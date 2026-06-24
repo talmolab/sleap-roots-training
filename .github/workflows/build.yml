@@ -1,0 +1,93 @@
+# Package build and publish workflow
+name: Build
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Get version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(uv version | awk '{print $NF}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: $VERSION"
+
+      - name: Validate tag matches version
+        if: github.event_name == 'release'
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG_VERSION="${TAG#v}"
+          if [[ "$TAG_VERSION" != "$VERSION" ]]; then
+            echo "ERROR: Tag version ($TAG_VERSION) does not match pyproject.toml version ($VERSION)"
+            exit 1
+          fi
+          echo "Tag $TAG matches pyproject.toml version $VERSION"
+
+      - name: Validate changelog entry exists
+        if: github.event_name == 'release'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! grep -q "\[$VERSION\]" docs/CHANGELOG.md; then
+            echo "ERROR: No changelog entry found for version $VERSION in docs/CHANGELOG.md"
+            exit 1
+          fi
+          echo "Changelog entry found for version $VERSION"
+
+      - name: Run linting
+        run: |
+          uv run black --check src/sleap_roots_training tests
+          uv run ruff check src/sleap_roots_training
+
+      - name: Run tests
+        run: |
+          uv run pytest -m "not integration" tests/ -x -q
+
+  build-and-publish:
+    name: Build and Publish
+    needs: validate-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # Required for actions/checkout
+      id-token: write  # Required for PyPI trusted publishing
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Verify wheel installs correctly
+        run: |
+          uv run --isolated --with dist/*.whl python -c "import sleap_roots_training; print(f'Version: {sleap_roots_training.__version__}')"
+
+      - name: Verify CLI entry point
+        run: |
+          uv run --isolated --with dist/*.whl sleap-roots-training --version
+
+      - name: Publish to PyPI
+        if: github.event_name == 'release'
+        run: uv publish

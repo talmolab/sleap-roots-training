@@ -1,0 +1,90 @@
+# Simple version management workflow
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - alpha
+          - beta
+          - rc
+          - stable
+      custom_version:
+        description: 'Custom version (optional, overrides bump_type)'
+        required: false
+        type: string
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup UV
+      uses: astral-sh/setup-uv@v6
+      with:
+        python-version: "3.11"
+
+    - name: Configure git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Get current version
+      id: current
+      run: |
+        CURRENT=$(uv version)
+        echo "version=$CURRENT" >> $GITHUB_OUTPUT
+        echo "Current version: $CURRENT"
+
+    - name: Bump version
+      id: bump
+      run: |
+        if [[ -n "${{ inputs.custom_version }}" ]]; then
+          # Set custom version
+          uv version "${{ inputs.custom_version }}"
+        else
+          # Use bump type
+          uv version --bump "${{ inputs.bump_type }}"
+        fi
+        
+        NEW_VERSION=$(uv version)
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "New version: $NEW_VERSION"
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Bump version from ${{ steps.current.outputs.version }} to ${{ steps.bump.outputs.new_version }}"
+        title: "Bump version to ${{ steps.bump.outputs.new_version }}"
+        body: |
+          ## Version Bump
+          
+          - **Previous version:** ${{ steps.current.outputs.version }}
+          - **New version:** ${{ steps.bump.outputs.new_version }}
+          - **Bump type:** ${{ inputs.bump_type }}${{ inputs.custom_version && ' (custom)' || '' }}
+          
+          ### Checklist
+          - [ ] Update CHANGELOG.md if needed
+          - [ ] Review version number is correct
+          - [ ] Merge when ready to release
+        branch: version-bump-${{ steps.bump.outputs.new_version }}
+        delete-branch: true
+        labels: |
+          version
+          automated
