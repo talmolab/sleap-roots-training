@@ -231,11 +231,11 @@ group 1 for isolated PR review and clean `git blame` on the anchor. (Optional: s
 
 ## 9. Acceptance — canary-first, then close the loop with the consumer
 
-- [ ] 9.0 **Prep the models-root:** obtain the canonical snapshot (Salk Box / the `models-downloader`
+- [x] 9.0 **Prep the models-root:** obtain the canonical snapshot (Salk Box / the `models-downloader`
       tree) and place the per-model `<species>/<root>/<id>.zip` archives under `--models-root`
       (resolution unzips + SHA256-verifies them; no manual unzip needed). Confirm a default dry run
       resolves all 8 physical models.
-- [ ] 9.1 **(requires explicit user go-ahead + `WANDB_API_KEY`) — CANARY:** seed a **representative
+- [x] 9.1 **(requires explicit user go-ahead + `WANDB_API_KEY`) — CANARY:** seed a **representative
       pair** (`seed-registry --execute --only arabidopsis-multiplant-cylinder-primary-age2-14 --only
       rice-cylinder-crown-age6-10`) to the eberrigan `sleap-roots-models` registry — the arabidopsis
       card is the gnarliest shape (**space in `mode`** `"multiplant cylinder"` **and** a member of the
@@ -247,13 +247,13 @@ group 1 for isolated PR review and clean `git blame` on the anchor. (Optional: s
       idempotent skip leaves the canary untouched) and run `seed-registry --verify`; also run the
       **producer-side read-back** using `project = f"{entity}-org/wandb-registry-{registry}"` (**not**
       the run project) to assert the production alias is present on every seeded collection.
-- [ ] 9.2 **(required rollout gate)** In the `sleap-roots-predict` checkout (branch
+- [x] 9.2 **(required rollout gate)** In the `sleap-roots-predict` checkout (branch
       `add-warm-model-worker`): `WANDB_API_KEY=… SRP_WANDB_ENTITY=<entity> SRP_WANDB_REGISTRY=<registry>
       uv run pytest -m wandb -q` → green; **assert on the derived values, not just "green"**: a known
       card's `registry_id` (versionless qualified name) and `version` (concrete) are as expected,
       `materialize()` downloads + caches, and the seeded `species`/`mode` values are exactly the ones
       predict selects on (the vocabulary reconciliation point).
-- [ ] 9.3 Report back: the final entity + registry + alias + published collections/artifacts **and the
+- [x] 9.3 Report back: the final entity + registry + alias + published collections/artifacts **and the
       seed run URL** (a durable repo-side pointer to the producing run, so it can flip its default
       source); the ask for predict to pin a **tested wandb range** (min `>=0.21.3,<0.22.0`, ideally
       converge up to the producer's `>=0.28.0,<0.29.0` band gated by a re-canary) **and add a CI marker
