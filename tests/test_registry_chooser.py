@@ -34,6 +34,32 @@ def test_parse_age_window_gap_raises():
         chooser.parse_age_window("2, 3, 5")
 
 
+def test_parse_age_window_empty_raises():
+    with pytest.raises(ValueError, match="empty"):
+        chooser.parse_age_window("")
+
+
+def test_missing_required_key_raises_indexed(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(  # row 0 has no `age`
+        "models:\n"
+        "  - species: soybean\n"
+        "    mode: cylinder\n"
+        "    primary_model_id: x/p/1\n"
+        "checksums:\n"
+        "  x/p/1: " + "0" * 64 + "\n"
+    )
+    with pytest.raises(ValueError, match="row 0.*age"):
+        chooser.load_selection_matrix(bad)
+
+
+def test_empty_models_raises(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("model:\n  - {}\n")  # typo'd top-level key -> no rows
+    with pytest.raises(ValueError, match="(?i)no .*models"):
+        chooser.load_selection_matrix(bad)
+
+
 def test_unknown_species_raises(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text(

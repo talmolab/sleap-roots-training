@@ -36,10 +36,15 @@ def test_crown_only_row_single_card():
     assert result[0].age_min == 6 and result[0].age_max == 10
 
 
-def test_null_slots_produce_no_card():
+def test_primary_only_row_one_card():
     row = _row("soybean", "cylinder", "2, 3", primary="s/p")  # lateral+crown null
     result = cards.expand_rows_to_cards([row])
     assert len(result) == 1 and result[0].root_type == "primary"
+
+
+def test_all_null_slots_produce_no_card():
+    row = _row("soybean", "cylinder", "2, 3")  # all three model ids null
+    assert cards.expand_rows_to_cards([row]) == []
 
 
 # --- Group 2: shared-model expansion against the real matrix ---

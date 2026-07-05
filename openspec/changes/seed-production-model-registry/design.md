@@ -248,6 +248,24 @@ long-path (`MAX_PATH`) is a real-seed-time concern for the temp root; noted for 
   rather than a path — lineage does no file IO, which sidesteps the dangling-temp-path hazard of the
   packaged resource and works identically from a wheel/zip import.
 
+### Hardening from the pre-PR code review (5-subagent pass on the implementation)
+
+- **Idempotency read fails closed (BLOCKING fix).** `api.artifacts()` is a *lazy* wandb paginator
+  whose query runs on iteration and raises for a missing collection — so a `try` around the call
+  alone would abort the first seed (every collection missing) and swallow transient errors into a
+  silent alias re-point. The seed now lists `_existing_collections(api, project)` once and only
+  checks the alias on collections known to exist; any real API error propagates. `resolve_all` is
+  split from `seed_registry` so the CLI validates every card (filesystem) *before* `wandb.init`,
+  failing fast with a clean `ClickException` and minting no empty run.
+- **`--only` scopes all modes.** The CLI applies the `--only` filter (with unknown-id fail-fast) up
+  front, so dry-run, `--verify`, and the confirmation-prompt count all reflect the canary scope.
+- **Cache leaf is content-keyed + atomically extracted + auto-cleaned** — a short SHA-derived leaf
+  avoids Windows `MAX_PATH` under the deep model id, self-invalidates on a snapshot change, and is
+  `atexit`-removed.
+- **Alias invariant:** the consumer hardcodes `"production"`; the producer's env-configurable
+  `SLEAP_ROOTS_MODEL_ALIAS` MUST therefore be `"production"` for the current consumer (documented in
+  the README).
+
 ### Cross-repo contracts surfaced by the consumer-PR review (report back; not code changes here)
 
 - **Seeded `mode` strings are an A3-params contract.** Arabidopsis has *two* cylinder-family modes in
@@ -297,12 +315,14 @@ src/sleap_roots_training/registry/
   chooser.py   # load_selection_matrix(path) + parse_age_window(age_str) + vocab  [PURE]
   cards.py     # expand_rows_to_cards(rows) + card_to_metadata(card) + collection_id(card) [PURE]
   models.py    # resolve_model_dir(model_id, models_root, checksums, *, require_pinned=False,
-               #   cache_root=None) — SHA256-verify + junk-free unzip + normalize layout [filesystem]
+               #   cache_root=None) — SHA256-verify + junk-free atomic unzip to a content-keyed
+               #   (short, self-invalidating) cache leaf + normalize layout  [filesystem]
   lineage.py   # build_lineage(matrix_sha256) + _resolve_git_sha()                [env/subprocess]
-  publish.py   # publish_card(run, card, model_dir, cfg) + seed_registry(cards, models_root,
-               #   checksums, cfg, run, *, api=None, force=False, only=None) +
-               #   verify_registry(cfg, expected, api=None) +
-               #   _collection_has_production(api, project, coll, alias) (lazy wandb import) [NETWORK]
+  publish.py   # publish_card(run, card, model_dir, cfg) + resolve_all(cards, models_root,
+               #   checksums) -> [(card, dir)] (validate-all, pre-network) +
+               #   seed_registry(resolved, cfg, run, *, api=None, force=False) +
+               #   verify_registry(cfg, expected, api=None) + _existing_collections(api, project)
+               #   + _collection_has_production(api, project, coll, alias) (lazy wandb import) [NETWORK]
   data/model_selection.yaml
 cli.py         # `seed-registry --models-root <dir> [--selection-matrix <path>] [--execute] [--yes]
                #   [--force] [--only <collection_id>]... [--verify]` (lazy wandb import in net paths)

@@ -10,7 +10,10 @@ convenience (it is not snapshot-pinned).
 
 from __future__ import annotations
 
+import atexit
 import hashlib
+import os
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -54,10 +57,11 @@ def _sha256_of_file(path: Path) -> str:
 
 
 def _default_cache_root() -> Path:
-    """Return a process-wide temp cache root for extracted models."""
+    """Return a process-wide temp cache root for extracted models (auto-cleaned)."""
     global _CACHE_ROOT
     if _CACHE_ROOT is None:
         _CACHE_ROOT = Path(tempfile.mkdtemp(prefix="srt-models-"))
+        atexit.register(shutil.rmtree, _CACHE_ROOT, ignore_errors=True)
     return _CACHE_ROOT
 
 
@@ -67,11 +71,14 @@ def _locate_model_root(root: Path) -> Path:
     Snapshot zips are inconsistent: some hold ``best_model.h5`` at the archive
     root, others wrap it in an inner ``<model>/`` directory. Normalizing to the
     directory that actually contains the weights keeps the ``add_dir`` layout (and
-    thus the published digest) canonical across both forms. Falls back to ``root``
-    if the weights are absent (so ``_verify_essentials`` raises a clear error).
+    thus the published digest) canonical across both forms. Prefers the shallowest
+    match (so a root-level copy wins over a nested one). Falls back to ``root`` if
+    the weights are absent (so ``_verify_essentials`` raises a clear error).
     """
-    matches = sorted(root.rglob("best_model.h5"))
-    return matches[0].parent if matches else root
+    matches = list(root.rglob("best_model.h5"))
+    if not matches:
+        return root
+    return min(matches, key=lambda p: (len(p.relative_to(root).parts), str(p))).parent
 
 
 def _verify_essentials(model_dir: Path, model_id: str) -> None:
@@ -91,6 +98,22 @@ def _extract_junk_free(zip_path: Path, dest: Path) -> None:
         members = [info for info in archive.infolist() if not _is_junk(info.filename)]
         # extractall sanitizes member paths (Zip-Slip-safe) on Python 3.6.2+.
         archive.extractall(dest, members=members)
+
+
+def _extract_atomic(zip_path: Path, dest: Path) -> None:
+    """Extract into a sibling temp dir, then rename to ``dest`` (atomic).
+
+    A crash mid-extraction leaves only the temp dir, so ``dest`` is never a
+    half-populated tree that a later run would wrongly reuse.
+    """
+    tmp = dest.with_name(f"{dest.name}.tmp-{os.getpid()}")
+    shutil.rmtree(tmp, ignore_errors=True)
+    _extract_junk_free(zip_path, tmp)
+    try:
+        tmp.rename(dest)
+    except OSError:
+        # Another call populated dest first; discard our copy.
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def resolve_model_dir(
@@ -116,8 +139,8 @@ def resolve_model_dir(
 
     Raises:
         FileNotFoundError: If neither a ``.zip`` nor a directory exists for the id.
-        ValueError: On a checksum mismatch, a missing essential file, or an unpinned
-            directory when ``require_pinned`` is set.
+        ValueError: On a missing recorded checksum, a checksum mismatch, a missing
+            essential file, or an unpinned directory when ``require_pinned`` is set.
     """
     models_root = Path(models_root)
     zip_path = models_root / f"{model_id}.zip"
@@ -133,9 +156,13 @@ def resolve_model_dir(
                 f"{model_id}: archive SHA256 mismatch "
                 f"(recorded {expected}, got {actual})"
             )
-        dest = (Path(cache_root) if cache_root else _default_cache_root()) / model_id
-        if not dest.exists() or not any(dest.iterdir()):
-            _extract_junk_free(zip_path, dest)
+        # Content-keyed leaf: short (avoids the Windows MAX_PATH blow-up of
+        # extracting under the deep, sometimes-doubled model id) and
+        # self-invalidating (a changed zip -> new digest -> new dir, never stale).
+        base = Path(cache_root) if cache_root is not None else _default_cache_root()
+        dest = base / actual[:16]
+        if not dest.exists():
+            _extract_atomic(zip_path, dest)
         model_dir = _locate_model_root(dest)
         _verify_essentials(model_dir, model_id)
         return model_dir

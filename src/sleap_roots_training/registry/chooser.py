@@ -124,10 +124,21 @@ def matrix_sha256(path: Optional[Path] = None) -> str:
 
 def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
     """Parse and validate a selection matrix YAML at ``matrix_path``."""
-    data = OmegaConf.to_container(OmegaConf.load(str(matrix_path)), resolve=True)
+    # resolve=False: the matrix has no interpolations, and a model id that happened
+    # to contain a ``${...}`` sequence must not be treated as one.
+    data = OmegaConf.to_container(OmegaConf.load(str(matrix_path)), resolve=False)
+
+    models = data.get("models") or []
+    if not models:
+        raise ValueError(
+            f"{matrix_path}: no `models:` rows found (check the top-level key)"
+        )
 
     rows: list[SelectionRow] = []
-    for index, raw in enumerate(data.get("models", [])):
+    for index, raw in enumerate(models):
+        for required in ("species", "mode", "age"):
+            if required not in raw:
+                raise ValueError(f"row {index}: missing required key {required!r}")
         species = raw["species"]
         mode = raw["mode"]
         if species not in SPECIES_VOCAB:

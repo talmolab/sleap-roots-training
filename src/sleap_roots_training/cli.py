@@ -56,7 +56,9 @@ def _require_api_key() -> None:
     help="Restrict validation + publishing to these collection ids (canary).",
 )
 @click.option("--verify", is_flag=True, help="Read-only: check the live registry.")
+@click.pass_context
 def seed_registry_command(
+    ctx: click.Context,
     models_root: Optional[Path],
     selection_matrix: Optional[Path],
     execute: bool,
@@ -70,11 +72,23 @@ def seed_registry_command(
     By default this is a dry run: it prints the planned collections + metadata and
     resolves every model directory without contacting wandb. Pass ``--execute`` to
     publish (which checks ``WANDB_API_KEY``, then confirms the target unless ``--yes``).
-    ``--verify`` re-runs the consumer read path against the live registry.
+    ``--verify`` re-runs the consumer read path against the live registry. ``--only``
+    scopes every mode to the named collection(s) for canary seeding.
     """
     cfg = config.resolve_registry_config()
     matrix = chooser.load_selection_matrix(selection_matrix)
     all_cards = cards.expand_rows_to_cards(matrix.rows)
+
+    # --only scopes ALL modes (dry-run, --verify, --execute); validate up front so an
+    # unknown id fails fast with a clean message and the confirm/plan reflect the scope.
+    if only:
+        only_set = set(only)
+        unknown = only_set - {cards.collection_id(card) for card in all_cards}
+        if unknown:
+            raise click.UsageError(
+                f"--only names unknown collection(s): {sorted(unknown)}"
+            )
+        all_cards = [c for c in all_cards if cards.collection_id(c) in only_set]
     expected = sorted(cards.collection_id(card) for card in all_cards)
 
     if verify:
@@ -85,7 +99,7 @@ def seed_registry_command(
         for collection in report["missing"]:
             click.echo(f"missing: {collection}")
         if report["missing"]:
-            raise SystemExit(1)
+            ctx.exit(1)
         return
 
     if models_root is None:
@@ -111,6 +125,13 @@ def seed_registry_command(
             abort=True,
         )
 
+    # Validate that every card resolves (filesystem, no network) BEFORE creating a
+    # run — a resolution error fails fast and cleanly, minting no empty wandb run.
+    try:
+        resolved = publish.resolve_all(all_cards, models_root, matrix.checksums)
+    except (FileNotFoundError, ValueError) as error:
+        raise click.ClickException(str(error))
+
     import wandb
 
     lineage_config = lineage.build_lineage(chooser.matrix_sha256(selection_matrix))
@@ -121,15 +142,9 @@ def seed_registry_command(
         )
     run = wandb.init(job_type="seed_registry", config=lineage_config)
     try:
-        report = publish.seed_registry(
-            all_cards,
-            models_root,
-            matrix.checksums,
-            cfg,
-            run,
-            force=force,
-            only=set(only) or None,
-        )
+        report = publish.seed_registry(resolved, cfg, run, force=force)
+    except ValueError as error:
+        raise click.ClickException(str(error))
     finally:
         run.finish()
     click.echo(f"published ({len(report['published'])}): {report['published']}")

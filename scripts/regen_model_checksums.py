@@ -9,11 +9,11 @@ Usage:
 where ``<models-root>`` holds the snapshot as ``<species>/<root>/<id>.zip``.
 """
 
-import hashlib
 import sys
 from pathlib import Path
 
 from sleap_roots_training.registry import cards, chooser
+from sleap_roots_training.registry.models import _sha256_of_file
 
 
 def main(models_root: str) -> int:
@@ -29,8 +29,7 @@ def main(models_root: str) -> int:
         if not zip_path.is_file():
             print(f"  # MISSING: {model_id}.zip", file=sys.stderr)
             continue
-        digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
-        print(f"  {model_id}: {digest}")
+        print(f"  {model_id}: {_sha256_of_file(zip_path)}")
     return 0
 
 

@@ -40,81 +40,102 @@ def publish_card(run, card: Card, model_dir: Path, cfg: RegistryConfig) -> None:
         name=collection, type="model", metadata=card_to_metadata(card)
     )
     artifact.add_dir(str(model_dir))
-    logged = run.log_artifact(artifact, type="model")
+    logged = run.log_artifact(artifact)
     logged.wait()  # wait before linking, or the link can race.
     target = f"{cfg.registry_project()}/{collection}"
     run.link_artifact(logged, target, aliases=[cfg.alias])
 
 
+def _existing_collections(api, project: str) -> set:
+    """Return the set of model-collection names that exist under ``project``.
+
+    Listing existing collections up front lets the idempotency check distinguish
+    "collection absent" (expected on a first seed) from a real API/network error
+    without swallowing the latter — a swallowed read error would be treated as
+    "not yet production" and wrongly re-publish, moving the ``production`` alias.
+    """
+    return {
+        collection.name
+        for collection in api.artifact_collections(
+            project_name=project, type_name="model"
+        )
+    }
+
+
 def _collection_has_production(api, project: str, collection: str, alias: str) -> bool:
-    """Return whether ``collection`` already holds an artifact with ``alias``."""
+    """Return whether an existing ``collection`` holds an artifact with ``alias``.
+
+    The caller MUST have confirmed the collection exists (see ``_existing_collections``)
+    — for an existing collection ``api.artifacts`` does not raise "not found", so any
+    error here propagates (fail closed) rather than being mistaken for "no production".
+    """
     name = f"{project}/{collection}"
-    try:
-        artifacts = api.artifacts(type_name="model", name=name)
-    except Exception:  # noqa: BLE001 - a missing collection is simply "no production".
-        return False
-    for artifact in artifacts:
-        if alias in (getattr(artifact, "aliases", None) or []):
-            return True
-    return False
+    return any(
+        alias in (getattr(artifact, "aliases", None) or [])
+        for artifact in api.artifacts(type_name="model", name=name)
+    )
+
+
+def resolve_all(
+    cards: Iterable[Card], models_root: Path, checksums: Mapping[str, str]
+) -> list:
+    """Resolve every card's model directory (validate-all before any publish).
+
+    Raises on the first unresolvable card, so a resolution error can never leave a
+    partial production seed. Runs no network — safe to call before ``wandb.init``.
+
+    Args:
+        cards: The cards to resolve.
+        models_root: Directory of ``<model_id>.zip`` archives.
+        checksums: Map of ``model_id`` to source-zip SHA256.
+
+    Returns:
+        A list of ``(card, model_dir)`` pairs, in order.
+    """
+    return [
+        (
+            card,
+            resolve_model_dir(
+                card.source_model_id, models_root, checksums, require_pinned=True
+            ),
+        )
+        for card in cards
+    ]
 
 
 def seed_registry(
-    cards: Iterable[Card],
-    models_root: Path,
-    checksums: Mapping[str, str],
+    resolved: Iterable,
     cfg: RegistryConfig,
     run,
     *,
     api=None,
     force: bool = False,
-    only: Optional[Iterable[str]] = None,
 ) -> dict:
-    """Publish every (in-scope) card to the registry, idempotently.
+    """Publish already-resolved cards to the registry, idempotently.
 
-    Validates that all in-scope cards resolve before publishing any (so a resolution
-    error can't leave a partial production seed), skips collections that already carry
-    the production alias unless ``force`` is set, and supports an ``only`` filter for
-    canary seeding.
+    Skips collections that already carry the production alias unless ``force`` is set
+    (so a re-run is a no-op and resumes after a partial failure); a real API error
+    during the idempotency read propagates (fail closed) rather than causing a
+    duplicate publish.
 
     Args:
-        cards: The full expanded card set.
-        models_root: Directory of ``<model_id>.zip`` archives.
-        checksums: Map of ``model_id`` to source-zip SHA256.
+        resolved: ``(card, model_dir)`` pairs from :func:`resolve_all`.
         cfg: The resolved registry configuration.
         run: The active ``wandb`` run.
-        api: A ``wandb.Api`` (created lazily if ``None``) used for the idempotency read.
+        api: A ``wandb.Api`` (created lazily if ``None``) for the idempotency read.
         force: If true, re-publish and re-point the alias even when already seeded.
-        only: If given, restrict both validation and publishing to these collection ids.
 
     Returns:
         A report ``{"published": [...], "skipped": [...]}``.
 
     Raises:
-        ValueError: On an unknown ``only`` id or a duplicate collection id.
+        ValueError: On a duplicate collection id in the seed set.
     """
-    cards = list(cards)
-    selected = cards
-    if only is not None:
-        only_set = set(only)
-        known = {collection_id(c) for c in cards}
-        unknown = only_set - known
-        if unknown:
-            raise ValueError(f"--only names unknown collection(s): {sorted(unknown)}")
-        selected = [c for c in cards if collection_id(c) in only_set]
-
-    ids = [collection_id(c) for c in selected]
+    resolved = list(resolved)
+    ids = [collection_id(card) for card, _ in resolved]
     duplicates = sorted({i for i in ids if ids.count(i) > 1})
     if duplicates:
         raise ValueError(f"duplicate collection ids in the seed set: {duplicates}")
-
-    # Validate-all-before-publish: resolve every in-scope card first.
-    resolved: list[tuple[Card, Path]] = []
-    for card in selected:
-        model_dir = resolve_model_dir(
-            card.source_model_id, models_root, checksums, require_pinned=True
-        )
-        resolved.append((card, model_dir))
 
     if api is None:
         import wandb
@@ -122,13 +143,17 @@ def seed_registry(
         api = wandb.Api()
 
     project = cfg.registry_project()
-    published: list[str] = []
-    skipped: list[str] = []
+    existing = set() if force else _existing_collections(api, project)
+    published: list = []
+    skipped: list = []
     for card, model_dir in resolved:
         collection = collection_id(card)
-        if not force and _collection_has_production(
-            api, project, collection, cfg.alias
-        ):
+        already = (
+            not force
+            and collection in existing
+            and _collection_has_production(api, project, collection, cfg.alias)
+        )
+        if already:
             logger.info("skip %s (already production)", collection)
             skipped.append(collection)
             continue
@@ -160,14 +185,9 @@ def verify_registry(
         api = wandb.Api()
 
     project = cfg.registry_project()
-    existing = {
-        collection.name
-        for collection in api.artifact_collections(
-            project_name=project, type_name="model"
-        )
-    }
-    present: list[str] = []
-    missing: list[str] = []
+    existing = _existing_collections(api, project)
+    present: list = []
+    missing: list = []
     for collection in expected_collections:
         if collection in existing and _collection_has_production(
             api, project, collection, cfg.alias

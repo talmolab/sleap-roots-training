@@ -42,7 +42,10 @@ Defaults live in `registry/config.py`; the species/mode vocabulary lives in
 
 **Cross-repo invariant:** `SLEAP_ROOTS_MODEL_REGISTRY` here must equal the consumer's
 `SRP_WANDB_REGISTRY` (which has **no default** — the operator must set it), and the entity
-default is shared with `SRP_WANDB_ENTITY` across both repos.
+default is shared with `SRP_WANDB_ENTITY` across both repos. The consumer **hardcodes** the
+`production` alias, so `SLEAP_ROOTS_MODEL_ALIAS` must remain `production` (a non-default alias would
+be silently skipped by the consumer, and the producer's own `--verify` — which checks the same
+configured alias — could not detect the skew).
 
 ### Usage
 

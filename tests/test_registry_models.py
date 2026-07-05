@@ -82,6 +82,15 @@ def test_resolve_checksum_mismatch_raises(tmp_path):
         )
 
 
+def test_resolve_zip_present_but_no_recorded_checksum_raises(tmp_path):
+    root = tmp_path / "snapshot"
+    _make_model_zip(root, MODEL_ID)
+    with pytest.raises(ValueError, match="no SHA256"):
+        models.resolve_model_dir(
+            MODEL_ID, root, {}, cache_root=tmp_path / "cache"  # empty checksum map
+        )
+
+
 def test_resolve_missing_raises(tmp_path):
     with pytest.raises(FileNotFoundError, match=MODEL_ID):
         models.resolve_model_dir(

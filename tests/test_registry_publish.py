@@ -5,15 +5,21 @@ from sleap_roots_training.registry.cards import Card, card_to_metadata, collecti
 from sleap_roots_training.registry.config import RegistryConfig
 
 CFG = RegistryConfig("ent", "reg", "production")
+PROJECT = CFG.registry_project()
 CPA_PRIMARY = "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743"
 ARAB_MULTI_PRIMARY = "arabidopsis-multiplant-cylinder-primary-age2-14"
+RICE_OLD_CROWN = "rice-cylinder-crown-age6-10"
 
 
 def _all_cards():
     return cards.expand_rows_to_cards(chooser.load_selection_matrix().rows)
 
 
-# --- publish_card (mock wandb) ---
+def _resolved(card_list, model_dir):
+    return [(card, model_dir) for card in card_list]
+
+
+# --- fakes ---
 
 
 class _FakeArtifact:
@@ -43,7 +49,7 @@ class _FakeRun:
         self.logged = None
         self.linked = None
 
-    def log_artifact(self, artifact, type=None, **kw):
+    def log_artifact(self, artifact, **kw):
         self.order.append("log")
         self.logged = _FakeLogged(artifact, self.order)
         return self.logged
@@ -51,6 +57,34 @@ class _FakeRun:
     def link_artifact(self, artifact, target_path, aliases=None, **kw):
         self.order.append("link")
         self.linked = (artifact, target_path, aliases)
+
+
+class _FakeCollection:
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakeArt:
+    def __init__(self, aliases):
+        self.aliases = aliases
+
+
+class _FakeApi:
+    def __init__(self, collections=(), arts_by_name=None, fail=False):
+        self._collections = list(collections)
+        self._arts = arts_by_name or {}
+        self._fail = fail
+
+    def artifact_collections(self, project_name, type_name):
+        if self._fail:
+            raise ConnectionError("transient registry error")
+        return [_FakeCollection(c) for c in self._collections]
+
+    def artifacts(self, type_name, name):
+        return self._arts.get(name, [])
+
+
+# --- publish_card ---
 
 
 def test_publish_card(monkeypatch, tmp_path):
@@ -69,162 +103,119 @@ def test_publish_card(monkeypatch, tmp_path):
     assert art.metadata == card_to_metadata(card)
     assert not ({"registry_id", "version", "weights_checksum"} & set(art.metadata))
     assert art.added_dirs == [str(model_dir)]
-    # log -> wait -> link (wait before link).
-    assert run.order == ["log", "wait", "link"]
-    linked_art, target, aliases = run.linked
+    assert run.order == ["log", "wait", "link"]  # wait before link
+    _, target, aliases = run.linked
     assert target == "ent-org/wandb-registry-reg/" + ARAB_MULTI_PRIMARY
     assert aliases == ["production"]
 
 
-# --- seed_registry driver (spy publish_card / resolve / has_production) ---
+# --- resolve_all (validate-all, pure filesystem) ---
 
 
-def _spy_publish(monkeypatch):
-    calls = []
-    monkeypatch.setattr(
-        publish, "publish_card", lambda run, c, d, cfg: calls.append(collection_id(c))
-    )
-    return calls
+def test_resolve_all_passes_require_pinned(monkeypatch, tmp_path):
+    seen = []
+
+    def fake_resolve(mid, root, ck, **kw):
+        seen.append(kw.get("require_pinned"))
+        return tmp_path
+
+    monkeypatch.setattr(publish, "resolve_model_dir", fake_resolve)
+    publish.resolve_all(_all_cards(), tmp_path, {})
+    assert seen and all(flag is True for flag in seen)  # driver enforces pinned
 
 
-def test_seed_publishes_thirteen_distinct(monkeypatch, tmp_path):
-    calls = _spy_publish(monkeypatch)
-    monkeypatch.setattr(publish, "resolve_model_dir", lambda *a, **k: tmp_path)
-    monkeypatch.setattr(publish, "_collection_has_production", lambda *a, **k: False)
-    report = publish.seed_registry(
-        _all_cards(), tmp_path, {}, CFG, run=object(), api=object()
-    )
-    assert len(calls) == 13 and len(set(calls)) == 13
-    assert sorted(report["published"]) == sorted(calls)
-
-
-def test_seed_validate_all_before_publish(monkeypatch, tmp_path):
-    calls = _spy_publish(monkeypatch)
-
+def test_resolve_all_raises_on_first_missing(monkeypatch, tmp_path):
     def fake_resolve(mid, root, ck, **kw):
         if "younger/crown" in mid:
             raise FileNotFoundError(mid)
         return tmp_path
 
     monkeypatch.setattr(publish, "resolve_model_dir", fake_resolve)
-    monkeypatch.setattr(publish, "_collection_has_production", lambda *a, **k: False)
     with pytest.raises(FileNotFoundError):
-        publish.seed_registry(
-            _all_cards(), tmp_path, {}, CFG, run=object(), api=object()
-        )
-    assert calls == []  # nothing published before the failing resolution
+        publish.resolve_all(_all_cards(), tmp_path, {})
+
+
+# --- seed_registry (takes resolved pairs) ---
+
+
+def test_seed_publishes_all_distinct(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(
+        publish, "publish_card", lambda run, c, d, cfg: calls.append(collection_id(c))
+    )
+    api = _FakeApi(collections=[])  # fresh registry: no collection exists yet
+    report = publish.seed_registry(
+        _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api
+    )
+    assert len(calls) == 13 and len(set(calls)) == 13
+    assert sorted(report["published"]) == sorted(calls) and report["skipped"] == []
 
 
 def test_seed_duplicate_collection_aborts(monkeypatch, tmp_path):
-    _spy_publish(monkeypatch)
-    monkeypatch.setattr(publish, "resolve_model_dir", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(publish, "publish_card", lambda *a: None)
     dup = [
         Card("rice", "cylinder", 6, 10, "crown", "a"),
         Card("rice", "cylinder", 6, 10, "crown", "b"),
     ]
     with pytest.raises(ValueError, match="(?i)duplicate"):
-        publish.seed_registry(dup, tmp_path, {}, CFG, run=object(), api=object())
-
-
-def test_seed_idempotent_skip_and_force(monkeypatch, tmp_path):
-    calls = _spy_publish(monkeypatch)
-    monkeypatch.setattr(publish, "resolve_model_dir", lambda *a, **k: tmp_path)
-    monkeypatch.setattr(
-        publish,
-        "_collection_has_production",
-        lambda api, proj, coll, alias: coll == "rice-cylinder-crown-age6-10",
-    )
-    report = publish.seed_registry(
-        _all_cards(), tmp_path, {}, CFG, run=object(), api=object(), force=False
-    )
-    assert "rice-cylinder-crown-age6-10" not in calls
-    assert "rice-cylinder-crown-age6-10" in report["skipped"]
-
-    calls.clear()
-    publish.seed_registry(
-        _all_cards(), tmp_path, {}, CFG, run=object(), api=object(), force=True
-    )
-    assert "rice-cylinder-crown-age6-10" in calls
-
-
-def test_seed_only_scopes_validation_and_publish(monkeypatch, tmp_path):
-    calls = _spy_publish(monkeypatch)
-
-    def fake_resolve(mid, root, ck, **kw):
-        if mid == CPA_PRIMARY:
-            return tmp_path
-        raise FileNotFoundError(mid)  # other 12 models "missing"
-
-    monkeypatch.setattr(publish, "resolve_model_dir", fake_resolve)
-    monkeypatch.setattr(publish, "_collection_has_production", lambda *a, **k: False)
-    # Canary: only its model staged; must NOT abort on the other 12 missing.
-    report = publish.seed_registry(
-        _all_cards(),
-        tmp_path,
-        {},
-        CFG,
-        run=object(),
-        api=object(),
-        only={ARAB_MULTI_PRIMARY},
-    )
-    assert calls == [ARAB_MULTI_PRIMARY]
-    assert report["published"] == [ARAB_MULTI_PRIMARY]
-
-
-def test_seed_only_unknown_raises(monkeypatch, tmp_path):
-    _spy_publish(monkeypatch)
-    monkeypatch.setattr(publish, "resolve_model_dir", lambda *a, **k: tmp_path)
-    with pytest.raises(ValueError, match="unknown"):
         publish.seed_registry(
-            _all_cards(),
-            tmp_path,
-            {},
-            CFG,
-            run=object(),
-            api=object(),
-            only={"does-not-exist"},
+            _resolved(dup, tmp_path), CFG, run=object(), api=_FakeApi()
         )
 
 
-# --- verify_registry (fake wandb.Api) ---
-
-
-class _FakeCollection:
-    def __init__(self, name):
-        self.name = name
-
-
-class _FakeArt:
-    def __init__(self, aliases):
-        self.aliases = aliases
-
-
-class _FakeApi:
-    def __init__(self, collections, arts_by_name):
-        self._collections = collections
-        self._arts = arts_by_name
-
-    def artifact_collections(self, project_name, type_name):
-        return [_FakeCollection(c) for c in self._collections]
-
-    def artifacts(self, type_name, name):
-        return self._arts.get(name, [])
-
-
-def test_verify_registry_reports_present_and_missing():
-    project = CFG.registry_project()
+def test_seed_idempotent_skip_and_force(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(
+        publish, "publish_card", lambda run, c, d, cfg: calls.append(collection_id(c))
+    )
     api = _FakeApi(
-        collections=["rice-cylinder-crown-age6-10"],
+        collections=[RICE_OLD_CROWN],
+        arts_by_name={f"{PROJECT}/{RICE_OLD_CROWN}": [_FakeArt(["production", "v3"])]},
+    )
+    report = publish.seed_registry(
+        _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api, force=False
+    )
+    assert RICE_OLD_CROWN not in calls and RICE_OLD_CROWN in report["skipped"]
+
+    calls.clear()
+    publish.seed_registry(
+        _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api, force=True
+    )
+    assert RICE_OLD_CROWN in calls  # --force re-publishes/re-points
+
+
+def test_seed_read_error_fails_closed(monkeypatch, tmp_path):
+    # A transient registry read error must PROPAGATE (fail closed), never be treated
+    # as "no production" -> republish -> silent alias move.
+    def boom_publish(*a):
+        raise AssertionError("must not publish on a read error")
+
+    monkeypatch.setattr(publish, "publish_card", boom_publish)
+    with pytest.raises(ConnectionError):
+        publish.seed_registry(
+            _resolved(_all_cards(), tmp_path),
+            CFG,
+            run=object(),
+            api=_FakeApi(fail=True),
+            force=False,
+        )
+
+
+# --- verify_registry ---
+
+
+def test_verify_reports_present_missing_and_alias_absent():
+    # RICE_OLD_CROWN: present + production. NO_ALIAS: collection exists but the
+    # production alias never landed -> must be reported MISSING. CANOLA: absent.
+    no_alias = "soybean-cylinder-primary-age2-8"
+    canola = "canola-cylinder-primary-age2-13"
+    api = _FakeApi(
+        collections=[RICE_OLD_CROWN, no_alias],
         arts_by_name={
-            f"{project}/rice-cylinder-crown-age6-10": [
-                _FakeArt(["production", "latest"])
-            ]
+            f"{PROJECT}/{RICE_OLD_CROWN}": [_FakeArt(["production", "latest"])],
+            f"{PROJECT}/{no_alias}": [_FakeArt(["latest"])],  # no production alias
         },
     )
-    report = publish.verify_registry(
-        CFG,
-        ["rice-cylinder-crown-age6-10", "soybean-cylinder-primary-age2-8"],
-        api=api,
-    )
-    assert report["present"] == ["rice-cylinder-crown-age6-10"]
-    assert report["missing"] == ["soybean-cylinder-primary-age2-8"]
+    report = publish.verify_registry(CFG, [RICE_OLD_CROWN, no_alias, canola], api=api)
+    assert report["present"] == [RICE_OLD_CROWN]
+    assert set(report["missing"]) == {no_alias, canola}
