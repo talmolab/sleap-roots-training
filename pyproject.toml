@@ -28,6 +28,8 @@ classifiers = [
 dependencies = [
     "click>=8.0.0",
     "omegaconf>=2.3.0",
+    "sleap-roots-contracts==0.1.0a3",
+    "wandb>=0.28.0,<0.29.0",
 ]
 
 [project.urls]
