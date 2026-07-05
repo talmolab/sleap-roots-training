@@ -1,0 +1,78 @@
+# Production model selection matrix for the sleap-roots pipeline.
+#
+# Source of truth: models-downloader `model_chooser_table.xlsx` (snapshot 20250204).
+#   Repo:  https://gitlab.com/salk-tm/models-downloader
+#   Table: tests/data/models_downloader_input/20250204_models/model_chooser_table.xlsx
+# Verified against the live xlsx on 2026-07-04.
+#
+# `age` is the native chooser comma-list; chooser.py parses it to age_min/age_max
+# (a contiguous window). Absent root-type slots are `null`.
+#
+# `checksums` pins each source `<model_id>.zip` by SHA256 so the published
+# `weights_checksum` (the whole-artifact digest) is deterministic for this snapshot.
+# Regenerate with the documented sha256 helper on a snapshot update.
+#
+# The arabidopsis `plate` row (arabidopsis_plates/primary + /lateral) is OMITTED:
+# those models are absent from the snapshot and have no concrete `.n=` id.
+# Tracked by talmolab/sleap-roots-training#3.
+
+models:
+  - species: soybean
+    mode: cylinder
+    age: "2, 3, 4, 5, 6, 7, 8"
+    primary_model_id: soybean/primary/221003_111420.multi_instance.n=1389
+    lateral_model_id: soybean/lateral/lateral_root_221006_172103.multi_instance.n=482
+    crown_model_id: null
+
+  - species: canola
+    mode: cylinder
+    age: "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+    primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
+    lateral_model_id: canola/lateral/240611_083419.multi_instance.n=631
+    crown_model_id: null
+
+  - species: pennycress
+    mode: cylinder
+    age: "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
+    lateral_model_id: canola/lateral/240611_083419.multi_instance.n=631
+    crown_model_id: null
+
+  - species: arabidopsis
+    mode: multiplant cylinder
+    age: "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
+    lateral_model_id: arabidopsis/lateral/240130_140452.multi_instance.n=337
+    crown_model_id: null
+
+  - species: arabidopsis
+    mode: cylinder
+    age: "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
+    lateral_model_id: arabidopsis/lateral/240130_140452.multi_instance.n=337
+    crown_model_id: null
+
+  - species: rice
+    mode: cylinder
+    age: "2, 3, 4, 5"
+    primary_model_id: rice/younger/primary/230104_182346.multi_instance.n=720
+    lateral_model_id: null
+    crown_model_id: rice/younger/crown/220821_163331.multi_instance.n=867
+
+  - species: rice
+    mode: cylinder
+    age: "6, 7, 8, 9, 10"
+    primary_model_id: null
+    lateral_model_id: null
+    crown_model_id: rice/older/crown/221208_113552.multi_instance.n=574
+
+# SHA256 of each distinct source `<model_id>.zip` (8 physical models).
+checksums:
+  soybean/primary/221003_111420.multi_instance.n=1389: 13c9a4f23234297473ae683d876bbda7af298b0c04bfd462772198020bbdb668
+  soybean/lateral/lateral_root_221006_172103.multi_instance.n=482: 291450a3f5b327c7cfab659961adef00d9aa690f835235ea98c5f4561c760838
+  canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743: 70bce1527e3a92447b3a8c66c1c58ab257615b76d32b56231719e006eeb43a8a
+  canola/lateral/240611_083419.multi_instance.n=631: fad45a8928df3d39969a7d2f6e140e9498d8af6e5019acd09c407184401e68c6
+  arabidopsis/lateral/240130_140452.multi_instance.n=337: 44177b75054db96bc55396f8c4ad04c9fe7650d9dca3b04d8c4241217ae5f1dd
+  rice/younger/primary/230104_182346.multi_instance.n=720: 7288e4f39027476e71b7bc8f239ae36d5ced376d136d5e3553cc9aec0da4f386
+  rice/younger/crown/220821_163331.multi_instance.n=867: cda5131b4ae76c8b434eb53d294ff1401edf3323bfec85073e6fb85790c5da3d
+  rice/older/crown/221208_113552.multi_instance.n=574: bfa49bac7a25d78e02f9874867b8d4bf3e96646f08ba195ddcdbb4273eab3e2a
