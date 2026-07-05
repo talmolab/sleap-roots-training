@@ -64,6 +64,8 @@ def test_dry_run_default_resolves_without_network(
     assert result.exit_code == 0, result.output
     assert "soybean-cylinder-primary-age2-3" in result.output
     assert "soybean-cylinder-lateral-age2-3" in result.output
+    # The stub models-root uses unzipped dirs -> honestly flagged as unpinned.
+    assert "UNPINNED" in result.output
 
 
 def test_dry_run_reports_missing_model(monkeypatch, tiny_matrix, tmp_path):
@@ -97,7 +99,19 @@ def test_execute_without_api_key_fails_before_prompt(
 
 def test_execute_declined_publishes_nothing(monkeypatch, tiny_matrix, stub_models_root):
     monkeypatch.setenv("WANDB_API_KEY", "secret")
-    _no_wandb(monkeypatch)  # confirm declined -> no wandb.init
+    import wandb
+
+    # Spy (record) rather than raise, so we can POSITIVELY assert nothing ran —
+    # asserting only a non-zero exit would also pass if a regression called wandb
+    # and then blew up (CliRunner swallows the exception into the exit code).
+    calls = []
+    monkeypatch.setattr(wandb, "init", lambda *a, **k: calls.append("init"))
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda *a, **k: calls.append("resolve_all") or []
+    )
+    monkeypatch.setattr(
+        publish, "publish_card", lambda *a, **k: calls.append("publish")
+    )
     result = _invoke(
         [
             "--selection-matrix",
@@ -109,6 +123,7 @@ def test_execute_declined_publishes_nothing(monkeypatch, tiny_matrix, stub_model
         input="n\n",
     )
     assert result.exit_code != 0  # aborted
+    assert calls == []  # nothing resolved, no run created, nothing published
 
 
 def test_execute_yes_seeds_and_reports(monkeypatch, tiny_matrix, stub_models_root):
@@ -269,5 +284,6 @@ def test_dry_run_resolves_real_zip(monkeypatch, tmp_path):
     )
     result = _invoke(["--selection-matrix", str(matrix), "--models-root", str(root)])
     assert result.exit_code == 0, result.output
-    assert result.output.count("[ok]") == 2  # both real zips resolved
+    assert result.output.count("[ok]") == 2  # both real zips resolved (pinned)
     assert "MISSING" not in result.output.upper()
+    assert "UNPINNED" not in result.output  # zip form is snapshot-pinned

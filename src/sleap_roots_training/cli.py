@@ -89,7 +89,11 @@ def seed_registry_command(
                 f"--only names unknown collection(s): {sorted(unknown)}"
             )
         all_cards = [c for c in all_cards if cards.collection_id(c) in only_set]
-    expected = sorted(cards.collection_id(card) for card in all_cards)
+    ids = [cards.collection_id(card) for card in all_cards]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        raise click.UsageError(f"duplicate collection ids in the matrix: {duplicates}")
+    expected = sorted(ids)
 
     if verify:
         _require_api_key()
@@ -109,9 +113,16 @@ def seed_registry_command(
         click.echo("DRY RUN — no wandb calls; pass --execute to publish.")
         for card in all_cards:
             collection = cards.collection_id(card)
+            pinned = (models_root / f"{card.source_model_id}.zip").is_file()
             try:
                 resolve_model_dir(card.source_model_id, models_root, matrix.checksums)
-                status = "ok"
+                # An unpinned already-unzipped dir resolves here but --execute rejects
+                # it; label it so a dry-run "ok" is not false confidence.
+                status = (
+                    "ok"
+                    if pinned
+                    else "ok — UNPINNED dir; --execute requires the .zip archive"
+                )
             except (FileNotFoundError, ValueError) as error:
                 status = f"MISSING ({error})"
             click.echo(f"{collection}  {cards.card_to_metadata(card)}  [{status}]")
