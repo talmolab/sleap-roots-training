@@ -8,6 +8,7 @@ on:
       - "tests/**"
       - ".github/workflows/ci.yml"
       - "pyproject.toml"
+      - "uv.lock"
   push:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - "tests/**"
       - ".github/workflows/ci.yml"
       - "pyproject.toml"
+      - "uv.lock"
 
 jobs:
   lint:
@@ -33,7 +35,7 @@ jobs:
         run: uv python install 3.11
 
       - name: Install dev dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
 
       - name: Run Black
         run: uv run black --check src/sleap_roots_training tests
@@ -72,7 +74,7 @@ jobs:
         run: uv python install ${{ matrix.python }}
 
       - name: Install dev dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
 
       - name: Run pytest
         run: |
