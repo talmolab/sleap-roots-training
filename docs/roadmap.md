@@ -1,13 +1,14 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
+**Last revised:** 2026-07-13 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
 **just-in-time** at tier kickoff, not up front.
 
 > **Canonical home:** this file (`docs/roadmap.md`) is the source of truth; it is mirrored to the
-> Notion project (the tracker the interns watch). Per-tier EPICs and PRs in this repo link back to
+> Notion project (the tracker the team watches). Per-tier EPICs and PRs in this repo link back to
 > the tiers below.
 
 ## Oracle / validation philosophy
@@ -61,7 +62,7 @@ of work, not a permanent owner:
   one reviewer on the engineering angle, one on the modeling/domain angle.
 - **Co-owned seams:** the evaluation/comparison harness (Tier 4) and the SAM-predict →
   review/correct loop (Tiers 6 + 8).
-- Cadence: weekly pairing + async trio check-in with Elizabeth. `.slp`/sleap-io is the contract.
+- Cadence: weekly pairing + async team check-in with Elizabeth. `.slp`/sleap-io is the contract.
 
 ---
 
@@ -70,22 +71,21 @@ of work, not a permanent owner:
 Not a roadmap tier, but it lives in this repo and later tiers build on it. Recorded here so the
 code is discoverable and **Tier 2 doesn't re-invent a contract that already exists**.
 
-**What shipped** (#4, #5; archived change `openspec/changes/archive/2026-07-05-seed-production-model-registry/`):
-the `model-registry` spec, `src/sleap_roots_training/registry/`, and the
-`sleap-roots-training seed-registry` CLI. It curates the **existing legacy TF models** into the
-`wandb-registry-sleap-roots-models` registry — 13 selection cards, each stamped with `ModelCard`
-metadata (`sleap-roots-contracts`) and the `production` alias — so the `WandbRegistrySource` in
-`talmolab/sleap-roots-predict` has something to fetch.
-
-**This is registry curation, not training.** The weights are legacy and are uploaded as-is. It does
-not advance the keypoint or mask tiers below.
-
-**Why later tiers care:** seeding fixed the **publishing surface** — the `ModelCard` metadata
-schema, the `production` alias, and the registry path — that this repo's future `sleap-nn`-trained
-models will reuse, whether the weights are legacy or native.
-
-**Open follow-ups:** #3 (seed the deferred arabidopsis plate models → 15 cards), #7 (accept a
-`wandb login` session, not just `WANDB_API_KEY`; mirrors to `talmolab/sleap-roots-predict`).
+- **What shipped** (#4, #5; archived change
+  `openspec/changes/archive/2026-07-05-seed-production-model-registry/`): the `model-registry`
+  spec, `src/sleap_roots_training/registry/`, and the `sleap-roots-training seed-registry` CLI. It
+  curates the **existing legacy TF models** into the `wandb-registry-sleap-roots-models` registry —
+  13 cards carrying the `production` alias (the registry also holds ~87 non-production
+  training-run/sweep collections; the 13 are the curated, `ModelCard`-stamped subset), each stamped
+  with `ModelCard` metadata (`sleap-roots-contracts`) — so the `WandbRegistrySource` in
+  `talmolab/sleap-roots-predict` has something to fetch.
+- **This is registry curation, not training.** The weights are legacy and are uploaded as-is. It
+  does not advance the keypoint or mask tiers below.
+- **Why later tiers care:** seeding fixed the **publishing surface** — the `ModelCard` metadata
+  schema, the `production` alias, and the registry path — that this repo's future `sleap-nn`-trained
+  models will reuse, whether the weights are legacy or native.
+- **Open follow-ups:** #3 (seed the deferred arabidopsis plate models → 15 cards), #7 (accept a
+  `wandb login` session, not just `WANDB_API_KEY`; mirrors to `talmolab/sleap-roots-predict`).
 
 ## Tier 0 — Scaffold `talmolab/sleap-roots-training` *(prerequisite — not OpenSpec)*
 
@@ -114,9 +114,9 @@ models will reuse, whether the weights are legacy or native.
 - **Secure SLEAP-team buy-in for talmolab/sleap-app#155** Phase-1 scope (render + accept/reject): draft
   the scope as a comment/sub-issue and get **written sign-off including an expected PR-review
   turnaround**. If no go-ahead, Tier 8 drops to a contingency / Phase 3 — **it is not on the
-  mask-training critical path** (see Tier 7). During Phase 1, whoever leads Tier 8 **ramps on
-  `sleap-app`** (reads issues/code, optionally lands a small non-blocking PR) so Phase 2 isn't a
-  cold start.
+  mask-training critical path** (see Tier 7). Assign a `sleap-app` ramp task at Tier 0.5 kickoff —
+  reading its issues/code and optionally landing a small non-blocking PR during Phase 1 — so
+  Tier 8 (Phase 2) isn't a cold start whenever it's picked up.
 - **Confirm repo name** `talmolab/sleap-roots-training`.
 - **Oracle:** documented keypoint train/predict run; pins locked; talmolab/sleap-app#155 scope acknowledged by the
   SLEAP team (or Tier 8 reclassified).
@@ -131,11 +131,13 @@ models will reuse, whether the weights are legacy or native.
   summaries — `scan_history()` returns zero rows, so there is no loss curve and no epoch count.
   That gap made the Tier-0 onboarding repro (#1) impossible to compare against the original run.
   Log per-epoch train/val loss and the stopping epoch.
-- **Oracle:** establish a **PyTorch-native baseline** (2–3 runs to get a stable range) on the
-  held-out data; document config, hyperparameters, loss curves, and accuracy. This baseline — not
-  exact parity with the old TF model — is the reference for later tiers; the old TF number is
-  reported alongside **as a range** (#8), because replicate spread is real. *(W&B versioning is
-  retrofitted in Tier 2.)*
+- **Oracle:** establish a **PyTorch-native baseline** (2–3 **same-config** runs to get a stable
+  range — not a hyperparameter sweep, which is a different axis of variation) on the held-out data;
+  document config, hyperparameters, loss curves, and accuracy. This baseline — not exact parity with
+  the old TF model — is the reference for later tiers; the old TF number is reported alongside **as
+  a range, not a point** (#8), because same-config seed/replicate spread is real (~1.5–1.7×
+  `dist_avg` in the legacy runs) and must not be mistaken for architecture-driven variation from a
+  sweep. *(W&B versioning is retrofitted in Tier 2.)*
 - **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`.
   **Depends on** Tier 0.5 (#9).
 
@@ -144,12 +146,15 @@ models will reuse, whether the weights are legacy or native.
   (`sleap-roots-labels`, `sleap-roots-models`) with run→artifact lineage.
 - **Builds on the shipped publishing surface** (see *Adjacent work* above): reuse the existing
   `ModelCard` contract, `production` alias, and `sleap-roots-models` registry path — do **not**
-  define new ones. The models registry is already non-empty (13 legacy collections).
+  define new ones. The models registry already carries 13 `production`-aliased collections (the
+  registry has ~100 collections total; most are non-production sweep/run artifacts).
 - **Labels need a contract of their own.** The `sleap-roots-labels` registry currently stores
   provenance as boolean-key metadata and `data_path`s pointing at deleted temp directories, so a
   label set cannot be traced to its experiment — and `cyl` (labels) vs `cylinder` (models) means a
-  model cannot be joined to the labels it trained on. A `LabelCard` mirroring `ModelCard`, plus the
-  `sample_manifest.csv` from `/build-labeling-package`, is a prerequisite for the lineage oracle.
+  model cannot be joined to the labels it trained on. A `LabelCard` mirroring `ModelCard`, plus a
+  row-level sample manifest (the ad hoc labeling-package build process already computes this
+  provenance in a personal script, not yet ported into a shared repo — see #10), is a prerequisite
+  for the lineage oracle.
 - **Oracle:** round-trip a dataset and a model through the registries; lineage reproduces a run;
   **a dry-run sweep (≈5 configs, 1 species) launches and logs with full lineage** — verifying the
   registry is solid **before** the expensive Tier 3 sweeps.
@@ -292,14 +297,15 @@ From the pragmatism review — keep throughput high and de-risk the likely-overr
 - Every PR links its EPIC + the roadmap tier/change it advances; closes its sub-issue on merge.
 - **Cross-PR / cross-review requirement** (see Work tracks) is tracked here too.
 - Cross-repo (`sleap-app`): draft the set, get the SLEAP-team go-ahead, then file.
-- Feature work uses the repo's Claude workflow: `/new-feature` → `/openspec:proposal` →
-  `/review-openspec` → approval → `/openspec:apply` (TDD) → `/pre-merge-check`. Issues should name
-  it so contributors don't improvise a process.
+- Feature work uses the repo's Claude workflow: run `/new-feature`, which itself orchestrates
+  `/openspec:proposal` → `/review-openspec` → (pauses for your explicit approval) →
+  `/openspec:apply` (TDD) → `/pre-merge-check`. Issues should name it so contributors don't
+  improvise a process.
 
 ## Open roadmap decisions
 - The comparison matrix (which crops × root types) — drafted at Tier 3, locked at Tier 4.
 - The common skeleton / node count per root type for unification — set at Tier 2.7.
-- Phase boundary timing (summer→fall), contingent on available intern hours.
+- Phase boundary timing (summer→fall), contingent on available team hours.
 
 ## Roadmap review reconciliations (2026-06-24)
 
@@ -327,7 +333,7 @@ confirmed RESOLVED, 100% spec coverage, no new cycles). Pragmatism lens added:
   `sleap-nn` → exact parity is the wrong bar. Reframed the **oracle philosophy + Tier 1** to
   establish a PyTorch baseline and show TF numbers for reference; added a Tier-0 step to extract a
   solid TF reference.
-- **IMPORTANT (coordination):** strengthened Tier 0.5 talmolab/sleap-app#155 buy-in to **written scope + review
+- **IMPORTANT (coordination):** strengthened Tier 0.5 #155 buy-in to **written scope + review
   turnaround + fallback**, and added an Anirudh **sleap-app ramp during Phase 1**.
 - **IMPORTANT (execution):** added the **Execution cadence & safeguards** section (weekly
   check-in + escalation, right-sized reviews, early W&B smoke test, matrix cap, Tier-4
@@ -348,26 +354,41 @@ then reviewed it. Reconciled:
   hide distortion); **Tier 6** SAM prompts use unified-skeleton keypoints; check `sleap-io` for
   existing resampling utilities before building.
 
-**Roadmap revision (2026-07-09)** — assignment stripped; onboarding findings folded in.
-- **Names removed from tiers.** Every `**Lead:** <person>` line is gone and the "Intern tracks"
-  section is now **Work tracks**. The roadmap says *what* needs doing; issues are filed JIT and
-  **assigned at filing time**. Fixed-in-advance ownership never survived contact with reality — it
-  bound the same work (the config schema) to two different people at once.
-- **Tier 0 onboarding clarified.** Reproducing a training run demonstrates the *workflow*; it is
-  **not** a parity test. This was already implied by the oracle philosophy but not stated where the
-  onboarding step lives, and the ambiguity cost real time (#1).
-- **Tier 1 gained a hard requirement:** per-epoch metrics **must** be logged to W&B. The legacy TF
-  runs logged only final summaries (`scan_history()` → zero rows), which made a repro impossible to
-  compare against its original.
-- **Tier 1 oracle now reports the TF reference as a range**, not a point — replicates of the same
-  config span ~2x in `dist_avg` (#8).
-- **Adjacent work section added.** The shipped production model registry (seed-registry CLI,
-  `model-registry` spec) was absent from the "source of truth" roadmap, so its code had no home and
-  #3/#7 had no tier. Tier 2 silently depended on the `ModelCard` publishing surface it established;
-  that dependency is now written down.
-- **Issue links added:** Tier 0 → #1, #8. Tier 0.5 → #9. Tier 1 → `add-config-schema`.
+**Roadmap revision (2026-07-13)** — assignment stripped; onboarding findings folded in.
+- **IMPORTANT (structure):** **Names removed from tiers.** Every `**Lead:** <person>` line is gone
+  and the "Intern tracks" section is now **Work tracks**. The roadmap says *what* needs doing;
+  issues are filed JIT and **assigned at filing time**. Fixed-in-advance ownership never survived
+  contact with reality — it bound the same work (the config schema) to two different people at
+  once.
+- **IMPORTANT (clarity):** **Tier 0 onboarding clarified.** Reproducing a training run demonstrates
+  the *workflow*; it is **not** a parity test. This was already implied by the oracle philosophy but
+  not stated where the onboarding step lives, and the ambiguity cost real time (#1).
+- **IMPORTANT (reproducibility):** **Tier 1 gained a hard requirement:** per-epoch metrics **must**
+  be logged to W&B. The legacy TF runs logged only final summaries (`scan_history()` → zero rows),
+  which made a repro impossible to compare against its original.
+- **IMPORTANT (oracle accuracy):** **Tier 1 oracle now reports the TF reference as a range**, not a
+  point — same-config seed/replicate spread is ~1.5–1.7× in `dist_avg` (#8). *Correction: an earlier
+  draft of this entry and of #8 mischaracterized a `max_stride` receptive-field **sweep** (four
+  different configs) as "replicates of the same config" and quoted a ~2× spread across the whole
+  sweep; re-verified against the actual per-run configs and fixed here and in #8.*
+- **IMPORTANT (completeness):** **Adjacent work section added.** The shipped production model
+  registry (seed-registry CLI, `model-registry` spec) was absent from the "source of truth"
+  roadmap, so its code had no home and #3/#7 had no tier. Tier 2 silently depended on the
+  `ModelCard` publishing surface it established; that dependency is now written down.
+- **MINOR:** **Issue links added:** Tier 0 → #1, #8. Tier 0.5 → #9. Tier 1 → `add-config-schema`.
   Tier 2 → #10, #11. Adjacent work → #3, #7.
-- **Tier 2 gained a label-contract prerequisite, and Tier 2.7 a dependency on it** (#10). The
-  `sleap-roots-labels` registry stores provenance as boolean keys and dead `data_path`s, and its
-  `cyl`/`cylinder` split means models cannot be joined to their training labels.
-- **Tracking policy** now names the `/new-feature` Claude workflow so contributors don't improvise.
+- **IMPORTANT (lineage):** **Tier 2 gained a label-contract prerequisite, and Tier 2.7 a dependency
+  on it** (#10). The `sleap-roots-labels` registry stores provenance as boolean keys and dead
+  `data_path`s, and its `cyl`/`cylinder` split means models cannot be joined to their training
+  labels.
+- **MINOR:** **Tracking policy** now names the `/new-feature` Claude workflow so contributors don't
+  improvise.
+- **MINOR (self-review, post-#12 review pass):** fixed a self-contradiction ("trio" vs "team"
+  cadence wording), a temporally-incoherent "whoever leads Tier 8" phrase (Tier 8 is Phase 2, but
+  the ramp task it described was needed during Phase 1, before this revision's own JIT-assignment
+  policy would assign anyone to it), an imprecise "13 legacy collections" count (the registry holds
+  ~100 collections; 13 carry `production`), and a `/build-labeling-package` slash-command reference
+  that doesn't resolve outside a personal script. Also restored one historical-log line this
+  revision had inadvertently altered (`#155` → `talmolab/sleap-app#155`) back to its original
+  wording, since editing prior dated entries — even for a good reason — contradicts "history is
+  append-only"; all live/forward references elsewhere in the doc remain correctly qualified.
