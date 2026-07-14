@@ -56,13 +56,67 @@ def resolve_registry_config() -> RegistryConfig:
     )
 
 
+WANDB_NETRC_MACHINE = "api.wandb.ai"
+
+
+def _resolve_netrc_path() -> str | None:
+    """Locate the netrc file the same way wandb does.
+
+    Mirrors ``wandb.sdk.lib.wbauth.wbnetrc._get_netrc_file_path`` so a
+    ``wandb login`` session is found on every platform: the ``NETRC`` env var
+    if set, else ``~/.netrc``, else ``~/_netrc`` (the file ``wandb login``
+    writes on Windows). Kept wandb-free by using only the stdlib.
+
+    Returns:
+        The path to an existing netrc file, or ``None`` if none is found.
+    """
+    env_path = os.environ.get("NETRC")
+    if env_path:
+        return os.path.expanduser(env_path)
+    unix_netrc = os.path.expanduser("~/.netrc")
+    if os.path.exists(unix_netrc):
+        return unix_netrc
+    windows_netrc = os.path.expanduser("~/_netrc")
+    if os.path.exists(windows_netrc):
+        return windows_netrc
+    return None
+
+
+def _has_wandb_credential() -> bool:
+    """Return whether a wandb credential is resolvable without contacting wandb.
+
+    A credential is resolvable if ``WANDB_API_KEY`` is set or a netrc entry for
+    ``api.wandb.ai`` exists (as written by ``wandb login``). A malformed,
+    unreadable, or missing netrc is treated as "no credential" rather than
+    raising, and the check never imports ``wandb``.
+
+    Returns:
+        ``True`` if a credential is resolvable, ``False`` otherwise.
+    """
+    if os.environ.get("WANDB_API_KEY"):
+        return True
+    netrc_path = _resolve_netrc_path()
+    if netrc_path is None:
+        return False
+    try:
+        import netrc
+
+        return bool(netrc.netrc(netrc_path).authenticators(WANDB_NETRC_MACHINE))
+    except Exception:
+        return False
+
+
 def require_api_key() -> None:
-    """Fail fast if ``WANDB_API_KEY`` is not set.
+    """Fail fast if no wandb credential is resolvable.
+
+    A credential is resolvable via ``WANDB_API_KEY`` or a netrc entry for
+    ``api.wandb.ai`` written by ``wandb login`` (see :func:`_has_wandb_credential`).
 
     Raises:
-        RuntimeError: If ``WANDB_API_KEY`` is unset, before any network call.
+        RuntimeError: If no credential is resolvable, before any network call.
     """
-    if not os.environ.get("WANDB_API_KEY"):
+    if not _has_wandb_credential():
         raise RuntimeError(
-            "WANDB_API_KEY is not set; cannot contact the wandb registry."
+            "No wandb credential found; set WANDB_API_KEY or run `wandb login` "
+            "(a netrc entry for api.wandb.ai). Cannot contact the wandb registry."
         )

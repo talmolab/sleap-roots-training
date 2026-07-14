@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
+  wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
+  `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb
+  locates it (`NETRC` env var, else `~/.netrc`, else `~/_netrc`), so a login session is honored on
+  every platform (including Windows `~/_netrc`). Fail-fast with a clear error is retained when no
+  credential is resolvable anywhere; a malformed netrc is treated as "no credential".
+
 ### Added
 - `sleap-roots-training seed-registry`: seed the production wandb model registry from the
   committed selection matrix. Publishes the current legacy root models as `type="model"`
