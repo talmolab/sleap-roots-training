@@ -1,9 +1,23 @@
 import hashlib
 import importlib.metadata
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from sleap_roots_training.registry import lineage
+
+#: The committed real TF-reference run configs to exercise lineage against.
+TF_RUN_IDS = (
+    "ijn85j6w",
+    "nxe8xgsd",
+    "v7rdm7cd",
+    "qilbptpp",
+    "1tryadtu",
+    "yenwgpjq",
+    "26ryyfu2",
+)
 
 
 def _fake_git(rev="deadbeef\n", status="\n"):
@@ -72,3 +86,31 @@ def test_chooser_matrix_sha256_matches_file(tmp_path):
     assert chooser.matrix_sha256(matrix) == hashlib.sha256(b"models: []\n").hexdigest()
     # Packaged default is a 64-hex digest.
     assert len(chooser.matrix_sha256()) == 64
+
+
+def _flatten_keys(obj, prefix=""):
+    """Return the full nested keyset of a config (both bare and dotted keys)."""
+    keys = set()
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            dotted = f"{prefix}.{key}" if prefix else key
+            keys.add(key)
+            keys.add(dotted)
+            keys |= _flatten_keys(value, dotted)
+    elif isinstance(obj, list):
+        for item in obj:
+            keys |= _flatten_keys(item, prefix)
+    return keys
+
+
+@pytest.mark.parametrize("run_id", TF_RUN_IDS)
+def test_lineage_coexists_with_real_run_config(run_id, tf_config, monkeypatch):
+    # Exercise lineage against a committed real W&B run config (not a hand-rolled dict):
+    # the lineage keys must be disjoint from the config's full nested keyset, and the
+    # combined mapping must round-trip through JSON unchanged.
+    monkeypatch.setenv("SLEAP_ROOTS_TRAINING_GIT_SHA", "abc123")
+    config = tf_config(run_id)
+    lin = lineage.build_lineage(hashlib.sha256(b"models: []\n").hexdigest())
+    assert set(lin).isdisjoint(_flatten_keys(config))
+    merged = {**config, **lin}
+    assert json.loads(json.dumps(merged)) == merged
