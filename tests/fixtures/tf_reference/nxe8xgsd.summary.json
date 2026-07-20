@@ -1,0 +1,17 @@
+{
+  "_wandb": {
+    "runtime": 2844
+  },
+  "dist_avg": 1.7104154479193332,
+  "dist_p50": 0.5858548173815423,
+  "dist_p90": 4.537119015587625,
+  "dist_p95": 8.421677815726055,
+  "dist_p99": 11.298794099344985,
+  "dist_std": 2.5467433899084564,
+  "model_name": "250625_122328.multi_instance.n=120",
+  "model_path": "//multilab-na.ad.salk.edu/hpi_dev/users/eberrigan/SLEAP/20250625_cyl_arabidopsis_primary_receptive_field/train_test_split.v000/models/250625_122328.multi_instance.n=120",
+  "oks_map": 0.008580858085808581,
+  "oks_mar": 0.013636363636363636,
+  "vis_prec": 1,
+  "vis_recall": 0.6309523809523809
+}
