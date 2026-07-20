@@ -22,12 +22,13 @@ dir so they never read the developer's real `~/.netrc` and run identically on ev
 ## 2. Implementation
 
 - [x] 2.1 In `src/sleap_roots_training/registry/config.py`, add module-level
-      `_resolve_netrc_path() -> str | None` mirroring wandb: `NETRC` env (expanded) if set, else
-      `~/.netrc` if it exists, else `~/_netrc` if it exists, else `None`.
+      `_resolve_netrc_path() -> Path | None` mirroring wandb: `NETRC` env (expanded) if set, else
+      `~/.netrc` if it exists, else `~/_netrc` if it exists, else `None` (pathlib, not `os.path`).
 - [x] 2.2 Add module-level `_has_wandb_credential() -> bool`: return `True` if `WANDB_API_KEY` is
       set; else resolve the netrc path (return `False` if `None`) and return
-      `bool(netrc.netrc(path).authenticators("api.wandb.ai"))` (stdlib `netrc`, imported locally — no
-      `import wandb`); return `False` on any exception (malformed/unreadable/missing).
+      `bool(creds and creds[2])` from `netrc.netrc(path).authenticators("api.wandb.ai")` — i.e.
+      require a **non-empty password** (stdlib `netrc`, module-level import — no `import wandb`);
+      return `False` on `(NetrcParseError, OSError)` (malformed/unreadable/missing).
 - [x] 2.3 Update `require_api_key()` to raise `RuntimeError` only when `_has_wandb_credential()` is
       `False`, with a clear message naming both sources (e.g. set `WANDB_API_KEY` or run
       `wandb login`). Update its docstring. Keep the public function name (callers/tests unchanged).
@@ -41,3 +42,20 @@ dir so they never read the developer's real `~/.netrc` and run identically on ev
       maintained).
 - [x] 3.4 `openspec validate update-wandb-credential-guard --strict`.
 - [x] 3.5 Add a `docs/CHANGELOG.md` Unreleased entry.
+
+## 4. Review response (PR #13)
+
+- [x] 4.1 Blank-password bug: `_has_wandb_credential()` requires a non-empty password
+      (`creds[2]`), so a stale/partially-written netrc no longer passes the guard (mirrors
+      `wandb==0.28.0` `wbnetrc.read_netrc_auth_with_source`). Regression test
+      `test_blank_password_netrc_is_not_a_credential`.
+- [x] 4.2 Narrow `except Exception` -> `except (netrc.NetrcParseError, OSError)`; move
+      `import netrc` to module level.
+- [x] 4.3 Switch `_resolve_netrc_path()` to `pathlib.Path`; fix its docstring so the `NETRC`
+      branch (returned as-is) is distinguished from the existence-checked fallbacks.
+- [x] 4.4 Add shared `tests/conftest.py` `isolate_netrc` fixture; use it in
+      `tests/test_registry_cli.py::test_execute_without_api_key_fails_before_prompt` (was not
+      netrc-isolated) and refactor `tests/test_registry_config.py` onto it.
+- [x] 4.5 Add branch-coverage test `test_other_machine_netrc_is_not_a_credential`.
+- [x] 4.6 Fix stale docstring in `cli.py::_require_api_key`.
+- [x] 4.7 Rebase onto current `main` to drop `docs/roadmap.md` stale-branch drift.

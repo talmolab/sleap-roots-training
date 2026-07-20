@@ -13,7 +13,10 @@ a clear error only when no credential is resolvable anywhere. The netrc file SHA
 same way wandb locates it, so a login session is detected on every platform: the `NETRC` environment
 variable if set, otherwise `~/.netrc`, otherwise `~/_netrc` (the file `wandb login` writes on
 Windows). The check SHALL use the stdlib `netrc` module (no `import wandb`), and a malformed,
-unreadable, or missing netrc SHALL be treated as "no credential" rather than raising.
+unreadable, or missing netrc SHALL be treated as "no credential" rather than raising. A netrc entry
+for `api.wandb.ai` whose password field is blank or absent SHALL NOT count as a resolvable
+credential (mirroring wandb's own resolver), so a stale or partially-written login cannot pass the
+guard and then fail deep inside `wandb.init()`.
 
 #### Scenario: Defaults when environment unset
 
@@ -43,6 +46,13 @@ unreadable, or missing netrc SHALL be treated as "no credential" rather than rai
 - **WHEN** the credential guard reads a malformed or unreadable netrc while `WANDB_API_KEY` is unset
 - **THEN** the parse/read error is swallowed and treated as "no credential"
 - **AND** the guard raises the same clear error rather than propagating the netrc parse error
+
+#### Scenario: Netrc entry with a blank password is not a credential
+
+- **WHEN** `WANDB_API_KEY` is unset and the netrc has an `api.wandb.ai` entry whose password field is
+  blank or absent (a stale/interrupted `wandb login`)
+- **THEN** the guard treats it as "no credential" and fails fast before the confirmation prompt
+- **AND** the guard does not defer the failure to a later `wandb.init()` call
 
 ### Requirement: Registry Verification Command
 
