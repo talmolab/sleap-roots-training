@@ -11,7 +11,9 @@ program roadmap (generalist + per-crop keypoint models → segmentation masks).
 ## Status
 
 Early scaffold (alpha). The pipeline is being implemented incrementally — see
-`openspec/` for in-progress changes and `docs/CHANGELOG.md` for releases.
+`openspec/` for in-progress changes and `docs/CHANGELOG.md` for releases. The program plan is in
+[`docs/roadmap.md`](docs/roadmap.md); the TensorFlow reference baseline is documented in
+[`docs/tf-reference.md`](docs/tf-reference.md).
 
 ## Install (development)
 
