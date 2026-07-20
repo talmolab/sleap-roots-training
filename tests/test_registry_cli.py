@@ -1,42 +1,11 @@
 from types import SimpleNamespace
 
-import pytest
 from click.testing import CliRunner
 
 from sleap_roots_training import cli
 from sleap_roots_training.registry import publish
 
-TINY_MATRIX = """\
-models:
-  - species: soybean
-    mode: cylinder
-    age: "2, 3"
-    primary_model_id: soy/p
-    lateral_model_id: soy/l
-    crown_model_id: null
-checksums:
-  soy/p: {sha}
-  soy/l: {sha}
-""".format(sha="0" * 64)
-
-
-@pytest.fixture
-def tiny_matrix(tmp_path):
-    path = tmp_path / "matrix.yaml"
-    path.write_text(TINY_MATRIX)
-    return path
-
-
-@pytest.fixture
-def stub_models_root(tmp_path):
-    """A models-root with the two tiny models as already-unzipped dirs."""
-    root = tmp_path / "models"
-    for model_id in ("soy/p", "soy/l"):
-        model_dir = root / model_id
-        model_dir.mkdir(parents=True)
-        (model_dir / "best_model.h5").write_bytes(b"w")
-        (model_dir / "training_config.json").write_bytes(b"{}")
-    return root
+# ``tiny_matrix`` and ``stub_models_root`` are shared fixtures (see tests/conftest.py).
 
 
 def _invoke(args, **kw):
@@ -80,10 +49,9 @@ def test_dry_run_reports_missing_model(monkeypatch, tiny_matrix, tmp_path):
 
 
 def test_execute_without_api_key_fails_before_prompt(
-    monkeypatch, tiny_matrix, stub_models_root
+    clean_wandb_env, tiny_matrix, stub_models_root
 ):
-    monkeypatch.delenv("WANDB_API_KEY", raising=False)
-    _no_wandb(monkeypatch)
+    _no_wandb(clean_wandb_env)
     result = _invoke(
         [
             "--selection-matrix",
