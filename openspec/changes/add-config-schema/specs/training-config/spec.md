@@ -34,3 +34,24 @@ against the schema, and reports the result with an appropriate exit code.
 - **WHEN** a user runs `sleap-roots-training validate config.yaml` on a config that does not conform
 - **THEN** the command prints the validation error
 - **AND** exits with a non-zero status code
+
+### Requirement: Per-Epoch W&B Metric Logging
+
+The training-config schema SHALL include a Weights & Biases logging configuration whose default
+enables **per-epoch** metric logging, so that Tier-1 sleap-nn runs log per-epoch train/val loss and
+the stopping epoch to W&B (recoverable via `run.scan_history()`). This closes the observability gap
+exposed by the legacy TensorFlow reference runs, which logged only final eval summaries — for those
+runs `scan_history()` returns zero rows, so there is no loss curve and no epoch count, which made
+the Tier-0 onboarding repro impossible to compare against the original (see `docs/roadmap.md` Tier 1
+and `docs/tf-reference.md`). Disabling per-epoch logging SHALL be an explicit, non-default choice.
+
+#### Scenario: Per-epoch logging is enabled by default
+
+- **WHEN** a config is loaded that does not set the W&B logging cadence
+- **THEN** the resolved config enables per-epoch metric logging by default
+
+#### Scenario: Per-epoch logging can be explicitly disabled
+
+- **WHEN** a config explicitly sets the W&B logging cadence to disable per-epoch logging
+- **THEN** the resolved config reflects that choice
+- **AND** validation still succeeds
