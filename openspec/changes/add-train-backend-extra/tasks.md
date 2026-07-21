@@ -104,11 +104,11 @@ runbook skeleton commit stays green before the manual spike backfills real findi
 
 ## 5. Changelog + verification
 
-- [ ] 5.1 Append to the existing `## [Unreleased]` / `### Added` in `docs/CHANGELOG.md` (do not
+- [x] 5.1 Append to the existing `## [Unreleased]` / `### Added` in `docs/CHANGELOG.md` (do not
       create a second `### Added`): the optional `train` backend extra, the verified keypoint
       runbook, and the integration GPU smoke test. (Do not duplicate the install command or restate
       the upstream-release fact here — those live in the runbook and the roadmap correction.)
-- [ ] 5.2 Verify with CI's exact invocations: `uv sync --locked --group dev`; `uv run pytest -m
+- [x] 5.2 Verify with CI's exact invocations: `uv sync --locked --group dev`; `uv run pytest -m
       "not integration" tests/` green; `uv run pytest tests/` (no marker filter) confirms
       `test_gpu.py` is SKIPPED (not errored) in the torch-less env; `uv run black --check
       src/sleap_roots_training tests`; `uv run ruff check src/sleap_roots_training`; `uv build`
