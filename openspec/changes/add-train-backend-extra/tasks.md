@@ -83,16 +83,19 @@ runbook skeleton commit stays green before the manual spike backfills real findi
 
 ## 4. Manual verification spike (remote Windows RTX A5000; NOT CI, NOT a merge gate)
 
-- [~] 4.1 On the training host, install from the **checkout**: `uv pip install ".[train]"
+- [x] 4.1 On the training host, install from the **checkout**: `uv pip install ".[train]"
       --torch-backend=auto`. *Done on the A5000 (native Windows): resolved sleap-nn 0.2.0 /
-      sleap-io 0.7.1 / torch 2.8.0+cu129; `torch.cuda.is_available()` is True.* **Pending:** fetch
-      the BermanFlies sample + run `sleap-nn train` then predict end-to-end (config schema being
-      confirmed on 0.2.0).
+      sleap-io 0.7.1 / torch 2.8.0+cu129; `torch.cuda.is_available()` True. Trained the BermanFlies
+      sample (2 epochs, ~49 s) via `sleap-nn train --config config.yaml`; the run also produced
+      predictions (`labels_pr.val.0.slp`) + metrics (val mOKS 0.186, avg dist 4.15 px). Standalone
+      inference verified via `sleap-nn track` (0.2.0's checkpoint-inference CLI). Two 0.2.0 caveats
+      recorded in the runbook: input config needs `data_config.preprocessing`; `predict` is
+      ONNX-export (use `track`).*
 - [x] 4.2 Run `pytest -m integration tests/test_gpu.py` on that host; capture the compute capability
       and `torch.cuda.get_arch_list()` output; record whether kernels are native or PTX-JIT for
       `sm_86`. *Done: 1 passed; capability `(8,6)`; arch list
       `['sm_70','sm_75','sm_80','sm_86','sm_90','sm_100','sm_120']` → `sm_86` native, no PTX-JIT.*
-- [~] 4.3 Backfill the exact commands + arch findings into `docs/training-backend.md` as an
+- [x] 4.3 Backfill the exact commands + arch findings into `docs/training-backend.md` as an
       **explicit commit** (`docs: backfill A5000 arch findings + verified commands`); paste the
       console output into the PR description. Extend the docs-contract check so it now asserts a
       concrete arch token (regex `sm_\d+` or literal `get_arch_list`) is present and no `TODO`/`TBD`

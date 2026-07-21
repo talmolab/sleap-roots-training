@@ -13,11 +13,11 @@ The backend ships as an optional extra so the base install and CI stay lean:
 - The end-user install target is `sleap-roots-training[train]` (works once the package is
   published); from a source checkout, install the extra from the working tree (below).
 
-> **Status:** install + GPU/arch findings are **verified on the RTX A5000** (see "GPU / CUDA
-> arch findings"). The train/predict commands below reflect the documented `sleap-nn` CLI and are
-> **pending end-to-end verification on the pinned 0.2.0** — `sleap-nn` **0.3.0** introduced the
-> unified `sleap-nn predict` CLI, so on 0.2.0 the prediction entrypoint may differ; the exact
-> verified commands get recorded here once the sample run completes.
+> **Status: verified end-to-end on the RTX A5000 (2026-07-21).** Install, GPU/arch check, and a
+> keypoint train → predict → evaluate run on the BermanFlies sample all completed on `sleap-nn`
+> 0.2.0. Two 0.2.0-specific gotchas are documented inline (the input config must include
+> `data_config.preprocessing`, and checkpoint inference is `sleap-nn track` — `sleap-nn predict` is
+> the ONNX-export path); see "sleap-nn 0.2.0 caveats".
 
 ## 1. Install the training backend
 
@@ -83,7 +83,8 @@ curl.exe -L -o train.pkg.slp https://storage.googleapis.com/sleap-data/datasets/
 curl.exe -L -o val.pkg.slp   https://storage.googleapis.com/sleap-data/datasets/BermanFlies/random_split1/val.pkg.slp
 ```
 
-Write a minimal `config.yaml` (tiny run — a couple of epochs is enough to prove the path):
+Write this `config.yaml` (tiny run — a couple of epochs is enough to prove the path). The
+`data_config.preprocessing` block is **required on 0.2.0** — see the caveats below:
 
 ```yaml
 data_config:
@@ -91,6 +92,15 @@ data_config:
     - train.pkg.slp
   val_labels_path:
     - val.pkg.slp
+  preprocessing:
+    ensure_rgb: false
+    ensure_grayscale: false
+    max_height: 192
+    max_width: 192
+    scale: 1.0
+    crop_size: null
+    min_crop_size: 100
+    crop_padding: null
 model_config:
   backbone_config:
     unet:
@@ -113,17 +123,25 @@ Train:
 uv run sleap-nn train --config config.yaml
 ```
 
-(This config/sample follows the sleap-nn quickstart, which documents the 0.3.0 CLI; if the
-0.2.0 config schema differs, run `uv run sleap-nn train --help` and adjust — the exact working
-config used gets recorded here after the run.)
+The trained model lands in `models/my_first_model/` (0.2.0 auto-suffixes to `-1`, `-2`, … if the
+run name already exists). Training also runs built-in inference + evaluation at the end, writing
+`labels_pr.train.0.slp` / `labels_pr.val.0.slp` and `metrics.*.npz` into the model dir — so a
+single `train` call already exercises train → predict → evaluate. Verified run on the A5000
+(BermanFlies, 2 epochs, ~49 s): val **mOKS 0.186**, avg dist **4.15 px**, p50 **2.92 px**,
+PCK@5px **0.189** (rough by design — a 2-epoch smoke run; quality is not the Tier 0.5 bar).
 
-## 4. Predict with the trained model
+## 4. Predict on new data with the trained model
+
+Standalone inference on 0.2.0 is **`sleap-nn track`** (`sleap-nn predict` is the ONNX-export
+predictor on 0.2.0; the unified `sleap-nn predict` arrives in 0.3.0):
 
 ```bash
-uv run sleap-nn predict --data_path val.pkg.slp --model_paths models/<run_name>/ -o val.predictions.slp
+uv run sleap-nn track --data_path val.pkg.slp --model_paths models/my_first_model/ --output_path val.predictions.slp
 ```
 
-Confirm `val.predictions.slp` is written with predicted instances.
+Confirm `val.predictions.slp` is written with predicted instances. Useful options: `--device`
+(default `auto`), `--peak_threshold` (default `0.2`), `--batch_size` (default `4`), and
+`--model_paths` may be repeated to run a top-down centroid + centered-instance pair.
 
 ## GPU / CUDA arch findings
 
@@ -140,6 +158,22 @@ Recorded on the target RTX A5000 (native Windows, driver 552.22 / CUDA 12.4) on 
 The `cu129` (CUDA 12.9) build runs on the 12.4 driver via CUDA minor-version
 forward-compatibility, so no driver update was needed. `uv run pytest -m integration
 tests/test_gpu.py` passes on this box.
+
+## sleap-nn 0.2.0 caveats (found during this verification)
+
+- **The input config must include `data_config.preprocessing`.** `run_training` reads
+  `config.data_config.preprocessing.ensure_rgb` (and `.ensure_grayscale`) directly off the
+  user-supplied config after the fit loop, and does not backfill that default there. A config
+  without it trains successfully but then crashes with
+  `omegaconf.errors.ConfigAttributeError: Key 'preprocessing' is not in struct`. Including the
+  `preprocessing` block (as above) avoids it. *Report upstream to the SLEAP team.*
+- **Checkpoint inference is `sleap-nn track`, not `sleap-nn predict`.** On 0.2.0, `sleap-nn predict`
+  is the ONNX-export predictor (`predict [OPTIONS] EXPORT_DIR VIDEO_PATH`). The unified
+  `sleap-nn predict --data_path … --model_paths … -o …` documented on nn.sleap.ai is a **0.3.0**
+  feature. On the pinned 0.2.0 use `sleap-nn track` (same `--data_path` / `--model_paths` /
+  `--output_path` options).
+- **CUDA:** `--torch-backend=auto` installed a CUDA 12.9 torch build that runs on the 12.4 driver
+  via forward-compatibility (no driver update needed); see "GPU / CUDA arch findings".
 
 ## Notes
 

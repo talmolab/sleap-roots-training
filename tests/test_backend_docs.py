@@ -12,6 +12,7 @@ the Windows CI leg regardless of checkout line endings.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 RUNBOOK = Path(__file__).resolve().parents[1] / "docs" / "training-backend.md"
@@ -45,3 +46,11 @@ def test_runbook_has_arch_findings_section():
         or ("compute capability" in text)
         or ("arch list" in text)
     ), "runbook missing a GPU compute-capability / arch findings section"
+
+
+def test_runbook_arch_findings_are_backfilled():
+    # After the verification spike, the arch findings must be real, not placeholders.
+    text = _read()
+    assert re.search(r"sm_\d+", text), "runbook missing a concrete sm_* arch token"
+    for placeholder in ("TODO", "TBD"):
+        assert placeholder not in text, f"runbook still has a {placeholder} placeholder"
