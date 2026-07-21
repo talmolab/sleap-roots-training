@@ -17,6 +17,22 @@ import pytest
 #: Directory holding committed test data.
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+#: The seven canonical run ids of the TensorFlow-reference receptive-field sweep, in
+#: stride order. Single source of truth for the tests that key off them (the standalone
+#: capture script keeps its own copy, guarded against drift by ``test_tf_reference``).
+TF_RUN_IDS = (
+    "ijn85j6w",  # stride 8  (no summary metrics)
+    "nxe8xgsd",  # stride 16
+    "v7rdm7cd",  # stride 16
+    "qilbptpp",  # stride 32
+    "1tryadtu",  # stride 32
+    "yenwgpjq",  # stride 64
+    "26ryyfu2",  # stride 64 (no summary metrics)
+)
+
+#: The runs that logged no summary metrics (only the ``_wandb`` bookkeeping key).
+NO_SUMMARY_RUNS = frozenset({"ijn85j6w", "26ryyfu2"})
+
 #: The wandb/registry environment variables a hermetic registry test must clear.
 _WANDB_ENV_VARS = (
     "WANDB_API_KEY",

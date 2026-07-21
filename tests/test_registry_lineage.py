@@ -6,18 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from conftest import TF_RUN_IDS  # committed real TF-reference run ids (shared)
 from sleap_roots_training.registry import lineage
-
-#: The committed real TF-reference run configs to exercise lineage against.
-TF_RUN_IDS = (
-    "ijn85j6w",
-    "nxe8xgsd",
-    "v7rdm7cd",
-    "qilbptpp",
-    "1tryadtu",
-    "yenwgpjq",
-    "26ryyfu2",
-)
 
 
 def _fake_git(rev="deadbeef\n", status="\n"):

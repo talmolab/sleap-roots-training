@@ -31,7 +31,9 @@ group as "nominally identical replicates" was wrong; this document reflects the 
 
 ## Metrics (per stride)
 
-Localization error is in pixels; lower `dist_*` is better, higher `vis_recall` is better.
+Localization error is in **pixels**: every run's `config` has `input_scaling: 1` (no rescaling of
+the input image), so the `dist_*` values are native image-pixel distances. Lower `dist_*` is
+better, higher `vis_recall` is better.
 
 | run id | `max_stride` | `dist_avg` | `dist_p50` | `dist_p90` | `vis_recall` |
 |---|---|---|---|---|---|
@@ -40,7 +42,7 @@ Localization error is in pixels; lower `dist_*` is better, higher `vis_recall` i
 | `v7rdm7cd` | 16 | 0.989 | 0.358 | 2.638 | 0.466 |
 | `qilbptpp` | 32 | 2.078 | 0.661 | 4.472 | 0.829 |
 | `1tryadtu` | 32 | 1.383 | 0.543 | 3.586 | 0.829 |
-| `yenwgpjq` | 64 | 1.709 | 0.754 | 4.678 | 0.884 |
+| `yenwgpjq` | 64 | 1.708 | 0.754 | 4.677 | 0.884 |
 | `26ryyfu2` | 64 | — | — | — | — |
 
 ## Same-config spread (report as a range, not a point)
@@ -58,12 +60,21 @@ Stride 64 is **not** a usable pair: its second run (`26ryyfu2`) logged no metric
 same-config baseline range is needed for the Tier-1 oracle, it must come from these same-stride pairs
 or from a fresh set of runs with identical configs varying only the seed.
 
-## `oks_map` is excluded (broken)
+## `oks_map` is excluded (likely mis-calibrated, not a generic bug)
 
 `oks_map` reads far below any sensible value across **every** run with a summary — roughly
 0.009–0.046 (well under ~0.05) — regardless of stride or `dist_avg`. It is **excluded** from the
-reference as a broken/mis-scaled metric; do not report or compare it. Use the `dist_*` localization
-metrics and `vis_recall` instead.
+reference; do not report or compare it. Use the `dist_*` localization metrics and `vis_recall`
+instead.
+
+A concrete hypothesis for *why* — worth checking before this becomes a permanent, unexamined dead
+end: `vis_prec` is **exactly `1`** in every one of the five summarized runs while the OKS metrics
+collapse. OKS is scored against per-keypoint sigma constants; if those sigmas were inherited from a
+different keypoint domain (e.g. human/animal pose) and applied unchanged to the root skeleton, they
+would depress OKS-based metrics uniformly while the `dist_*` and visibility metrics stay meaningful.
+That points at a root-domain **OKS-sigma calibration** problem, not at the models being bad. This is
+recorded here rather than filed as a separate issue; revisit it if OKS metrics are ever needed for
+Tier-1 scoring.
 
 ## Missing results
 
