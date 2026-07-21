@@ -32,6 +32,18 @@ dependencies = [
     "wandb>=0.28.0,<0.29.0",
 ]
 
+[project.optional-dependencies]
+# Phase-1 sleap-nn keypoint training backend (Tier 0.5, #9). Heavy + platform-specific,
+# so kept out of the base install; CI never selects this extra. Capped below the
+# unverified v0.3.0 / sleap-io 0.8.0 mask line (raise at the Tier 6 mask re-verify).
+# CUDA torch is selected at install time on the GPU box (uv pip install ".[train]"
+# --torch-backend=auto|cu124|cu126); see docs/training-backend.md.
+train = [
+    "sleap-nn>=0.2.0,<0.3.0",
+    "sleap-io>=0.7.1,<0.8.0",
+    "torch>=2.5.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/talmolab/sleap-roots-training"
 Repository = "https://github.com/talmolab/sleap-roots-training"
@@ -49,6 +61,7 @@ build-backend = "uv_build"
 dev = [
     "black>=25.1.0",
     "build>=1.3.0",
+    "packaging>=24.0",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
     "ruff>=0.12.11",
