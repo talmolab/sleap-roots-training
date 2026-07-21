@@ -55,20 +55,20 @@ runbook skeleton commit stays green before the manual spike backfills real findi
 
 ## 3. Runbook + docs-truth corrections (docs + CI-safe contract test)
 
-- [ ] 3.1 Write the failing `tests/test_backend_docs.py`. Resolve the doc via
+- [x] 3.1 Write the failing `tests/test_backend_docs.py`. Resolve the doc via
       `Path(__file__).resolve().parents[1] / "docs" / "training-backend.md"`; read with
       `encoding="utf-8"` and normalize `\r\n`→`\n` before all assertions (Windows CI leg). Assert
       **presence only**: the `sleap-roots-training[train]` install token, a fenced `sleap-nn` train
       command, a fenced predict command, and a compute-capability / arch section heading.
-- [ ] 3.2 Run the test → confirm it FAILs (doc absent).
-- [ ] 3.3 Write `docs/training-backend.md` — the single canonical home for install (`[train]` extra
+- [x] 3.2 Run the test → confirm it FAILs (doc absent).
+- [x] 3.3 Write `docs/training-backend.md` — the single canonical home for install (`[train]` extra
       via `pip install ".[train]"` / `uv pip install ".[train]" --torch-backend=cu128`), the
       verified train + predict commands, a sample-dataset pointer, and the GPU/arch findings (arch
       section a clearly-marked placeholder to backfill from task 4). Keep it a **runbook, not a
       tutorial**. Add a one-line pointer next to README "Install (development)" (pointer only — do
       NOT restate the commands, DRY); add a one-line Tech-Stack note in `openspec/project.md`.
-- [ ] 3.4 Run the test → green; lint clean.
-- [ ] 3.5 Correct now-false upstream facts (the change's own research proves `sleap-nn` v0.3.0 and
+- [x] 3.4 Run the test → green; lint clean.
+- [x] 3.5 Correct now-false upstream facts (the change's own research proves `sleap-nn` v0.3.0 and
       `sleap-io` 0.8.0/0.9.1 are already released):
       - `openspec/project.md` "Important Constraints": rewrite the "mask features … pending the
         v0.3.0 / sleap-io 0.8.0 releases" line to state those releases exist, so Phase 2 pins to
