@@ -98,7 +98,10 @@
 ## 7. Test-collection hardening + verification
 
 - [x] 7.1 Add `[tool.pytest.ini_options] testpaths = ["tests"]` (and preserve the `integration`
-      marker) to `pyproject.toml`, so the default run never recurses into `scripts/`.
+      marker) to `pyproject.toml` — explicit is better than implicit: pin collection to `tests/`
+      instead of relying on default rootdir discovery. (This is *not* needed to keep `scripts/` out
+      of collection: nothing under `scripts/` matches pytest's `test_*.py`/`*_test.py` patterns, as
+      confirmed by an identical `pytest --collect-only -q` with the setting removed.)
 - [x] 7.2 `uv run pytest` (existing 69 + new tests green; no network).
 - [x] 7.3 `uv run black --check src/sleap_roots_training tests` and
       `uv run ruff check src/sleap_roots_training`.

@@ -18,16 +18,16 @@
 - [ ] 2.3 Implement the `validate` subcommand in `cli.py`, wiring `load_config` + `validate_config`.
 - [ ] 2.4 Run the full test suite + lint; confirm green.
 
-## 3. Per-epoch W&B logging (TDD)
+## 3. Docs
 
-- [ ] 3.1 Write the failing test: a config with no W&B logging cadence set resolves with per-epoch
-      metric logging enabled by default.
-- [ ] 3.2 Write the failing test: a config that explicitly disables per-epoch logging resolves with
-      it disabled and still validates.
-- [ ] 3.3 Add the W&B logging configuration (with per-epoch enabled by default) to the schema in
-      `sleap_roots_training/config.py`; run the tests to confirm they pass.
-
-## 4. Docs
-
-- [ ] 4.1 Add an example config (`examples/`) and a README usage snippet; add a `docs/CHANGELOG.md`
+- [ ] 3.1 Add an example config (`examples/`) and a README usage snippet; add a `docs/CHANGELOG.md`
       entry under `[Unreleased]`.
+
+## 4. Per-epoch W&B logging (TDD)
+
+- [ ] 4.1 Write the failing test: a config with no W&B logging cadence set resolves with per-epoch
+      metric logging enabled by default.
+- [ ] 4.2 Write the failing test: a config that explicitly disables per-epoch logging resolves with
+      it disabled and still validates.
+- [ ] 4.3 Add the W&B logging configuration (with per-epoch enabled by default) to the schema in
+      `sleap_roots_training/config.py`; run the tests to confirm they pass.
