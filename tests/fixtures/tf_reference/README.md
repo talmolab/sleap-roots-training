@@ -15,6 +15,11 @@ network access, and locks the documented reference against drift.
 - **Captured with:** `wandb` client `0.28.0`
 - **Capture date:** 2026-07-20
 - **Contents:** `config` and `summary` JSON only — **no** W&B API key, netrc, or other secret.
+- **Redaction:** the raw payloads embed an internal SMB host and user in their path strings
+  (`config_path`, `filename`, `runs_folder`, `*_labels`, `model_path`). Both segments are redacted
+  to `REDACTED-HOST` / `REDACTED-USER` before committing; the audit-relevant run-name, timestamps,
+  group, and split are left intact. `scripts/pull_tf_reference.py` applies the same redaction on
+  every pull, so a refresh stays byte-identical.
 
 This experiment is a `model.backbone.unet.max_stride` **sweep**, not a replicate set. Two runs each
 at strides 16/32/64 and a single run at stride 8 (seven runs total). Do not pool or range metrics

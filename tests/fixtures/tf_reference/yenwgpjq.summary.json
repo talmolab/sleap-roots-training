@@ -9,7 +9,7 @@
   "dist_p99": 13.12451997470218,
   "dist_std": 2.546946908003485,
   "model_name": "250625_134257.multi_instance.n=120",
-  "model_path": "//multilab-na.ad.salk.edu/hpi_dev/users/eberrigan/SLEAP/20250625_cyl_arabidopsis_primary_receptive_field/train_test_split.v000/models/250625_134257.multi_instance.n=120",
+  "model_path": "//REDACTED-HOST/hpi_dev/users/REDACTED-USER/SLEAP/20250625_cyl_arabidopsis_primary_receptive_field/train_test_split.v000/models/250625_134257.multi_instance.n=120",
   "oks_map": 0.014608085808580857,
   "oks_mar": 0.05227272727272727,
   "vis_prec": 1,

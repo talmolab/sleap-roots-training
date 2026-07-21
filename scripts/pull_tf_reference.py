@@ -11,6 +11,11 @@ Only ``config``/``summary`` data is written -- never a W&B API key or netrc. The
 relies on an existing ``wandb login`` session (a netrc entry for ``api.wandb.ai``) or
 ``WANDB_API_KEY`` in the environment.
 
+The raw payloads embed an internal SMB host and user in their path strings; those two
+segments are redacted (see ``_redact``) before writing, keeping the audit-relevant
+run-name/timestamps/group intact. Redaction is applied on every pull, so re-running still
+reproduces byte-identical files.
+
 Writes are deterministic (LF newlines, ``sort_keys``, ``ensure_ascii``, single trailing
 newline) so re-running reproduces byte-identical files on every platform.
 
@@ -41,6 +46,35 @@ RUN_IDS = (
 #: Where the committed fixtures live, relative to the repo root.
 OUT_DIR = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "tf_reference"
 
+#: Internal path segments scrubbed from every payload before it is committed. The
+#: hostname reveals internal network topology; the user segment is redacted with it.
+#: The audit-relevant run-name/timestamps/group are deliberately left intact.
+_REDACTIONS = (
+    ("multilab-na.ad.salk.edu", "REDACTED-HOST"),
+    ("users/eberrigan", "users/REDACTED-USER"),  # forward-slash UNC form
+    ("users\\eberrigan", "users\\REDACTED-USER"),  # backslash UNC form
+)
+
+
+def _redact(payload):
+    """Return ``payload`` with the internal host/user redacted from every string value.
+
+    Args:
+        payload: A JSON-serializable value (dict, list, str, or scalar).
+
+    Returns:
+        The same structure with :data:`_REDACTIONS` applied to every string leaf.
+    """
+    if isinstance(payload, dict):
+        return {key: _redact(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [_redact(item) for item in payload]
+    if isinstance(payload, str):
+        for old, new in _REDACTIONS:
+            payload = payload.replace(old, new)
+        return payload
+    return payload
+
 
 def _write_json(path: Path, payload: dict) -> None:
     """Write ``payload`` as deterministic, byte-stable JSON.
@@ -66,8 +100,11 @@ def main() -> int:
     api = wandb.Api()
     for run_id in RUN_IDS:
         run = api.run(f"{ENTITY}/{PROJECT}/{run_id}")
-        _write_json(OUT_DIR / f"{run_id}.config.json", dict(run.config))
-        _write_json(OUT_DIR / f"{run_id}.summary.json", dict(run.summary._json_dict))
+        _write_json(OUT_DIR / f"{run_id}.config.json", _redact(dict(run.config)))
+        _write_json(
+            OUT_DIR / f"{run_id}.summary.json",
+            _redact(dict(run.summary._json_dict)),
+        )
         print(f"{run_id} {run.state}")
     return 0
 

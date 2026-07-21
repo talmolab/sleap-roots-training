@@ -1,5 +1,5 @@
 {
-  "config_path": "//multilab-na.ad.salk.edu/hpi_dev/users/eberrigan/SLEAP/20250625_cyl_arabidopsis_primary_receptive_field/train_test_split.v000/modified_config_v000_20250626_175615.json",
+  "config_path": "//REDACTED-HOST/hpi_dev/users/REDACTED-USER/SLEAP/20250625_cyl_arabidopsis_primary_receptive_field/train_test_split.v000/modified_config_v000_20250626_175615.json",
   "data": {
     "instance_cropping": {
       "center_on_part": null,
@@ -166,12 +166,12 @@
       ],
       "split_by_inds": false,
       "test_inds": null,
-      "test_labels": "\\\\multilab-na.ad.salk.edu\\hpi_dev\\users\\eberrigan\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\test.pkg.slp",
+      "test_labels": "\\\\REDACTED-HOST\\hpi_dev\\users\\REDACTED-USER\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\test.pkg.slp",
       "training_inds": null,
-      "training_labels": "\\\\multilab-na.ad.salk.edu\\hpi_dev\\users\\eberrigan\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\train.pkg.slp",
+      "training_labels": "\\\\REDACTED-HOST\\hpi_dev\\users\\REDACTED-USER\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\train.pkg.slp",
       "validation_fraction": 0.1,
       "validation_inds": null,
-      "validation_labels": "\\\\multilab-na.ad.salk.edu\\hpi_dev\\users\\eberrigan\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\val.pkg.slp"
+      "validation_labels": "\\\\REDACTED-HOST\\hpi_dev\\users\\REDACTED-USER\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\val.pkg.slp"
     },
     "preprocessing": {
       "ensure_grayscale": false,
@@ -185,7 +185,7 @@
     }
   },
   "description": "",
-  "filename": "\\\\multilab-na.ad.salk.edu\\hpi_dev\\users\\eberrigan\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\models\\250626_175627.multi_instance.n=120\\training_config.json",
+  "filename": "\\\\REDACTED-HOST\\hpi_dev\\users\\REDACTED-USER\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\models\\250626_175627.multi_instance.n=120\\training_config.json",
   "model": {
     "backbone": {
       "hourglass": null,
@@ -332,7 +332,7 @@
     "run_name": "250626_175627.multi_instance.n=120",
     "run_name_prefix": "",
     "run_name_suffix": "",
-    "runs_folder": "\\\\multilab-na.ad.salk.edu\\hpi_dev\\users\\eberrigan\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\models",
+    "runs_folder": "\\\\REDACTED-HOST\\hpi_dev\\users\\REDACTED-USER\\SLEAP\\20250625_cyl_arabidopsis_primary_receptive_field\\train_test_split.v000\\models",
     "save_outputs": true,
     "save_visualizations": false,
     "tags": [
