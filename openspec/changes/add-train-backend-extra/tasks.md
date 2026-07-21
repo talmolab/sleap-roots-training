@@ -43,14 +43,15 @@ runbook skeleton commit stays green before the manual spike backfills real findi
 
 ## 2. Integration-marked GPU smoke test (not in default CI)
 
-- [ ] 2.1 Write `tests/test_gpu.py`: `@pytest.mark.integration`; **no torch import at module
+- [x] 2.1 Write `tests/test_gpu.py`: `@pytest.mark.integration`; **no torch import at module
       scope** — `torch = pytest.importorskip("torch")` inside the test body; `if not
       torch.cuda.is_available(): pytest.skip(...)`; assert `torch.cuda.is_available()`; record
       `get_device_name(0)`, `get_device_capability()`, and `get_arch_list()` via print; assert
       `get_arch_list()` is non-empty.
-- [ ] 2.2 (CI-safe) Confirm the guard contract in the default environment: `pytest -m "not
+- [x] 2.2 (CI-safe) Confirm the guard contract in the default environment: `pytest -m "not
       integration"` DESELECTS it (suite stays green) and a full `pytest` in the torch-less dev env
-      SKIPS it (no collection error). This is the honest, CI-runnable test of the test's own safety.
+      SKIPS it (no collection error). *Confirmed on the Mac: `-m "not integration"` → 1 deselected /
+      0 selected; full run → 1 skipped ("could not import 'torch'"), no collection error.*
 
 ## 3. Runbook + docs-truth corrections (docs + CI-safe contract test)
 
