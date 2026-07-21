@@ -34,7 +34,7 @@ DOC_METRIC_COLUMNS = ("dist_avg", "dist_p50", "dist_p90", "vis_recall")
 
 
 def _load(run_id: str, kind: str) -> dict:
-    return json.loads((FIXTURES / f"{run_id}.{kind}.json").read_text())
+    return json.loads((FIXTURES / f"{run_id}.{kind}.json").read_text(encoding="utf-8"))
 
 
 def _max_stride(config: dict) -> int:
@@ -59,7 +59,9 @@ def _parse_doc_metric_table() -> dict[str, dict]:
     table row that names a canonical run. A missing metric keeps its literal "—" text.
     """
     rows: dict[str, dict] = {}
-    for line in DOC.read_text().splitlines():
+    # Read UTF-8 explicitly: Path.read_text() defaults to the platform encoding (cp1252
+    # on Windows), which mis-decodes the doc's em dashes and other non-ASCII glyphs.
+    for line in DOC.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped.startswith("|"):
             continue
@@ -100,7 +102,8 @@ def test_fixtures_have_no_secrets():
     # glued to underscores/adjacent word characters (which a `\b`-anchored regex missed).
     key_re = re.compile(r"(?<![0-9a-f])[0-9a-f]{40,}(?![0-9a-f])", re.IGNORECASE)
     for path in sorted(FIXTURES.iterdir()):
-        assert not key_re.search(path.read_text()), f"possible API key in {path.name}"
+        text = path.read_text(encoding="utf-8")
+        assert not key_re.search(text), f"possible API key in {path.name}"
     # No payload should carry a credential-bearing key with a non-empty value.
     for run_id in RUN_IDS:
         for kind in ("config", "summary"):
@@ -158,9 +161,11 @@ def test_doc_table_matches_every_fixture_cell():
         ), f"{run_id}: doc max_stride disagrees with the fixture config"
         if run_id in NO_SUMMARY_RUNS:
             for column, cell in row["cells"].items():
+                # U+2014 EM DASH marks a metric-less run; the \u escape keeps the source
+                # ASCII so the check does not depend on the source file's encoding.
                 assert (
-                    cell == "—"
-                ), f"{run_id}: doc {column}={cell!r}, expected '—' (no metrics logged)"
+                    cell == "\u2014"
+                ), f"{run_id}: doc {column}={cell!r} is not the em-dash placeholder"
             continue
         summary = _load(run_id, "summary")
         for column, cell in row["cells"].items():
@@ -172,7 +177,7 @@ def test_doc_table_matches_every_fixture_cell():
 
 
 def test_doc_locks_the_documented_claims():
-    doc = DOC.read_text()
+    doc = DOC.read_text(encoding="utf-8")
     assert "sweep" in doc.lower(), "the doc must frame the group as a sweep"
     # The two same-stride ranges (rounded values) must appear in the doc.
     for value in ("0.989", "1.710", "1.383", "2.078"):

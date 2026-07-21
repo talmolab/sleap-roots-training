@@ -60,7 +60,7 @@ checksums:
 def tiny_matrix(tmp_path: Path) -> Path:
     """Write the minimal selection matrix to a temp path and return it."""
     path = tmp_path / "matrix.yaml"
-    path.write_text(TINY_MATRIX)
+    path.write_text(TINY_MATRIX, encoding="utf-8")
     return path
 
 
@@ -98,7 +98,8 @@ def tf_config(tf_reference_dir: Path) -> Callable[[str], dict]:
     """Return a loader for a committed run ``config`` payload by run id."""
 
     def load(run_id: str) -> dict:
-        return json.loads((tf_reference_dir / f"{run_id}.config.json").read_text())
+        path = tf_reference_dir / f"{run_id}.config.json"
+        return json.loads(path.read_text(encoding="utf-8"))
 
     return load
 
@@ -108,6 +109,7 @@ def tf_summary(tf_reference_dir: Path) -> Callable[[str], dict]:
     """Return a loader for a committed run ``summary`` payload by run id."""
 
     def load(run_id: str) -> dict:
-        return json.loads((tf_reference_dir / f"{run_id}.summary.json").read_text())
+        path = tf_reference_dir / f"{run_id}.summary.json"
+        return json.loads(path.read_text(encoding="utf-8"))
 
     return load

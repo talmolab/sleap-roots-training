@@ -47,7 +47,7 @@ def test_clean_wandb_env_covers_the_documented_var_set():
 def test_tiny_matrix_and_stub_models_root(tiny_matrix, stub_models_root):
     # The two staging fixtures produce the files the registry tests rely on.
     assert tiny_matrix.is_file()
-    assert "soybean" in tiny_matrix.read_text()
+    assert "soybean" in tiny_matrix.read_text(encoding="utf-8")
     for model_id in ("soy/p", "soy/l"):
         assert (stub_models_root / model_id / "best_model.h5").is_file()
         assert (stub_models_root / model_id / "training_config.json").is_file()
