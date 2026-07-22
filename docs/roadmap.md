@@ -135,9 +135,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   range — not a hyperparameter sweep, which is a different axis of variation) on the held-out data;
   document config, hyperparameters, loss curves, and accuracy. This baseline — not exact parity with
   the old TF model — is the reference for later tiers; the old TF number is reported alongside **as
-  a range, not a point** (#8), because same-config seed/replicate spread is real (~1.5–1.7×
-  `dist_avg` in the legacy runs) and must not be mistaken for architecture-driven variation from a
-  sweep. *(W&B versioning is retrofitted in Tier 2.)*
+  a range, not a point** (#8), because same-config seed/replicate spread is real (~1.5–1.73×
+  `dist_avg` in the legacy runs; see `docs/tf-reference.md`) and must not be mistaken for
+  architecture-driven variation from a sweep. *(W&B versioning is retrofitted in Tier 2.)*
 - **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`.
   **Depends on** Tier 0.5 (#9).
 

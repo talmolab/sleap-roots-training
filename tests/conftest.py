@@ -1,30 +1,131 @@
-"""Shared pytest fixtures for the test suite."""
+"""Shared pytest fixtures for the sleap-roots-training test suite.
+
+Centralizes the setup that was otherwise re-invented across test modules — writing a
+selection-matrix YAML to a temp path, staging a stub models-root, and isolating the
+wandb/registry environment (env vars + netrc/home) for hermetic tests — plus loaders for
+the committed TensorFlow-reference W&B payloads under ``tests/fixtures/tf_reference/``.
+"""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
-_WANDB_CRED_ENV_VARS = ("WANDB_API_KEY", "NETRC")
+#: Directory holding committed test data.
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+#: The seven canonical run ids of the TensorFlow-reference receptive-field sweep, in
+#: stride order. Single source of truth for the tests that key off them (the standalone
+#: capture script keeps its own copy, guarded against drift by ``test_tf_reference``).
+TF_RUN_IDS = (
+    "ijn85j6w",  # stride 8  (no summary metrics)
+    "nxe8xgsd",  # stride 16
+    "v7rdm7cd",  # stride 16
+    "qilbptpp",  # stride 32
+    "1tryadtu",  # stride 32
+    "yenwgpjq",  # stride 64
+    "26ryyfu2",  # stride 64 (no summary metrics)
+)
+
+#: The runs that logged no summary metrics (only the ``_wandb`` bookkeeping key).
+NO_SUMMARY_RUNS = frozenset({"ijn85j6w", "26ryyfu2"})
+
+#: The wandb/registry environment variables a hermetic test must clear. ``NETRC`` joins
+#: the registry vars so netrc-based credential resolution is isolated too; ``HOME``/
+#: ``USERPROFILE`` are *repointed* (not cleared) by ``isolate_wandb_env`` below.
+_WANDB_ENV_VARS = (
+    "WANDB_API_KEY",
+    "WANDB_ENTITY",
+    "SLEAP_ROOTS_MODEL_REGISTRY",
+    "SLEAP_ROOTS_MODEL_ALIAS",
+    "NETRC",
+)
+
+#: A minimal one-row selection matrix (one primary + one lateral, shared checksum).
+TINY_MATRIX = """\
+models:
+  - species: soybean
+    mode: cylinder
+    age: "2, 3"
+    primary_model_id: soy/p
+    lateral_model_id: soy/l
+    crown_model_id: null
+checksums:
+  soy/p: {sha}
+  soy/l: {sha}
+""".format(sha="0" * 64)
 
 
 @pytest.fixture
-def isolate_netrc(monkeypatch, tmp_path) -> Path:
-    """Isolate wandb credential resolution from the host environment.
+def tiny_matrix(tmp_path: Path) -> Path:
+    """Write the minimal selection matrix to a temp path and return it."""
+    path = tmp_path / "matrix.yaml"
+    path.write_text(TINY_MATRIX, encoding="utf-8")
+    return path
 
-    Clears ``WANDB_API_KEY``/``NETRC`` and points ``HOME``/``USERPROFILE`` at an
-    empty temp dir so tests never pick up an ambient credential (e.g. a
-    developer who has run ``wandb login``) and behave identically on every OS.
+
+@pytest.fixture
+def stub_models_root(tmp_path: Path) -> Path:
+    """A models-root with the two tiny models as already-unzipped dirs."""
+    root = tmp_path / "models"
+    for model_id in ("soy/p", "soy/l"):
+        model_dir = root / model_id
+        model_dir.mkdir(parents=True)
+        (model_dir / "best_model.h5").write_bytes(b"w")
+        (model_dir / "training_config.json").write_bytes(b"{}")
+    return root
+
+
+@pytest.fixture
+def isolate_wandb_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Fully isolate wandb/registry credential resolution from the host environment.
+
+    Clears every var in ``_WANDB_ENV_VARS`` (``WANDB_API_KEY``/``WANDB_ENTITY``/the two
+    ``SLEAP_ROOTS_MODEL_*`` vars/``NETRC``) and repoints ``HOME``/``USERPROFILE`` at an
+    empty temp dir, so neither an exported key, an ambient ``wandb login`` netrc, nor a
+    stray registry override leaks in — on any OS.
 
     Returns:
-        The isolated home directory, so tests can write ``.netrc``/``_netrc``
-        into it to exercise the fallback branches.
+        The isolated home dir, so a test can write ``.netrc``/``_netrc`` into it to
+        exercise the netrc fallback branches. Tests that need the underlying
+        ``monkeypatch`` (e.g. to layer further patches) can request it as a separate
+        fixture param — pytest hands this fixture and the test the same instance.
     """
     home = tmp_path / "home"
     home.mkdir()
-    for name in _WANDB_CRED_ENV_VARS:
-        monkeypatch.delenv(name, raising=False)
+    for var in _WANDB_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     return home
+
+
+@pytest.fixture
+def tf_reference_dir() -> Path:
+    """The directory of committed TensorFlow-reference W&B payload fixtures."""
+    return FIXTURES_DIR / "tf_reference"
+
+
+@pytest.fixture
+def tf_config(tf_reference_dir: Path) -> Callable[[str], dict]:
+    """Return a loader for a committed run ``config`` payload by run id."""
+
+    def load(run_id: str) -> dict:
+        path = tf_reference_dir / f"{run_id}.config.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    return load
+
+
+@pytest.fixture
+def tf_summary(tf_reference_dir: Path) -> Callable[[str], dict]:
+    """Return a loader for a committed run ``summary`` payload by run id."""
+
+    def load(run_id: str) -> dict:
+        path = tf_reference_dir / f"{run_id}.summary.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    return load

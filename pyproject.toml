@@ -69,6 +69,7 @@ convention = "google"
 "tests/**" = ["D"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "integration: marks tests as integration tests (slow, run real training/inference)",
 ]

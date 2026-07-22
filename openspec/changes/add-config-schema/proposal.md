@@ -16,6 +16,10 @@ workflow for the repo.
 - Add a `sleap-roots-training validate <config.yaml>` CLI subcommand that loads a config file,
   merges it onto the schema, validates types and required fields, and reports a clear pass/fail
   with an appropriate exit code.
+- Include a **Weights & Biases logging configuration** in the schema whose default enables
+  **per-epoch** metric logging, so Tier-1 runs log per-epoch train/val loss and the stopping epoch
+  (closing the observability gap the legacy TF reference runs exposed — see `docs/tf-reference.md`
+  and `docs/roadmap.md` Tier 1; recorded here per issue #8).
 
 ## Impact
 
