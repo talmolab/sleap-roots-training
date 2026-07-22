@@ -73,8 +73,7 @@ collapse. OKS is scored against per-keypoint sigma constants; if those sigmas we
 different keypoint domain (e.g. human/animal pose) and applied unchanged to the root skeleton, they
 would depress OKS-based metrics uniformly while the `dist_*` and visibility metrics stay meaningful.
 That points at a root-domain **OKS-sigma calibration** problem, not at the models being bad. This is
-recorded here rather than filed as a separate issue; revisit it if OKS metrics are ever needed for
-Tier-1 scoring.
+recorded here and tracked in #17; revisit it if OKS metrics are ever needed for Tier-1 scoring.
 
 ## Missing results
 

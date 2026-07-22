@@ -20,16 +20,18 @@
 
 - [x] 2.1 Write a failing test asserting the shared fixtures exist and behave: a `tiny_matrix`
       (valid YAML written to a temp path) fixture loads via `chooser.load_selection_matrix`; a
-      `stub_models_root` fixture stages the expected model dirs; and `clean_wandb_env` clears the
-      `WANDB_*` / `SLEAP_ROOTS_MODEL_*` vars inside a test and restores them after.
+      `stub_models_root` fixture stages the expected model dirs; and `isolate_wandb_env` clears the
+      `WANDB_*` / `SLEAP_ROOTS_MODEL_*` / `NETRC` vars (and repoints `HOME`/`USERPROFILE`) inside a
+      test and restores them after.
 - [x] 2.2 Run it to confirm it fails (fixtures not defined yet).
 - [x] 2.3 Create `tests/conftest.py` with the shared fixtures: `tf_fixtures_dir`, `tiny_matrix` and
       `stub_models_root` lifted verbatim from `tests/test_registry_cli.py`, `tf_config(run_id)` /
       `tf_summary(run_id)` loaders that read the committed JSON directly (no import of
-      `scripts/pull_tf_reference.py`), and a `clean_wandb_env` fixture (mirrors
-      `sleap-roots-predict`).
+      `scripts/pull_tf_reference.py`), and an `isolate_wandb_env` fixture (mirrors
+      `sleap-roots-predict`; reconciled on merge with PR #13's `isolate_netrc` so the single
+      fixture also clears `NETRC` and repoints `HOME`/`USERPROFILE`).
 - [x] 2.4 Migrate `tests/test_registry_cli.py` to consume the shared `tiny_matrix` /
-      `stub_models_root` fixtures and to use `clean_wandb_env` in place of its manual
+      `stub_models_root` fixtures and to use `isolate_wandb_env` in place of its manual
       `monkeypatch.delenv("WANDB_API_KEY")`; delete the now-duplicated inline definitions. Do NOT
       touch any assertions. Leave intentionally-inline malformed-input tests (e.g. in
       `tests/test_registry_chooser.py`) as-is.
@@ -71,6 +73,11 @@
       `scripts/pull_tf_reference.py` exists.
 - [x] 4.5 Confirm the lock actually binds: temporarily perturb one expected constant (or a copied
       fixture) to watch a test fail, then revert.
+- [x] 4.6 Add `test_fixtures_are_redacted_of_internal_host_and_user` (per PR #14 review): scan every
+      committed payload for the capture script's pre-redaction strings (the `_REDACTIONS` needles —
+      internal SMB host / user path segments) and assert none survive, so a future weakening of
+      `_redact` can't silently reintroduce the leak. Complements 4.3 (credential-shaped strings only);
+      needles are sourced from the script so the sensitive literals aren't duplicated into the test.
 
 ## 5. Documentation
 

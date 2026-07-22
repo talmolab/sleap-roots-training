@@ -69,6 +69,10 @@ def _parse_doc_metric_table() -> dict[str, dict]:
         run_id = cells[0]
         if run_id not in RUN_IDS:
             continue
+        # A canonical-run row is exactly: run-id | max_stride | 4 metric columns. Assert
+        # rather than silently dropping a column via a short zip() (a doc row that lost a
+        # trailing column would otherwise stop locking that column instead of failing).
+        assert len(cells) == 6, f"{run_id}: doc row has {len(cells)} cells, expected 6"
         rows[run_id] = {
             "max_stride": int(cells[1]),
             "cells": dict(zip(DOC_METRIC_COLUMNS, cells[2:6])),
@@ -110,6 +114,21 @@ def test_fixtures_have_no_secrets():
             blob = json.dumps(_load(run_id, kind)).lower()
             for marker in ("api_key", "wandb_api_key", "password", "secret", "token"):
                 assert f'"{marker}"' not in blob, f"{marker} in {run_id}.{kind}.json"
+
+
+def test_fixtures_are_redacted_of_internal_host_and_user():
+    # Complements test_fixtures_have_no_secrets (which only catches credential-shaped
+    # strings): assert none of the capture script's pre-redaction sensitive strings (the
+    # internal SMB host / user path segments) survive in any committed payload. Sourced
+    # from the script's _REDACTIONS so this lock can't drift from the redactor itself, and
+    # so the sensitive literals live only in the script, not duplicated into this test.
+    module = _load_capture_script()
+    needles = [old for old, _new in module._REDACTIONS]
+    assert needles, "capture script exposes no _REDACTIONS to check against"
+    for path in sorted(FIXTURES.iterdir()):
+        text = path.read_text(encoding="utf-8")
+        for needle in needles:
+            assert needle not in text, f"unredacted {needle!r} in {path.name}"
 
 
 def test_stride_multiset_is_a_sweep():
