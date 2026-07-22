@@ -21,7 +21,11 @@ def main() -> None:
 
 
 def _require_api_key() -> None:
-    """Fail fast (as a clean CLI error) if ``WANDB_API_KEY`` is unset."""
+    """Fail fast (as a clean CLI error) if no wandb credential is resolvable.
+
+    A credential is resolvable via ``WANDB_API_KEY`` or a netrc entry for
+    ``api.wandb.ai`` written by ``wandb login``.
+    """
     try:
         config.require_api_key()
     except RuntimeError as error:

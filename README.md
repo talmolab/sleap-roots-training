@@ -37,7 +37,7 @@ worker reads.
 | `WANDB_ENTITY` | wandb entity (also wandb-native — steers run placement) | `eberrigan-salk-institute-for-biological-studies` |
 | `SLEAP_ROOTS_MODEL_REGISTRY` | **models** registry name (a separate `sleap-roots-labels` registry also exists) | `sleap-roots-models` |
 | `SLEAP_ROOTS_MODEL_ALIAS` | alias marking a version production | `production` |
-| `WANDB_API_KEY` | required for any wandb-contacting operation | — |
+| `WANDB_API_KEY` | one way to authenticate wandb-contacting operations; a `wandb login` session (netrc entry for `api.wandb.ai`) also satisfies the guard | — |
 
 Defaults live in `registry/config.py`; the species/mode vocabulary lives in
 `registry/chooser.py` — reference those rather than re-hardcoding.

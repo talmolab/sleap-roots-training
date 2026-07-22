@@ -1,7 +1,7 @@
 """Exercise the shared ``conftest`` fixtures directly.
 
 They are otherwise only hit transitively through the registry tests; this pins their
-contract explicitly (per PR #14 review), most importantly that ``clean_wandb_env``
+contract explicitly (per PR #14 review), most importantly that ``isolate_wandb_env``
 *actively* clears every managed var rather than passing by a coincidentally-empty env.
 """
 
@@ -14,10 +14,10 @@ from conftest import _WANDB_ENV_VARS
 
 @pytest.fixture(autouse=True)
 def _seed_wandb_env():
-    """Set every managed var *before* ``clean_wandb_env`` runs, then restore.
+    """Set every managed var *before* ``isolate_wandb_env`` runs, then restore.
 
     Autouse fixtures are set up before the non-autouse fixtures a test requests, so the
-    sentinels are in place when ``clean_wandb_env`` runs -- proving it deletes live vars.
+    sentinels are in place when ``isolate_wandb_env`` runs -- proving it deletes live vars.
     """
     original = {var: os.environ.get(var) for var in _WANDB_ENV_VARS}
     for var in _WANDB_ENV_VARS:
@@ -30,17 +30,26 @@ def _seed_wandb_env():
             os.environ[var] = value
 
 
-def test_clean_wandb_env_clears_every_managed_var(clean_wandb_env):
+def test_isolate_wandb_env_clears_every_managed_var(isolate_wandb_env):
     for var in _WANDB_ENV_VARS:
-        assert var not in os.environ, f"clean_wandb_env left {var} set"
+        assert var not in os.environ, f"isolate_wandb_env left {var} set"
 
 
-def test_clean_wandb_env_covers_the_documented_var_set():
+def test_isolate_wandb_env_repoints_home(isolate_wandb_env):
+    # HOME/USERPROFILE point at the returned empty temp home, so netrc fallback
+    # resolution (~/.netrc, ~/_netrc) is isolated from the host on every OS.
+    assert os.environ["HOME"] == str(isolate_wandb_env)
+    assert os.environ["USERPROFILE"] == str(isolate_wandb_env)
+    assert isolate_wandb_env.is_dir()
+
+
+def test_isolate_wandb_env_covers_the_documented_var_set():
     assert set(_WANDB_ENV_VARS) == {
         "WANDB_API_KEY",
         "WANDB_ENTITY",
         "SLEAP_ROOTS_MODEL_REGISTRY",
         "SLEAP_ROOTS_MODEL_ALIAS",
+        "NETRC",
     }
 
 

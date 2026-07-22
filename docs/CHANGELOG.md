@@ -6,9 +6,20 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
+  wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
+  `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb
+  locates it (`NETRC` env var, else `~/.netrc`, else `~/_netrc`), so a login session is honored on
+  every platform (including Windows `~/_netrc`). Fail-fast with a clear error is retained when no
+  credential is resolvable anywhere; a malformed netrc — or a netrc entry with a blank/absent
+  password — is treated as "no credential" (mirroring wandb's own resolver), so a stale login fails
+  before the confirmation prompt rather than deep inside `wandb.init()`.
+
 ### Added
 - Shared test-fixture layer (`tests/conftest.py`) with `tiny_matrix`, `stub_models_root`,
-  `clean_wandb_env`, and TF-reference payload loaders.
+  `isolate_wandb_env` (clears the wandb/registry env vars **and** `NETRC` and repoints
+  `HOME`/`USERPROFILE`), and TF-reference payload loaders.
 - Committed TensorFlow reference baseline: the `config`/`summary` of the seven canonical
   `20250625_cyl_arabidopsis_primary_receptive_field` runs under `tests/fixtures/tf_reference/`
   (captured by `scripts/pull_tf_reference.py`), documented in `docs/tf-reference.md` and locked by

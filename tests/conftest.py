@@ -1,9 +1,9 @@
 """Shared pytest fixtures for the sleap-roots-training test suite.
 
 Centralizes the setup that was otherwise re-invented across test modules — writing a
-selection-matrix YAML to a temp path, staging a stub models-root, and clearing the
-wandb/registry environment for hermetic tests — plus loaders for the committed
-TensorFlow-reference W&B payloads under ``tests/fixtures/tf_reference/``.
+selection-matrix YAML to a temp path, staging a stub models-root, and isolating the
+wandb/registry environment (env vars + netrc/home) for hermetic tests — plus loaders for
+the committed TensorFlow-reference W&B payloads under ``tests/fixtures/tf_reference/``.
 """
 
 from __future__ import annotations
@@ -33,12 +33,15 @@ TF_RUN_IDS = (
 #: The runs that logged no summary metrics (only the ``_wandb`` bookkeeping key).
 NO_SUMMARY_RUNS = frozenset({"ijn85j6w", "26ryyfu2"})
 
-#: The wandb/registry environment variables a hermetic registry test must clear.
+#: The wandb/registry environment variables a hermetic test must clear. ``NETRC`` joins
+#: the registry vars so netrc-based credential resolution is isolated too; ``HOME``/
+#: ``USERPROFILE`` are *repointed* (not cleared) by ``isolate_wandb_env`` below.
 _WANDB_ENV_VARS = (
     "WANDB_API_KEY",
     "WANDB_ENTITY",
     "SLEAP_ROOTS_MODEL_REGISTRY",
     "SLEAP_ROOTS_MODEL_ALIAS",
+    "NETRC",
 )
 
 #: A minimal one-row selection matrix (one primary + one lateral, shared checksum).
@@ -77,14 +80,27 @@ def stub_models_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def clean_wandb_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
-    """Delete every wandb/registry env var so registry tests are hermetic.
+def isolate_wandb_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Fully isolate wandb/registry credential resolution from the host environment.
 
-    Returns the ``monkeypatch`` instance so the test can layer further patches on it.
+    Clears every var in ``_WANDB_ENV_VARS`` (``WANDB_API_KEY``/``WANDB_ENTITY``/the two
+    ``SLEAP_ROOTS_MODEL_*`` vars/``NETRC``) and repoints ``HOME``/``USERPROFILE`` at an
+    empty temp dir, so neither an exported key, an ambient ``wandb login`` netrc, nor a
+    stray registry override leaks in — on any OS.
+
+    Returns:
+        The isolated home dir, so a test can write ``.netrc``/``_netrc`` into it to
+        exercise the netrc fallback branches. Tests that need the underlying
+        ``monkeypatch`` (e.g. to layer further patches) can request it as a separate
+        fixture param — pytest hands this fixture and the test the same instance.
     """
+    home = tmp_path / "home"
+    home.mkdir()
     for var in _WANDB_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
-    return monkeypatch
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
 
 
 @pytest.fixture
