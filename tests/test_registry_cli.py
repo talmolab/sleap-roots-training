@@ -80,9 +80,11 @@ def test_dry_run_reports_missing_model(monkeypatch, tiny_matrix, tmp_path):
 
 
 def test_execute_without_api_key_fails_before_prompt(
-    monkeypatch, tiny_matrix, stub_models_root
+    monkeypatch, tiny_matrix, stub_models_root, isolate_netrc
 ):
-    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+    # isolate_netrc clears WANDB_API_KEY/NETRC and points HOME at an empty dir,
+    # so this fails on the guard even for a contributor who has run `wandb login`
+    # locally -- not just on CI runners that happen to lack an ambient netrc.
     _no_wandb(monkeypatch)
     result = _invoke(
         [
