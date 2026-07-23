@@ -44,7 +44,7 @@ model_config:
 
 trainer_config:
   max_epochs: 200
-  seed: 42                  # REQUIRED on 0.2.0 (no default seed) — pin it for the oracle
+  seed: 42                  # REQUIRED on 0.2.0 (no default) — vary this across the baseline runs
   save_ckpt: true
   ckpt_dir: models
   run_name: cyl_arabidopsis_primary

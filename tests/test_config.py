@@ -108,6 +108,28 @@ def test_integer_seed_passes(write_config):
     config.validate_config(config.load_config(path))  # must not raise
 
 
+def test_missing_preprocessing_is_rejected(write_config):
+    path = write_config(drop=("data_config.preprocessing",))
+    with pytest.raises(config.ConfigError, match="preprocessing"):
+        config.validate_config(config.load_config(path))
+
+
+# --- Emit: the sleap-nn-native config (experiment stripped), base-safe -------------------
+
+
+def test_to_sleap_nn_config_strips_experiment(write_config):
+    emitted = config.to_sleap_nn_config(config.load_config(write_config()))
+    assert "experiment" not in emitted
+    for key in ("data_config", "model_config", "trainer_config"):
+        assert key in emitted
+
+
+def test_to_sleap_nn_yaml_has_no_experiment(write_config):
+    text = config.to_sleap_nn_yaml(config.load_config(write_config()))
+    assert "experiment" not in text
+    assert "data_config" in text
+
+
 # --- W&B enablement pairing (Requirement 4) --------------------------------------------
 
 
@@ -165,6 +187,8 @@ _VALID_EXP = (
     "experiment: {species: arabidopsis, mode: cylinder, root_type: primary, "
     "dataset: {name: d, path: p}}\n"
 )
+# Experiment + a valid data_config so checks after _check_preprocessing (e.g. W&B) are reached.
+_VALID_BASE = _VALID_EXP + "data_config: {preprocessing: {scale: 1.0}}\n"
 
 
 def _write(tmp_path, body: str):
@@ -194,13 +218,13 @@ def test_top_level_list_is_rejected(tmp_path):
 
 
 def test_list_shaped_wandb_is_rejected_cleanly(tmp_path):
-    body = _VALID_EXP + "trainer_config: {seed: 1, use_wandb: true, wandb: [a, b]}\n"
+    body = _VALID_BASE + "trainer_config: {seed: 1, use_wandb: true, wandb: [a, b]}\n"
     with pytest.raises(config.ConfigError, match="wandb must be a mapping"):
         config.validate_config(config.load_config(_write(tmp_path, body)))
 
 
 def test_non_boolean_use_wandb_is_rejected(tmp_path):
-    body = _VALID_EXP + 'trainer_config: {seed: 1, use_wandb: "false"}\n'
+    body = _VALID_BASE + 'trainer_config: {seed: 1, use_wandb: "false"}\n'
     with pytest.raises(config.ConfigError, match="use_wandb must be a boolean"):
         config.validate_config(config.load_config(_write(tmp_path, body)))
 
@@ -208,7 +232,7 @@ def test_non_boolean_use_wandb_is_rejected(tmp_path):
 def test_wandb_partial_target_is_rejected(tmp_path):
     # entity present, project missing -> the per-key loop's second iteration must fire.
     body = (
-        _VALID_EXP + "trainer_config: {seed: 1, use_wandb: true, wandb: {entity: e}}\n"
+        _VALID_BASE + "trainer_config: {seed: 1, use_wandb: true, wandb: {entity: e}}\n"
     )
     with pytest.raises(config.ConfigError, match="project"):
         config.validate_config(config.load_config(_write(tmp_path, body)))

@@ -82,8 +82,12 @@ the extra is importable and SHALL report a clear, non-failing note when it is no
 The wrapper SHALL guarantee the configuration handed to `sleap-nn` is reproducible and does not
 trigger `sleap-nn` 0.2.0's known post-fit failure. Validation SHALL reject a config whose
 `trainer_config.seed` is unset — treating an absent key and an explicit `null` alike, since 0.2.0
-supplies no default seed — and SHALL require the seed to be an integer. Config emission SHALL produce
-a fully-resolved `sleap-nn` config in which `data_config.preprocessing` is materialized.
+supplies no default seed — and SHALL require the seed to be an integer. Validation SHALL also
+require a `data_config.preprocessing` block (0.2.0 reads it after the fit loop and crashes if it is
+absent). The wrapper SHALL provide an emit step that produces the sleap-nn-native config with the
+repo-owned `experiment` block stripped — sleap-nn's struct-mode config rejects unknown top-level
+keys — so that `sleap-nn train` receives a config it accepts. The emit step SHALL be
+base-install safe (no `train` extra required).
 
 #### Scenario: Missing or null seed is rejected
 
@@ -96,13 +100,18 @@ a fully-resolved `sleap-nn` config in which `data_config.preprocessing` is mater
 - **WHEN** a config sets `trainer_config.seed` to an integer
 - **THEN** the reproducibility check passes
 
-#### Scenario: Preprocessing is materialized on emission
+#### Scenario: Missing preprocessing is rejected
 
-- **WHEN** a config omits `data_config.preprocessing` and the wrapper emits the resolved `sleap-nn`
-  config for training
-- **THEN** the emitted config contains a populated `data_config.preprocessing` block
-- **AND** the emitted config is structurally complete for `run_training`'s post-fit read of
-  `data_config.preprocessing` (the field that raised `ConfigAttributeError` in Tier 0.5)
+- **WHEN** a config omits `data_config.preprocessing`
+- **THEN** validation fails naming `data_config.preprocessing`
+- **AND** the message explains sleap-nn 0.2.0 crashes post-fit without it
+
+#### Scenario: Emit strips the experiment block
+
+- **WHEN** the emit step runs on a valid config
+- **THEN** the emitted sleap-nn config omits the `experiment` block
+- **AND** retains the `data_config` / `model_config` / `trainer_config` blocks (including
+  `data_config.preprocessing`)
 
 ### Requirement: Per-Epoch W&B Metric Logging
 

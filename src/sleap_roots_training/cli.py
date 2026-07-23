@@ -187,5 +187,35 @@ def validate_command(config_path: Path) -> None:
     click.echo(f"OK: {config_path} is valid")
 
 
+@main.command(name="emit")
+@click.argument("config_path", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the sleap-nn config here (default: stdout).",
+)
+def emit_command(config_path: Path, output: Optional[Path]) -> None:
+    """Emit the sleap-nn-native config from CONFIG_PATH (``experiment`` block stripped).
+
+    Validates CONFIG_PATH, then writes the config to pass to ``sleap-nn train --config``:
+    sleap-nn's struct-mode config rejects the repo-owned ``experiment`` key, so it is
+    removed. Works without the ``train`` extra, so you can author + validate + emit on one
+    machine and train on another. Exits non-zero with a clear error if the config is invalid.
+    """
+    try:
+        cfg = training_config.load_config(config_path)
+        training_config.validate_config(cfg)
+    except training_config.ConfigError as error:
+        raise click.ClickException(str(error))
+    sleap_nn_yaml = training_config.to_sleap_nn_yaml(cfg)
+    if output is None:
+        click.echo(sleap_nn_yaml, nl=False)
+    else:
+        output.write_text(sleap_nn_yaml, encoding="utf-8")
+        click.echo(f"wrote sleap-nn config to {output}")
+
+
 if __name__ == "__main__":  # pragma: no cover
     main()

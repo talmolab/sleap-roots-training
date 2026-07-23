@@ -43,6 +43,13 @@ def test_guide_validate_command_in_fenced_block():
     ), "no fenced `sleap-roots-training validate ...` command in the guide"
 
 
+def test_guide_emit_command_in_fenced_block():
+    blocks = _fenced_blocks(_read())
+    assert any(
+        "sleap-roots-training emit" in block for block in blocks
+    ), "no fenced `sleap-roots-training emit ...` command in the guide"
+
+
 def test_guide_train_command_in_fenced_block():
     blocks = _fenced_blocks(_read())
     assert any(

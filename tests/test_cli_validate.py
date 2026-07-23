@@ -62,3 +62,26 @@ def test_validate_reports_skip_note_without_train_extra(write_config, monkeypatc
     result = _invoke(["validate", str(write_config())])
     assert result.exit_code == 0, result.output
     assert "train" in result.output.lower()
+
+
+def test_emit_strips_experiment_to_stdout(write_config):
+    result = _invoke(["emit", str(write_config())])
+    assert result.exit_code == 0, result.output
+    assert "experiment" not in result.output
+    assert "data_config" in result.output
+
+
+def test_emit_writes_output_file(write_config, tmp_path):
+    out = tmp_path / "resolved.yaml"
+    result = _invoke(["emit", str(write_config()), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    text = out.read_text(encoding="utf-8")
+    assert "experiment" not in text
+    assert "data_config" in text
+
+
+def test_emit_invalid_config_exits_nonzero(write_config):
+    path = write_config(drop=("trainer_config.seed",))
+    result = _invoke(["emit", str(path)])
+    assert result.exit_code != 0
+    assert "seed" in result.output

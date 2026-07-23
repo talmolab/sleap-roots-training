@@ -50,6 +50,9 @@ Conventions that keep the base matrix green:
       so it does not shadow the existing `registry.config` binding; map a validation failure and a
       YAML parse error to `click.ClickException` (non-zero exit).
 - [x] 2.4 Confirm green; run the full suite + lint.
+- [x] 2.5 Add the `emit` subcommand (`sleap-roots-training emit <cfg> [-o out]`) writing the
+      sleap-nn-native config via `to_sleap_nn_yaml` (experiment stripped); base-safe. Tests: emit
+      strips `experiment` to stdout + an `-o` file; emit of an invalid config exits non-zero.
 
 ## 3. Reproducibility + backend-safety (TDD)
 
@@ -62,16 +65,16 @@ Conventions that keep the base matrix green:
       checks, prints a clear "deep `sleap-nn` validation skipped — install `[train]`" note, and exits
       0; and `validate <bad-seed.yaml>` still exits non-zero (the skip does not swallow a real
       base-safe failure).
-- [x] 3.4 Implement `to_sleap_nn_config(cfg)` (`_strip_experiment` then merge the rest onto
-      `OmegaConf.structured(TrainingJobConfig())` and resolve) and the lazy-`import sleap_nn`
-      deep-validation branch in `validate_config`, routed through a **monkeypatchable seam** (e.g.
-      `config._deep_validation_available()` / `_import_sleap_nn()`) so 3.3 can force the absent
-      branch deterministically even on a box where `[train]` is installed. Confirm 3.3 green.
-- [x] 3.5 **[integration]** Write + implement the deep-path test: `to_sleap_nn_config` on a config
-      omitting `data_config.preprocessing` returns a **resolved** config containing a populated
-      `preprocessing` block; and `validate_config`'s deep path delegates to `verify_training_cfg`
-      (a config with no backbone/head fails via `sleap-nn`'s own `check_must_be_set`). Confirm it
-      passes where `[train]` is installed and the base `-m "not integration"` suite still deselects it.
+- [x] 3.4 Implement the lazy-`import sleap_nn` deep-validation branch in `validate_config`, routed
+      through a **monkeypatchable seam** (`config._deep_validation_available()`) so 3.3 can force
+      the absent branch deterministically even on a box where `[train]` is installed. Confirm 3.3
+      green.
+- [x] 3.5 Require `data_config.preprocessing` (base-safe check — 0.2.0 crashes post-fit without it,
+      like the seed rule) and implement `to_sleap_nn_config` / `to_sleap_nn_yaml` as a **base-safe
+      experiment-strip** (no schema merge, no `sleap_nn`). Add base-safe tests: missing
+      preprocessing rejected; the emitted config drops `experiment` and keeps the sleap-nn blocks.
+      Add the `emit` CLI (group 2 sibling). The `[integration]` test keeps only the delegation case
+      (no backbone/head fails via `sleap-nn`'s own `check_must_be_set`).
 
 ## 4. Per-epoch W&B logging (TDD + empirical verification)
 
@@ -122,9 +125,10 @@ Conventions that keep the base matrix green:
 - [x] 5.7 Add a `docs/CHANGELOG.md` entry under the **existing** `[Unreleased] ### Added` (no second
       `### Added`, no `YYYY-MM-DD`): the `sleap-roots-training validate` CLI + composed config schema
       (the user-facing headline), the example config, and the training guide + doc-contract test.
-- [ ] 5.8 **Manual ([train] box):** run `pytest -m integration tests/test_config.py` where `[train]`
-      is installed and record in the PR body that the deep-delegation + preprocessing-materialization
-      tests (3.5) pass — the only place the anti-crash guarantee is actually exercised.
+- [ ] 5.8 **Manual ([train] box):** run `pytest -m integration` where `[train]` is installed (the
+      delegation test), and confirm `validate → emit → sleap-nn train --config <emitted>` runs
+      end-to-end on the box (sleap-nn accepts the experiment-stripped config, no post-fit
+      `preprocessing` crash). Record the result in the PR body.
 - [x] 5.9 Full suite (`pytest -m "not integration"` in an env **without** `[train]`, so the
       lazy-import safety is really proven) + `black --check src tests` + `ruff check src` green (match
       CI's scoping); `conda run -n talmo-sleap openspec validate add-config-schema --strict` clean.

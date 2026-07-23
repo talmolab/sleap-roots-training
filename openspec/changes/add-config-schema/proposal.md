@@ -38,9 +38,11 @@ training-config validation to `sleap-nn` itself.**
 - Close the **two genuine gaps** `TrainingJobConfig` leaves for a Tier-1 baseline (`design.md` D4):
   (1) `sleap-nn` 0.2.0 has **no default `trainer_config.seed`**, so validation rejects a config
   whose seed is unset — the oracle is built from multiple runs and unseeded spread can't be told
-  from signal; (2) the wrapper emits a **fully-resolved** `sleap-nn` config (materializing
-  `data_config.preprocessing`), which prevents the post-fit `ConfigAttributeError: Key
-  'preprocessing' is not in struct` crash documented in Tier 0.5.
+  from signal; (2) 0.2.0's `run_training` crashes post-fit on a config missing
+  `data_config.preprocessing`, so validation **requires** that block. Add a base-install-safe
+  `emit` step that produces the sleap-nn-native config with the `experiment` block stripped
+  (sleap-nn's struct-mode config rejects that key), so `sleap-nn train` receives a config it
+  accepts; the guide is `validate → emit → train`.
 - **Reframe the per-epoch W&B requirement** (`design.md` D3). The prior draft assumed a schema
   field "whose default enables per-epoch logging." There is **no such knob**: `WandBConfig` has no
   cadence field and `TrainerConfig` has no `log_every_n_steps` — per-epoch logging is `sleap-nn` /
@@ -61,8 +63,8 @@ and reports the legacy TF numbers as a range, per `docs/tf-reference.md`).
 - **Affected specs:** `training-config` (ADDED — the capability does not yet exist under
   `openspec/specs/`, so all requirements are additive).
 - **Affected code:** `src/sleap_roots_training/config.py` (new); `src/sleap_roots_training/cli.py`
-  (add `validate` subcommand — imported under an alias, since `cli.py` already binds `config` to
-  `registry.config`); `tests/` (new base-install-safe unit + CLI tests, an example-validates test,
+  (add `validate` + `emit` subcommands — imported under an alias, since `cli.py` already binds
+  `config` to `registry.config`); `tests/` (new base-install-safe unit + CLI tests, an example-validates test,
   plus one `integration`-marked deep-validation test); `examples/` (new example config); `docs/`
   (new training guide + doc-contract test) and `docs/CHANGELOG.md`; `README.md` (one-line pointer);
   `openspec/project.md` (Architecture Patterns line updated to the composition framing);

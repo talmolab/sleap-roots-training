@@ -102,16 +102,19 @@ These are the only places the wrapper adds validation beyond delegating, because
    indistinguishable from signal, and every later tier grades against that baseline. So
    `validate_config` rejects an unset seed — a repo policy stricter than `sleap-nn`'s default, which
    is the point.
-2. **Resolved-config emission.** `run_training` reads `config.data_config.preprocessing.*` off the
-   user config *after* the fit loop and crashes if it is absent. Because the schema carries a
-   `preprocessing` factory default, merging the user config onto
-   `OmegaConf.structured(TrainingJobConfig())` **materializes** it. So `to_sleap_nn_config` emits
-   that fully-resolved config, and the guide trains from it — turning a latent crash into a
-   structural guarantee. This is the one guarantee whose only test is `[train]`-gated, so its
-   verification is an explicit **manual `pytest -m integration tests/test_config.py`** run on the
-   `[train]` box, recorded in the PR body (the spec scenario asserts the *structural* completeness the
-   test actually checks — that the emitted config carries a populated `preprocessing` block — not a
-   full training run).
+2. **Require preprocessing (not materialize) + a base-safe emit.** `run_training` reads
+   `config.data_config.preprocessing.*` off the user config *after* the fit loop and crashes if it
+   is absent. An earlier draft *materialized* it by merging onto
+   `OmegaConf.structured(TrainingJobConfig())` — but that (a) needs the `train` extra to build the
+   schema, and (b) freezes **every** unset data/model/trainer default, a silent-behavior risk the
+   pre-PR review flagged. **Decision:** instead **require** `data_config.preprocessing` at
+   `validate` time (a surgical repo policy, exactly like the seed) and keep emission a pure
+   experiment-strip. So `to_sleap_nn_config` / the `emit` CLI only remove the `experiment` block
+   (sleap-nn's struct-mode config rejects that unknown key) — no schema merge, no `sleap_nn` import,
+   **base-install safe**. This fits the Mac-authors / A5000-trains split (validate + emit on the
+   Mac, train on the box) and delivers the crash-prevention with no over-broad default freezing.
+   The guide is `validate → emit → sleap-nn train --config <emitted>`; that the emitted config
+   actually trains is confirmed on the `[train]` box (recorded in the PR body).
 
 ### D5 — Keep the change-id and capability name; the `experiment` block is the sole new schema
 

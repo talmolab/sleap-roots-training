@@ -122,6 +122,7 @@ def validate_config(cfg: DictConfig) -> list[str]:
     _check_block_types(cfg)
     _validate_experiment(cfg)
     _check_seed(cfg)
+    _check_preprocessing(cfg)
     _check_wandb(cfg)
     if _deep_validation_available():
         _deep_validate(cfg)
@@ -130,23 +131,27 @@ def validate_config(cfg: DictConfig) -> list[str]:
 
 
 def to_sleap_nn_config(cfg: DictConfig) -> DictConfig:
-    """Return the resolved sleap-nn-native config (the ``experiment`` block stripped).
+    """Return the sleap-nn-native config: ``cfg`` with the ``experiment`` block stripped.
 
-    Merges the sleap-nn portion onto ``OmegaConf.structured(TrainingJobConfig())`` so
-    schema defaults — notably ``data_config.preprocessing`` — are **materialized**,
-    which prevents sleap-nn 0.2.0's post-fit ``ConfigAttributeError`` on a config that
-    omitted ``preprocessing``. Requires the ``train`` extra (imports ``sleap_nn``).
+    This is the config to hand to ``sleap-nn train --config`` — sleap-nn's struct-mode
+    ``TrainingJobConfig`` rejects the repo-owned ``experiment`` key, so it must be removed
+    first. Base-install safe (pure OmegaConf; no ``sleap_nn`` import), so a config can be
+    authored + emitted on one machine and trained on another. The ``data_config.preprocessing``
+    block that :func:`validate_config` requires is carried through, so ``sleap-nn train`` does
+    not hit sleap-nn 0.2.0's post-fit ``ConfigAttributeError``.
 
     Args:
         cfg: A config mapping, as returned by :func:`load_config`.
 
     Returns:
-        The fully-resolved ``sleap-nn`` config, ready for ``sleap-nn train --config``.
+        The sleap-nn-native config (``experiment`` removed).
     """
-    from sleap_nn.config.training_job_config import TrainingJobConfig
+    return _strip_experiment(cfg)
 
-    schema = OmegaConf.structured(TrainingJobConfig())
-    return OmegaConf.merge(schema, _strip_experiment(cfg))
+
+def to_sleap_nn_yaml(cfg: DictConfig) -> str:
+    """Return the sleap-nn-native config (``experiment`` stripped) as a YAML string."""
+    return OmegaConf.to_yaml(to_sleap_nn_config(cfg))
 
 
 # --- internal helpers ------------------------------------------------------------------
@@ -214,6 +219,21 @@ def _check_seed(cfg: DictConfig) -> None:
         )
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ConfigError(f"trainer_config.seed must be an integer, got {seed!r}")
+
+
+def _check_preprocessing(cfg: DictConfig) -> None:
+    """Require ``data_config.preprocessing`` (0.2.0 reads it post-fit and crashes if absent).
+
+    sleap-nn 0.2.0's ``run_training`` reads ``config.data_config.preprocessing`` off the
+    user config *after* the fit loop without backfilling the schema default, so a config
+    that omits it trains and then crashes with ``ConfigAttributeError``. Requiring it here
+    (a repo policy, like the explicit seed) surfaces that at ``validate`` time instead.
+    """
+    if OmegaConf.select(cfg, "data_config.preprocessing", default=None) is None:
+        raise ConfigError(
+            "data_config.preprocessing is required (sleap-nn 0.2.0 reads it after "
+            "training and crashes if absent); include a preprocessing block"
+        )
 
 
 def _check_wandb(cfg: DictConfig) -> None:
