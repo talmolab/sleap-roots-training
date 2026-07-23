@@ -22,6 +22,10 @@ uv sync --group dev
 uv run sleap-roots-training --help
 ```
 
+To install the optional `sleap-nn` keypoint training backend and run/predict a model, see
+[docs/training-backend.md](docs/training-backend.md) (the `sleap-roots-training[train]` extra
++ GPU install).
+
 ## Seeding the production model registry
 
 `sleap-roots-training seed-registry` publishes the current legacy root models (from the

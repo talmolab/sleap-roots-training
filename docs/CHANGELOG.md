@@ -35,6 +35,14 @@ All notable changes to this project are documented here. The format is based on
   legacy-model resolution (SHA256-verified unzip), run-config lineage, and the
   publish/link/verify helpers.
 - Runtime deps `wandb` and `sleap-roots-contracts`.
+- Optional `train` extra: the Phase-1 `sleap-nn` keypoint backend
+  (`sleap-nn>=0.2.0,<0.3.0`, `sleap-io>=0.7.1,<0.8.0`, `torch>=2.5.0`), kept out of the base
+  install so the cross-platform CI matrix stays lean. Install with
+  `sleap-roots-training[train]`.
+- `docs/training-backend.md`: verified `sleap-nn` keypoint train/predict runbook (install,
+  GPU check, train + predict commands, and the GPU compute-capability / arch findings).
+- `tests/test_train_extra.py` (CI-safe pins contract) and `tests/test_gpu.py`
+  (integration-marked GPU smoke test, skipped without a CUDA device).
 
 ## [0.0.1a0] - 2026-06-24
 

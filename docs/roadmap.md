@@ -38,15 +38,15 @@ PyTorch baseline.
 **Default to tagged releases, not commit hashes.**
 - **Phase 1 (keypoints):** pin to released `sleap-nn` (v0.2.0+) and its released `sleap-io` —
   keypoint training is in the release, so Phase 1 needs **no commit pins**. (Verify at Tier 0.5.)
-- **Phase 2 (masks):** the mask features are on `main` but not yet tagged — latest `sleap-nn`
-  release is v0.2.0 (masks pending **v0.3.0**), and the mask data layer is `sleap-io` **0.8.0**,
-  unreleased (latest tag v0.7.1; `sleap-nn`'s own `main` currently commit-pins `sleap-io` for this
-  reason). **These are our lab's repos**, so the clean path is to get **v0.3.0 / sleap-io 0.8.0
-  cut** before Phase 2 (fall) and pin to those releases. A commit-hash pin is only a **stopgap** if
-  a mask tier arrives before the release lands.
+- **Phase 2 (masks):** the mask releases are now **cut** — `sleap-nn` **v0.3.0** (adds the mask
+  features + a unified `sleap-nn predict` CLI) and `sleap-io` **0.8.0** (latest **0.9.1**) are
+  tagged and on PyPI. So Phase 2 pins to those tagged releases; **no commit-hash pin is needed**.
+  Phase 1 stays capped below them (`sleap-nn<0.3.0`, `sleap-io<0.8.0`) since that mask line is not
+  yet verified here.
 
-Action: at Tier 0.5, confirm Phase-1 release pins work and **coordinate the v0.3.0 / sleap-io 0.8.0
-release timeline with the SLEAP team**. Re-verify at Tier 6 kickoff.
+Action: at Tier 0.5, confirm Phase-1 release pins work (done — #9). The v0.3.0 / sleap-io 0.8.0
+timeline no longer needs coordinating (already released); **confirm Phase-2 pins against those
+released tags at Tier 6 kickoff.**
 
 ## Work tracks (complementary — everyone works across both)
 
@@ -392,3 +392,15 @@ then reviewed it. Reconciled:
   revision had inadvertently altered (`#155` → `talmolab/sleap-app#155`) back to its original
   wording, since editing prior dated entries — even for a good reason — contradicts "history is
   append-only"; all live/forward references elsewhere in the doc remain correctly qualified.
+
+**Roadmap revision (2026-07-21)** — upstream mask releases are out; Phase-1 pins locked (Tier 0.5 / #9).
+- **IMPORTANT (upstream pins):** **The Phase-2 mask releases are cut.** `sleap-nn` **v0.3.0**
+  (masks + a unified `sleap-nn predict` CLI) and `sleap-io` **0.8.0**/**0.9.1** are now tagged on
+  PyPI, so the "Upstream version pins" body (Phase-2 bullet + Action) has been corrected: Phase 2
+  pins to released tags and **no v0.3.0 / sleap-io 0.8.0 cut needs coordinating**. Source: the
+  Tier 0.5 verification spike (#9), which locked the Phase-1 pins (`sleap-nn>=0.2.0,<0.3.0`,
+  `sleap-io>=0.7.1,<0.8.0`, `torch>=2.5.0`) as an optional `train` extra and confirmed keypoint
+  train/predict on the `sleap-nn` backend. `openspec/project.md` "Important Constraints" was
+  corrected to match.
+- **MINOR:** Tier 0.5 is **not** marked "done" here — completion is tracked by #9 + the CHANGELOG
+  per the JIT tracking policy; this entry only corrects now-false forward-looking facts.
