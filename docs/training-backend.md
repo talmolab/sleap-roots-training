@@ -130,6 +130,13 @@ single `train` call already exercises train → predict → evaluate. Verified r
 (BermanFlies, 2 epochs, ~49 s): val **mOKS 0.186**, avg dist **4.15 px**, p50 **2.92 px**,
 PCK@5px **0.189** (rough by design — a 2-epoch smoke run; quality is not the Tier 0.5 bar).
 
+> **Reproducibility note (matters for Tier 1).** sleap-nn 0.2.0 has **no default random seed**
+> (`trainer_config.seed` is unset; the `seed: 42` default arrives in 0.3.0), so this smoke run is
+> unseeded — fine here (parity/quality is not the Tier 0.5 bar), but **Tier 1 baseline configs must
+> set `trainer_config.seed` explicitly**. The Tier 1 oracle is built from multiple runs, and an
+> unseeded spread can't be told apart from real signal; every later tier grades against that
+> baseline, so the seed has to be pinned before it is established.
+
 ## 4. Predict on new data with the trained model
 
 Standalone inference on 0.2.0 is **`sleap-nn track`** (`sleap-nn predict` is the ONNX-export
@@ -151,9 +158,10 @@ Recorded on the target RTX A5000 (native Windows, driver 552.22 / CUDA 12.4) on 
 - **`torch.cuda.get_arch_list()`:** `['sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']`
 - **`torch.cuda.get_device_capability()`:** `(8, 6)` → `sm_86`
 - **`torch.cuda.is_available()`:** `True` (`NVIDIA RTX A5000`)
-- **Native vs JIT:** `sm_86` is present in the arch list, so the A5000 runs **native precompiled
-  SASS kernels — no PTX-JIT fallback**. (The build also ships `sm_100`/`sm_120`, so it would cover
-  Blackwell / RTX 50-series hardware too.)
+- **Native SASS vs PTX-JIT (inference):** `sm_86` appears in the build's arch list, which strongly
+  indicates the A5000 runs precompiled native SASS with no PTX-JIT fallback. This is an inference
+  from `get_arch_list()` (arch presence), not a direct cubin/fatbin measurement. (The build also
+  ships `sm_100`/`sm_120`, so it would cover Blackwell / RTX 50-series hardware too.)
 
 The `cu129` (CUDA 12.9) build runs on the 12.4 driver via CUDA minor-version
 forward-compatibility, so no driver update was needed. `uv run pytest -m integration

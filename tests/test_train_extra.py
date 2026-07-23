@@ -12,6 +12,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import Version
@@ -25,14 +26,26 @@ def _load_pyproject() -> dict:
         return tomllib.load(fh)
 
 
-def _train_extra() -> list[str]:
-    project = _load_pyproject()["project"]
+def _extract_train_extra(project: dict) -> list[str]:
     train = project.get("optional-dependencies", {}).get("train")
     assert train, (
         "pyproject.toml [project.optional-dependencies].train must exist and be non-empty "
         "(the Phase-1 sleap-nn backend extra)"
     )
+    assert isinstance(train, list), (
+        "the `train` extra must be a TOML array of requirement strings, got "
+        f"{type(train).__name__}"
+    )
+    for entry in train:
+        assert isinstance(entry, str), (
+            "each `train` entry must be a requirement string, got "
+            f"{type(entry).__name__}: {entry!r}"
+        )
     return train
+
+
+def _train_extra() -> list[str]:
+    return _extract_train_extra(_load_pyproject()["project"])
 
 
 def _requirements() -> list[Requirement]:
@@ -85,3 +98,34 @@ def test_base_install_stays_lean():
         assert (
             canonicalize_name(backend) not in base
         ), f"{backend} must not be a base dependency (train extra only)"
+
+
+def test_torch_has_release_floor():
+    # torch is intentionally floor-only (no upper cap); still lock the floor so an accidental
+    # edit to a bare, unpinned `torch` fails here the way the sleap-nn/sleap-io caps do.
+    spec = _specifier_for("torch")
+    assert spec.contains(Version("2.5.0")), f"torch must admit 2.5.0: {spec}"
+    assert not spec.contains(
+        Version("2.4.0")
+    ), f"torch must keep a >=2.5 floor (not left unpinned): {spec}"
+
+
+def test_specifier_for_unknown_name_raises():
+    with pytest.raises(AssertionError):
+        _specifier_for("definitely-not-in-the-extra")
+
+
+def test_extract_train_extra_rejects_non_list():
+    # A bare string (forgotten [...] brackets) must fail clearly, not iterate char-by-char.
+    with pytest.raises(AssertionError):
+        _extract_train_extra(
+            {"optional-dependencies": {"train": "sleap-nn>=0.2.0,<0.3.0"}}
+        )
+
+
+def test_extract_train_extra_rejects_non_string_entry():
+    # A non-string entry (e.g. an accidental inline table) must fail clearly, not TypeError.
+    with pytest.raises(AssertionError):
+        _extract_train_extra(
+            {"optional-dependencies": {"train": [{"name": "sleap-nn"}]}}
+        )

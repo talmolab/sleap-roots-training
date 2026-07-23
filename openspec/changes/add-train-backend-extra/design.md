@@ -182,3 +182,12 @@ consistent lock in one shot (they moved together); commits 2–5 are tests/docs 
   0.8.0/0.9.1 are already tagged/published. So the roadmap's "coordinate the v0.3.0 / sleap-io 0.8.0
   cut" action downgrades to "confirm Phase 2 can pin to the released tags at Tier 6" — recorded in
   the PR, no upstream release needs to be cut.
+- **Cross-platform install coverage (PR #15 review).** Installing the `train` extra is exercised
+  only by the macOS universal-lock resolution plus one real Windows/A5000 install — **not** by CI
+  (CI never installs the extra, by design, to stay lean). This is an accepted, reviewer-acknowledged
+  risk, not a claim of full matrix coverage.
+- **Deferred to Tier 1: pin strength vs a re-verification gate.** The GPU-box install bypasses
+  `uv.lock` (via `--torch-backend`), so a future `sleap-nn` 0.2.x *patch* could change behavior with
+  no automatic re-verify before results feed W&B lineage. Decide before Tier 1 records training
+  results: exact-pin `sleap-nn` (vs the current minor-cap) or add a patch-release re-verification
+  gate.

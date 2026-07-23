@@ -34,14 +34,18 @@ dependencies = [
 
 [project.optional-dependencies]
 # Phase-1 sleap-nn keypoint training backend (Tier 0.5, #9). Heavy + platform-specific,
-# so kept out of the base install; CI never selects this extra. Capped below the
-# unverified v0.3.0 / sleap-io 0.8.0 mask line (raise at the Tier 6 mask re-verify).
-# CUDA torch is selected at install time on the GPU box (uv pip install ".[train]"
-# --torch-backend=auto|cu124|cu126); see docs/training-backend.md.
+# so kept out of the base install; CI never selects this extra.
+# The sleap-nn/sleap-io caps are DELIBERATE: v0.3.0 / sleap-io 0.8.0 (the mask line) have
+# shipped, but are not yet verified here, so Phase 1 stays on the pre-mask line — raise the
+# caps at the Tier 6 mask re-verify.
+# torch is floor-only (no upper cap) ON PURPOSE: it mirrors upstream sleap-nn's own unpinned
+# torch, and the real CUDA build is chosen at install time on the GPU box
+# (uv pip install ".[train]" --torch-backend=auto|cu124|cu126), not from uv.lock.
+# See docs/training-backend.md.
 train = [
     "sleap-nn>=0.2.0,<0.3.0",
     "sleap-io>=0.7.1,<0.8.0",
-    "torch>=2.5.0",
+    "torch>=2.5.0",  # floor-only by design — see comment above
 ]
 
 [project.urls]
