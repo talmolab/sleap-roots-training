@@ -121,11 +121,13 @@ runbook skeleton commit stays green before the manual spike backfills real findi
 
 ## 6. Git / PR flow (CI-safety notes)
 
-- [ ] 6.1 Push the branch and open a **draft PR** — a feature-branch push alone does not trigger CI
+- [x] 6.1 Push the branch and open a **draft PR** — a feature-branch push alone does not trigger CI
       (the `push` trigger is `branches: [main]` only); `pull_request: opened` fires the 6-leg matrix
       so commits 1–4 validate while the spike (task 4) runs in parallel on the A5000 (which pulls
-      the same branch).
-- [ ] 6.2 After the backfill commit (4.3), mark the PR ready and run `/pre-merge-check`.
-- [ ] 6.3 Archive the OpenSpec change in a **separate follow-up PR** (via `cleanup-merged`),
+      the same branch). *Done: PR #15 (opened by the operator); the 6-leg matrix ran green.*
+- [x] 6.2 After the backfill commit (4.3), mark the PR ready and run `/pre-merge-check`. *Done: CI
+      7/7 pass; reviewed by 3 reviewers (2 approvals); review feedback addressed in commit 89373ac;
+      squash-merged as e8e410f (closes #9).*
+- [x] 6.3 Archive the OpenSpec change in a **separate follow-up PR** (via `cleanup-merged`),
       following the #4 → #5 precedent; the archive move lives under `openspec/**`, outside the CI
-      paths filter, so it never triggers CI.
+      paths filter, so it never triggers CI. *In progress: this archive branch/PR.*
