@@ -8,11 +8,13 @@ the committed TensorFlow-reference W&B payloads under ``tests/fixtures/tf_refere
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Callable
 
 import pytest
+from omegaconf import OmegaConf
 
 #: Directory holding committed test data.
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -107,6 +109,82 @@ def isolate_wandb_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 def tf_reference_dir() -> Path:
     """The directory of committed TensorFlow-reference W&B payload fixtures."""
     return FIXTURES_DIR / "tf_reference"
+
+
+#: A canonical, fully-valid training config reused across the config + CLI tests. It is
+#: *final*-valid on purpose — a valid ``experiment`` vocab, an integer ``trainer_config.seed``,
+#: a backbone + head (so it also passes deep sleap-nn validation under ``[train]``), and
+#: ``use_wandb`` absent (so no W&B target is required) — so that adding the seed and W&B
+#: checks in later commits never turns an earlier group's "good" config red. Tests state only
+#: their *deviation* from it via ``write_config(overrides=..., drop=...)``.
+VALID_CONFIG: dict = {
+    "experiment": {
+        "species": "arabidopsis",
+        "mode": "cylinder",
+        "root_type": "primary",
+        "dataset": {
+            "name": "arabidopsis_primary_cylinder",
+            "path": "data/train.pkg.slp",
+            "notes": "Tier 1 baseline dataset",
+        },
+    },
+    "data_config": {
+        "train_labels_path": ["data/train.pkg.slp"],
+        "val_labels_path": ["data/val.pkg.slp"],
+        "preprocessing": {"max_height": 192, "max_width": 192, "scale": 1.0},
+    },
+    "model_config": {
+        "backbone_config": {"unet": {"filters": 32, "max_stride": 16}},
+        "head_configs": {"single_instance": {"confmaps": {"sigma": 5.0}}},
+    },
+    "trainer_config": {
+        "max_epochs": 50,
+        "seed": 42,
+        "save_ckpt": True,
+        "ckpt_dir": "models",
+        "run_name": "arabidopsis_primary_cylinder",
+    },
+}
+
+
+def _drop_key(cfg: OmegaConf, dotted: str) -> None:
+    """Delete a dotted key (e.g. ``trainer_config.seed``) from an OmegaConf container."""
+    parts = dotted.split(".")
+    node = cfg
+    for part in parts[:-1]:
+        node = node[part]
+    del node[parts[-1]]
+
+
+@pytest.fixture
+def write_config(tmp_path: Path) -> Callable[..., Path]:
+    """Return a factory that writes a training-config YAML to a temp path and returns it.
+
+    The factory starts from a deep copy of ``VALID_CONFIG`` so a test only states its
+    deviation:
+
+    - ``overrides``: an OmegaConf-mergeable mapping deep-merged onto the valid config
+      (set a value, or add an unknown key to exercise rejection).
+    - ``drop``: dotted keys to delete (e.g. ``"experiment"`` or ``"trainer_config.seed"``).
+
+    Fixtures are self-contained (built in ``tmp_path``); tests never read ``examples/``.
+    """
+
+    def _write(
+        name: str = "config.yaml",
+        overrides: dict | None = None,
+        drop: tuple[str, ...] = (),
+    ) -> Path:
+        cfg = OmegaConf.create(copy.deepcopy(VALID_CONFIG))
+        if overrides:
+            cfg = OmegaConf.merge(cfg, overrides)
+        for dotted in drop:
+            _drop_key(cfg, dotted)
+        path = tmp_path / name
+        path.write_text(OmegaConf.to_yaml(cfg), encoding="utf-8")
+        return path
+
+    return _write
 
 
 @pytest.fixture
