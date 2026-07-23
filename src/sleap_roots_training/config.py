@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Union
 
-import yaml
 from omegaconf import MISSING, DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
@@ -92,7 +91,7 @@ def load_config(path: Union[str, Path]) -> DictConfig:
     path = Path(path)
     try:
         cfg = OmegaConf.load(path)
-    except (OmegaConfBaseException, yaml.YAMLError, OSError) as err:
+    except Exception as err:  # OmegaConf.load surfaces I/O and YAML-parse errors here
         raise ConfigError(f"could not parse config {path}: {err}") from err
     if cfg is None or not OmegaConf.is_dict(cfg) or len(cfg) == 0:
         raise ConfigError(f"config {path} is empty or not a YAML mapping")
