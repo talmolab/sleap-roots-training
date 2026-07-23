@@ -3,7 +3,8 @@
 Tier 0.5 (#9) verification runbook: the exact, reproducible commands to install the
 `sleap-nn` keypoint backend, train and predict on a small sample dataset, and check the
 GPU. It de-risks Tier 1 by proving the released backend works end to end before any
-config-driven training is built on it.
+config-driven training is built on it. For the config-driven train/eval workflow built on top of
+this backend (authoring a config, `validate`, reading results), see [training.md](training.md).
 
 The backend ships as an optional extra so the base install and CI stay lean:
 
