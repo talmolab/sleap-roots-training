@@ -253,9 +253,10 @@ live registry — using the same registry project string the consumer uses
 (`f"{entity}-org/wandb-registry-{registry}"`, **not** the seed run's project) — and reports, for
 every expected collection (derived from the selection matrix), whether an artifact carrying the
 production alias is present. It is read-only, so it requires only the selection matrix + registry
-config (not `--models-root`), but it SHALL check `WANDB_API_KEY` before contacting wandb. This is
-real, re-runnable software (not a one-time procedure), so post-seed verification is embodied by a
-command rather than an unimplemented spec clause.
+config (not `--models-root`), but it SHALL check for a resolvable wandb credential (`WANDB_API_KEY`
+or a netrc entry for `api.wandb.ai`) before contacting wandb. This is real, re-runnable software (not
+a one-time procedure), so post-seed verification is embodied by a command rather than an
+unimplemented spec clause.
 
 #### Scenario: Verify reads back the production alias
 
@@ -272,8 +273,17 @@ The package SHALL resolve the wandb entity (`WANDB_ENTITY`), the **models** regi
 (`SLEAP_ROOTS_MODEL_REGISTRY` — named explicitly for the models registry because a separate
 `sleap-roots-labels` registry also exists), and the production alias (`SLEAP_ROOTS_MODEL_ALIAS`) from
 environment variables with defaults (entity default `eberrigan-salk-institute-for-biological-studies`,
-registry default `sleap-roots-models`, alias default `production`), and SHALL require `WANDB_API_KEY`
-to be set for any operation that contacts wandb, failing fast with a clear error when it is absent.
+registry default `sleap-roots-models`, alias default `production`), and SHALL require a **resolvable
+wandb credential** for any operation that contacts wandb — either `WANDB_API_KEY` set in the
+environment **or** a netrc entry for `api.wandb.ai` (as written by `wandb login`) — failing fast with
+a clear error only when no credential is resolvable anywhere. The netrc file SHALL be located the
+same way wandb locates it, so a login session is detected on every platform: the `NETRC` environment
+variable if set, otherwise `~/.netrc`, otherwise `~/_netrc` (the file `wandb login` writes on
+Windows). The check SHALL use the stdlib `netrc` module (no `import wandb`), and a malformed,
+unreadable, or missing netrc SHALL be treated as "no credential" rather than raising. A netrc entry
+for `api.wandb.ai` whose password field is blank or absent SHALL NOT count as a resolvable
+credential (mirroring wandb's own resolver), so a stale or partially-written login cannot pass the
+guard and then fail deep inside `wandb.init()`.
 
 #### Scenario: Defaults when environment unset
 
@@ -286,10 +296,30 @@ to be set for any operation that contacts wandb, failing fast with a clear error
 - **WHEN** the registry environment variables are set to other values
 - **THEN** the resolved configuration uses those values
 
-#### Scenario: Missing API key fails fast
+#### Scenario: Netrc login satisfies the credential guard
 
-- **WHEN** a wandb-contacting operation runs without `WANDB_API_KEY` set
-- **THEN** it raises a clear error before any network call is made
+- **WHEN** `WANDB_API_KEY` is unset but a netrc entry for `api.wandb.ai` is resolvable
+- **THEN** the credential guard passes without raising
+- **AND** the wandb-contacting operation is allowed to proceed
+
+#### Scenario: No resolvable credential fails fast
+
+- **WHEN** a wandb-contacting operation runs with neither `WANDB_API_KEY` set nor a netrc entry for
+  `api.wandb.ai`
+- **THEN** it raises a clear error naming both credential sources before any network call is made
+
+#### Scenario: Malformed netrc is treated as no credential
+
+- **WHEN** the credential guard reads a malformed or unreadable netrc while `WANDB_API_KEY` is unset
+- **THEN** the parse/read error is swallowed and treated as "no credential"
+- **AND** the guard raises the same clear error rather than propagating the netrc parse error
+
+#### Scenario: Netrc entry with a blank password is not a credential
+
+- **WHEN** `WANDB_API_KEY` is unset and the netrc has an `api.wandb.ai` entry whose password field is
+  blank or absent (a stale/interrupted `wandb login`)
+- **THEN** the guard treats it as "no credential" and fails fast before the confirmation prompt
+- **AND** the guard does not defer the failure to a later `wandb.init()` call
 
 ### Requirement: Registry Seeding CLI with Confirmed Execution
 
@@ -297,17 +327,17 @@ The CLI SHALL provide a `seed-registry` subcommand that reads the selection matr
 resolves model directories, and — by default — runs a **dry run** that prints the planned
 collections and per-card metadata and resolves every model directory on the filesystem (reporting
 any missing model) **without** contacting wandb. Actually publishing SHALL require an explicit
-`--execute`, which SHALL check `WANDB_API_KEY` **before** confirming the target entity/registry
-(interactive, bypassed with `--yes`), and SHALL validate that every card **in the invocation's scope**
-resolves before publishing any artifact, so a partial production seed is not left in a shared
-registry. The CLI SHALL accept a repeatable `--only <collection_id>` filter so a single card can be
-seeded first as a canary (verify the consumer can read it across the producer/consumer wandb version
-skew); with `--only`, both the validation set and the publish set narrow to the named card(s) (so a
-canary needs only its own model staged), and an `--only` value naming no known collection SHALL fail
-fast. A subsequent full `--execute` publishes the rest and skips the already-seeded canary. The
-`--models-root` is required for dry-run and `--execute`; `--verify` is a distinct read-only mode that
-requires only the selection matrix + registry config (not `--models-root`) and SHALL check
-`WANDB_API_KEY`.
+`--execute`, which SHALL check for a resolvable wandb credential (`WANDB_API_KEY` or a netrc entry
+for `api.wandb.ai`) **before** confirming the target entity/registry (interactive, bypassed with
+`--yes`), and SHALL validate that every card **in the invocation's scope** resolves before publishing
+any artifact, so a partial production seed is not left in a shared registry. The CLI SHALL accept a
+repeatable `--only <collection_id>` filter so a single card can be seeded first as a canary (verify
+the consumer can read it across the producer/consumer wandb version skew); with `--only`, both the
+validation set and the publish set narrow to the named card(s) (so a canary needs only its own model
+staged), and an `--only` value naming no known collection SHALL fail fast. A subsequent full
+`--execute` publishes the rest and skips the already-seeded canary. The `--models-root` is required
+for dry-run and `--execute`; `--verify` is a distinct read-only mode that requires only the selection
+matrix + registry config (not `--models-root`) and SHALL check for a resolvable wandb credential.
 
 #### Scenario: Only-filter seeds a single canary card, validating only its scope
 
@@ -330,15 +360,16 @@ requires only the selection matrix + registry config (not `--models-root`) and S
 - **AND** no wandb network call is made
 - **AND** the command exits with status code 0
 
-#### Scenario: Missing API key fails before the confirmation prompt
+#### Scenario: Missing credential fails before the confirmation prompt
 
-- **WHEN** `seed-registry --execute` is run without `WANDB_API_KEY` set
+- **WHEN** `seed-registry --execute` is run with neither `WANDB_API_KEY` set nor a netrc entry for
+  `api.wandb.ai`
 - **THEN** the command fails fast with a clear error before prompting for confirmation
 - **AND** no wandb network call is made
 
 #### Scenario: Execution requires confirmation
 
-- **WHEN** `seed-registry --execute` is run with `WANDB_API_KEY` set but without `--yes`
+- **WHEN** `seed-registry --execute` is run with a resolvable wandb credential but without `--yes`
 - **THEN** the command names the target entity and registry and requires confirmation before
   publishing
 - **AND** declining performs no publish
@@ -355,4 +386,3 @@ requires only the selection matrix + registry config (not `--models-root`) and S
 - **WHEN** `seed-registry --execute --yes` is run with valid credentials and a complete models-root
 - **THEN** each not-yet-seeded card is published and linked with the production alias
 - **AND** the command reports the published and skipped collections
-
