@@ -13,6 +13,12 @@ from click.testing import CliRunner
 from sleap_roots_training import cli, config
 
 
+@pytest.fixture(autouse=True)
+def _force_base_safe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force the no-``[train]`` path so the CLI tests are deterministic on any host."""
+    monkeypatch.setattr(config, "_deep_validation_available", lambda: False)
+
+
 def _invoke(args):
     return CliRunner().invoke(cli.main, args)
 

@@ -31,6 +31,9 @@ ROOT_TYPE_VOCAB = frozenset(_ROOT_SLOTS)
 
 #: Recognized ``sleap-nn`` top-level config keys (``TrainingJobConfig``). Any other
 #: top-level key besides our ``experiment`` block is rejected, not silently dropped.
+#: This mirrors ``TrainingJobConfig``'s top-level fields — a shallow list used only for
+#: base-safe typo detection; keep it in sync with the pinned ``sleap-nn`` (bounded by the
+#: ``<0.3.0`` cap). The deep path (``verify_training_cfg``) is the authoritative check.
 _SLEAP_NN_KEYS = frozenset(
     {
         "data_config",
@@ -116,6 +119,7 @@ def validate_config(cfg: DictConfig) -> list[str]:
         ConfigError: Any check fails; the message names the offending field.
     """
     _check_top_level_keys(cfg)
+    _check_block_types(cfg)
     _validate_experiment(cfg)
     _check_seed(cfg)
     _check_wandb(cfg)
@@ -165,6 +169,18 @@ def _check_top_level_keys(cfg: DictConfig) -> None:
         )
 
 
+def _check_block_types(cfg: DictConfig) -> None:
+    """Reject a present top-level block that is not a mapping.
+
+    A scalar/null/list where a mapping is expected (e.g. ``experiment: primary``,
+    ``trainer_config:`` as a stray list) would otherwise make the downstream
+    ``merge`` / ``select`` calls raise a raw OmegaConf error and leak a traceback.
+    """
+    for key in (_EXPERIMENT_KEY, "data_config", "model_config", "trainer_config"):
+        if key in cfg and not OmegaConf.is_dict(cfg[key]):
+            raise ConfigError(f"'{key}' must be a mapping")
+
+
 def _validate_experiment(cfg: DictConfig) -> None:
     """Validate the ``experiment`` block against the schema and the vocabularies."""
     if _EXPERIMENT_KEY not in cfg:
@@ -172,8 +188,9 @@ def _validate_experiment(cfg: DictConfig) -> None:
     schema = OmegaConf.structured(ExperimentConfig)
     try:
         merged = OmegaConf.merge(schema, cfg.experiment)
+        # Resolve purely to surface any MISSING required field (species/dataset.*).
         OmegaConf.to_container(merged, resolve=True, throw_on_missing=True)
-    except OmegaConfBaseException as err:
+    except (OmegaConfBaseException, ValueError) as err:
         raise ConfigError(f"invalid 'experiment' block: {err}") from err
     _check_vocab("experiment.species", merged.species, SPECIES_VOCAB)
     _check_vocab("experiment.mode", merged.mode, MODE_VOCAB)
@@ -201,8 +218,16 @@ def _check_seed(cfg: DictConfig) -> None:
 
 def _check_wandb(cfg: DictConfig) -> None:
     """When ``trainer_config.use_wandb`` is true, require ``wandb.entity`` + ``project``."""
-    if not OmegaConf.select(cfg, "trainer_config.use_wandb", default=False):
+    use_wandb = OmegaConf.select(cfg, "trainer_config.use_wandb", default=False)
+    if not isinstance(use_wandb, bool):
+        raise ConfigError(
+            f"trainer_config.use_wandb must be a boolean, got {use_wandb!r}"
+        )
+    if not use_wandb:
         return
+    wandb = OmegaConf.select(cfg, "trainer_config.wandb", default=None)
+    if wandb is not None and not OmegaConf.is_dict(wandb):
+        raise ConfigError("trainer_config.wandb must be a mapping")
     for key in ("entity", "project"):
         value = OmegaConf.select(cfg, f"trainer_config.wandb.{key}", default=None)
         if not value:

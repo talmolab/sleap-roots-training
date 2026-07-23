@@ -157,3 +157,58 @@ def test_base_path_does_not_import_sleap_nn(write_config, monkeypatch):
     monkeypatch.delitem(sys.modules, "sleap_nn", raising=False)
     config.validate_config(config.load_config(write_config()))
     assert "sleap_nn" not in sys.modules
+
+
+# --- Malformed / non-mapping blocks are reported cleanly, not as tracebacks -------------
+
+_VALID_EXP = (
+    "experiment: {species: arabidopsis, mode: cylinder, root_type: primary, "
+    "dataset: {name: d, path: p}}\n"
+)
+
+
+def _write(tmp_path, body: str):
+    path = tmp_path / "c.yaml"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "experiment: primary\ntrainer_config: {seed: 1}\n",  # scalar experiment
+        "experiment: null\ntrainer_config: {seed: 1}\n",  # null experiment
+        _VALID_EXP + "trainer_config:\n  - seed: 1\n",  # list-shaped trainer_config
+        _VALID_EXP
+        + "data_config: 5\ntrainer_config: {seed: 1}\n",  # scalar data_config
+    ],
+)
+def test_non_mapping_block_is_rejected_cleanly(tmp_path, body):
+    with pytest.raises(config.ConfigError, match="must be a mapping"):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+def test_top_level_list_is_rejected(tmp_path):
+    with pytest.raises(config.ConfigError):
+        config.load_config(_write(tmp_path, "- a\n- b\n"))
+
+
+def test_list_shaped_wandb_is_rejected_cleanly(tmp_path):
+    body = _VALID_EXP + "trainer_config: {seed: 1, use_wandb: true, wandb: [a, b]}\n"
+    with pytest.raises(config.ConfigError, match="wandb must be a mapping"):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+def test_non_boolean_use_wandb_is_rejected(tmp_path):
+    body = _VALID_EXP + 'trainer_config: {seed: 1, use_wandb: "false"}\n'
+    with pytest.raises(config.ConfigError, match="use_wandb must be a boolean"):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+def test_wandb_partial_target_is_rejected(tmp_path):
+    # entity present, project missing -> the per-key loop's second iteration must fire.
+    body = (
+        _VALID_EXP + "trainer_config: {seed: 1, use_wandb: true, wandb: {entity: e}}\n"
+    )
+    with pytest.raises(config.ConfigError, match="project"):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
