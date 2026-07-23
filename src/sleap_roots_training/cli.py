@@ -6,6 +6,7 @@ from typing import Optional
 import click
 
 from sleap_roots_training import __version__
+from sleap_roots_training import config as training_config
 from sleap_roots_training.registry import cards, chooser, config, lineage, publish
 from sleap_roots_training.registry.models import resolve_model_dir
 
@@ -164,6 +165,26 @@ def seed_registry_command(
         run.finish()
     click.echo(f"published ({len(report['published'])}): {report['published']}")
     click.echo(f"skipped ({len(report['skipped'])}): {report['skipped']}")
+
+
+@main.command(name="validate")
+@click.argument("config_path", type=click.Path(exists=True, path_type=Path))
+def validate_command(config_path: Path) -> None:
+    """Validate a training config file (CONFIG_PATH) against the schema.
+
+    Runs the experiment-metadata, explicit-seed, and W&B-enablement checks, and — when the
+    optional ``train`` extra is installed — delegates deep validation to ``sleap-nn``.
+    Prints a success line and exits 0 when the config conforms; prints a clear, field-named
+    error and exits non-zero otherwise.
+    """
+    try:
+        cfg = training_config.load_config(config_path)
+        notes = training_config.validate_config(cfg)
+    except training_config.ConfigError as error:
+        raise click.ClickException(str(error))
+    for note in notes:
+        click.echo(f"note: {note}")
+    click.echo(f"OK: {config_path} is valid")
 
 
 if __name__ == "__main__":  # pragma: no cover
