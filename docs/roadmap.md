@@ -347,6 +347,14 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   SLEAP-team coordination. Tracked as a separate program when reached.
 - **(Possible)** downstream deployment of the finished models into the `sleap-roots` phenotyping
   pipeline — out of scope here; revisit if/when the models are production-bound.
+- **(Possible)** a single model outputting both pose and segmentation masks from a shared
+  backbone (Mask-R-CNN-style multi-task head). **Not currently possible**: `sleap_nn`'s
+  `HeadConfig` (`sleap_nn/config/model_config.py`) is `@oneof`-constrained to exactly one head
+  type per model, across all nine head types (`single_instance`, `centroid`, `centered_instance`,
+  `bottomup`, two multi-class variants, `bottomup_segmentation`,
+  `centered_instance_segmentation`, `semantic_segmentation`). Would require new upstream
+  `sleap-nn` capability — a combined head type or relaxing the `@oneof` constraint — not
+  achievable from this repo's config layer alone.
 
 ---
 
