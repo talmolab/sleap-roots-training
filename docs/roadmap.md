@@ -54,14 +54,15 @@ This roadmap describes **what needs to be done**, not who does it. Work is assig
 is filed, just-in-time at tier kickoff (see *Tracking-issue policy*). Two tracks describe the kind
 of work, not a permanent owner:
 
-- **Engineering track:** pipeline architecture + tooling; the mask-review GUI (Tier 8).
+- **Engineering track:** pipeline architecture + tooling; the mask-review GUI (Tier 6.5, later
+  upstreamed to `sleap-app` in Tier 8).
 - **Modeling & evaluation track:** training/sweeps + evaluation, the generalist-vs-specialist
   comparison, labeling strategy/QC, trait validation.
 - **Cross-training is a requirement, not a hope:** everyone ships at least one PR in the *other*
   track, and labels a real batch. **Every PR is cross-reviewed by someone from the other track** —
   one reviewer on the engineering angle, one on the modeling/domain angle.
-- **Co-owned seams:** the evaluation/comparison harness (Tier 4) and the SAM-predict →
-  review/correct loop (Tiers 6 + 8).
+- **Co-owned seams:** the evaluation/comparison harness (Tier 4) and the segmentation
+  bootstrap → review/correct loop (Tiers 6 + 6.5).
 - Cadence: weekly pairing + async team check-in with Elizabeth. `.slp`/sleap-io is the contract.
 
 ---
