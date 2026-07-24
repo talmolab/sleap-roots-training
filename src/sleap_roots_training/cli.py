@@ -6,6 +6,7 @@ from typing import Optional
 import click
 
 from sleap_roots_training import __version__
+from sleap_roots_training import config as training_config
 from sleap_roots_training.registry import cards, chooser, config, lineage, publish
 from sleap_roots_training.registry.models import resolve_model_dir
 
@@ -164,6 +165,66 @@ def seed_registry_command(
         run.finish()
     click.echo(f"published ({len(report['published'])}): {report['published']}")
     click.echo(f"skipped ({len(report['skipped'])}): {report['skipped']}")
+
+
+@main.command(name="validate")
+@click.argument("config_path", type=click.Path(exists=True, path_type=Path))
+def validate_command(config_path: Path) -> None:
+    """Validate a training config file (CONFIG_PATH) against the schema.
+
+    Runs the experiment-metadata, explicit-seed, and W&B-enablement checks, and — when the
+    optional ``train`` extra is installed — delegates deep validation to ``sleap-nn``.
+    Prints a success line and exits 0 when the config conforms; prints a clear, field-named
+    error and exits non-zero otherwise.
+    """
+    try:
+        cfg = training_config.load_config(config_path)
+        notes = training_config.validate_config(cfg)
+    except training_config.ConfigError as error:
+        raise click.ClickException(str(error))
+    for note in notes:
+        click.echo(f"note: {note}")
+    if notes:
+        # Deep sleap-nn validation was skipped (no train extra) — don't imply a full pass.
+        click.echo(
+            f"OK: {config_path} passed base checks (deep sleap-nn validation skipped; "
+            "install the 'train' extra to validate the backend config)"
+        )
+    else:
+        click.echo(f"OK: {config_path} is valid")
+
+
+@main.command(name="emit")
+@click.argument("config_path", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the sleap-nn config here (default: stdout).",
+)
+def emit_command(config_path: Path, output: Optional[Path]) -> None:
+    """Emit the sleap-nn-native config from CONFIG_PATH (``experiment`` block stripped).
+
+    Validates CONFIG_PATH, then writes the config to pass to ``sleap-nn train --config``:
+    sleap-nn's struct-mode config rejects the repo-owned ``experiment`` key, so it is
+    removed. Works without the ``train`` extra, so you can author + validate + emit on one
+    machine and train on another. Exits non-zero with a clear error if the config is invalid.
+    """
+    try:
+        cfg = training_config.load_config(config_path)
+        training_config.validate_config(cfg)
+    except training_config.ConfigError as error:
+        raise click.ClickException(str(error))
+    sleap_nn_yaml = training_config.to_sleap_nn_yaml(cfg)
+    if output is None:
+        click.echo(sleap_nn_yaml, nl=False)
+        return
+    try:
+        output.write_text(sleap_nn_yaml, encoding="utf-8")
+    except OSError as error:
+        raise click.ClickException(f"could not write {output}: {error}")
+    click.echo(f"wrote sleap-nn config to {output}")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -6,6 +6,8 @@ on:
     paths:
       - "src/sleap_roots_training/**"
       - "tests/**"
+      - "docs/**"
+      - "examples/**"
       - ".github/workflows/ci.yml"
       - "pyproject.toml"
       - "uv.lock"
@@ -14,6 +16,8 @@ on:
     paths:
       - "src/sleap_roots_training/**"
       - "tests/**"
+      - "docs/**"
+      - "examples/**"
       - ".github/workflows/ci.yml"
       - "pyproject.toml"
       - "uv.lock"

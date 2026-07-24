@@ -1,0 +1,54 @@
+# Tier 1 baseline config — Arabidopsis primary root, cylinder.
+#
+# One YAML = sleap-nn's native data_config / model_config / trainer_config, PLUS a
+# repo-owned `experiment` block (species / mode / root_type / dataset identity).
+# Validate it, then train:
+#   sleap-roots-training validate examples/arabidopsis_primary_cylinder.yaml
+#   sleap-nn train --config examples/arabidopsis_primary_cylinder.yaml   # needs the [train] extra
+# See docs/training.md.
+
+experiment:
+  species: arabidopsis      # SPECIES_VOCAB (registry/chooser.py)
+  mode: cylinder            # MODE_VOCAB — NOT "primary_cylinder"; `primary` is the root_type
+  root_type: primary        # primary | lateral | crown
+  dataset:
+    name: cyl_arabidopsis_primary
+    # A plain, local packaged .slp (embedded frames). Replace with the real
+    # Arabidopsis primary-root cylinder dataset before the baseline runs.
+    path: data/arabidopsis_primary_cylinder.train.pkg.slp
+
+data_config:
+  train_labels_path:
+    - data/arabidopsis_primary_cylinder.train.pkg.slp
+  val_labels_path:
+    - data/arabidopsis_primary_cylinder.val.pkg.slp
+  preprocessing:
+    ensure_rgb: false
+    ensure_grayscale: false
+    max_height: 192
+    max_width: 192
+    scale: 1.0
+    crop_size: null
+    min_crop_size: 100
+    crop_padding: null
+
+model_config:
+  backbone_config:
+    unet:
+      filters: 32
+      max_stride: 16
+  head_configs:
+    single_instance:
+      confmaps:
+        sigma: 5.0
+
+trainer_config:
+  max_epochs: 200
+  seed: 42                  # REQUIRED on 0.2.0 (no default) — vary this across the baseline runs
+  save_ckpt: true
+  ckpt_dir: models
+  run_name: cyl_arabidopsis_primary
+  use_wandb: false          # set true + fill wandb.entity/project to log per-epoch metrics
+  # wandb:
+  #   entity: eberrigan-salk-institute-for-biological-studies
+  #   project: sleap-roots
