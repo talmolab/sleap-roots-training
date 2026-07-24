@@ -223,6 +223,20 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   resample a native specialist's predictions — that biases against it).
 - **Tracking:** Tier-4 EPIC. *(Co-owned harness — pair-programmed, see safeguards below.)*
 
+### Tier 4.5 — Production model selection
+- **Deliverable:** a documented, per-species decision — deploy the generalist, a species-specific
+  specialist, or a generalist trained over some subset of species — backed by Tier 4's comparison
+  table and trait-validation numbers. Explicitly allows "the generalist doesn't work for this
+  species, use its specialist" as a valid, expected outcome, not an edge case. Reuses the existing
+  publishing mechanism (`ModelCard`, `production` alias, `seed-registry` CLI) — no new registry
+  surface.
+- **Oracle:** every species in the drafted comparison matrix has a documented, evidence-backed
+  production recommendation; recommendations are published to the registry via the existing
+  mechanism.
+- **Depends on:** Tier 4 (comparison table + trait validation is the evidence base).
+- **Tracking:** Tier-4.5 EPIC. *(Same decision process repeats after Tier 9 for mask models —
+  not its own tier number, just flag it when Tier 9 is reached.)*
+
 ### Tier 5 — Full labeling-QC tooling
 - **Deliverable:** the full QC tooling/CLI over labels, extending the Tier-2.5 seed checks.
 - **Oracle:** QC flags the **same planted error set** from Tier 2.5 (now measured to a
