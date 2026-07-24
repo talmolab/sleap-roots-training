@@ -48,6 +48,15 @@ ENV/
 # Weights & Biases local run cache
 wandb/
 
+# Datasets / labeled data — live in the W&B label registry, never in git
+/data/
+*.slp
+*.pkg.slp
+*.slp.pkg
+
+# Training outputs (checkpoints, metrics)
+/models/
+
 # Claude
 .serena/cache/
 .claude/settings.local.json
