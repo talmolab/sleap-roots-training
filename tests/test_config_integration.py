@@ -22,7 +22,9 @@ def test_no_backbone_or_head_fails_via_sleap_nn(write_config):
     path = write_config(
         drop=("model_config.backbone_config", "model_config.head_configs")
     )
-    with pytest.raises(config.ConfigError, match="backbone|head"):
+    # sleap-nn's own check_must_be_set message ("BackboneConfig: At least one attribute
+    # ... must be set") — case-insensitive so "BackboneConfig"/"HeadConfig" both match.
+    with pytest.raises(config.ConfigError, match=r"(?i)backbone|head"):
         config.validate_config(config.load_config(path))
 
 
