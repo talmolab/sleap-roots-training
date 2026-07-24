@@ -294,13 +294,33 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 - **Tracking:** Tier-6.7 EPIC.
 
 ### Tier 7 — Pipeline mask training
-- **Deliverable:** train `bottomup_segmentation` / `centered_instance_segmentation` via the
-  pipeline; config-driven.
-- **Oracle:** mask model meets a mask-AP/IoU target on held-out data.
+- **Deliverable:** train `bottomup_segmentation`/`centered_instance_segmentation` (or whole-frame
+  semantic, per Tier 6's per-crop decision) via the config-driven pipeline from Tier 1, starting
+  from Talmo's validated recipe as the default rather than an open hyperparameter search:
+  whole-frame UNet, output-stride 4, BCE/Dice 0.5/0.5, no `pos_weight`; tiling only when a crop's
+  objects are smaller than the tile (compact/lateral roots — never elongated primaries); top-down
+  instance segmentation for compact-root crops (bottom-up is not yet deployable as-is per the
+  campaign's audit — mislabels/misses roughly half even after the grouping-field retrain).
+- **Sweep clause (parity with Tier 3's pose sweeps):** for crops where Talmo's campaign already
+  validated the recipe on that exact crop (e.g. cylinder Arabidopsis — SAM3 zero-shot clDice
+  0.808 vs. trained UNet clDice 0.866, n=17), reuse it directly. For crops it didn't cover, or
+  where the audit flagged single-seed/single-crop scope (most results are soy_lateral-only), run a
+  light confirmatory config-driven sweep (backbone, output-stride, tile size) before committing —
+  do not assume the borrowed recipe transfers untested.
+- **Concrete starting point:** for cylinder Arabidopsis specifically, packaged train/val
+  `.pkg.slp` files already exist from Talmo's campaign
+  (`sleap-nn`'s `scratch/2026-07-05-plant-seg-experiments/data/masks/cyl_arabidopsis_foreground*.pkg.slp`,
+  `cyl_arabidopsis_instance*.pkg.slp`) — use directly rather than regenerating, same spirit as
+  reusing the Tier 1 keypoint split files.
+- **Oracle:** mask model meets a mask-AP/IoU target on held-out data, established the same way
+  Tier 1 established its keypoint baseline — report the new model's own range next to the
+  campaign's reference numbers as context, not a pass/fail gate.
+- **Compute note:** doesn't require Run:AI specifically — may run on the A5000 workstation.
 - **Tracking:** Tier-7 EPIC. *(Splits into a "runs it" role and a "builds the tooling" role.)*
-- **Not blocked by Tier 8:** mask corrections for training can be done programmatically
-  (`sleap-io` `PredictedSegmentationMask.to_user()`) or via the desktop path in the interim. The
-  web GUI (Tier 8) is a quality-of-life accelerator, **not** a critical-path dependency.
+- **Not blocked by Tier 8:** mask corrections for training can be done via Tier 6.5's standalone
+  tool now, or programmatically (`sleap-io` `PredictedSegmentationMask.to_user()`) in the
+  interim. Tier 8 (upstreaming into `sleap-app`) is a later migration, **not** a critical-path
+  dependency.
 
 ### Tier 8 — Mask review/correct GUI in `sleap-app` (talmolab/sleap-app#155 Phase-1) *(cross-repo, off critical path)*
 - **Deliverable:** render + accept/reject predicted masks in the web app, round-tripping `.slp`.
