@@ -322,12 +322,17 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   interim. Tier 8 (upstreaming into `sleap-app`) is a later migration, **not** a critical-path
   dependency.
 
-### Tier 8 — Mask review/correct GUI in `sleap-app` (talmolab/sleap-app#155 Phase-1) *(cross-repo, off critical path)*
-- **Deliverable:** render + accept/reject predicted masks in the web app, round-tripping `.slp`.
-- **Oracle:** a reviewer can load predicted masks, accept/reject, and re-save valid `.slp`;
-  accepted by SLEAP-team review.
+### Tier 8 — Upstream the correction tool into `sleap-app` (talmolab/sleap-app#155 Phase-1) *(cross-repo, off critical path)*
+- **Deliverable:** migrate/rebuild Tier 6.5's standalone correction tool as native `sleap-app`
+  functionality, round-tripping `.slp`. Repurposed from the original framing — Tier 6.5 already
+  provides the actual review path; this is the later "make it a first-class part of the shared
+  app" step.
+- **Oracle:** a reviewer can load predicted masks in `sleap-app`, accept/reject, and re-save valid
+  `.slp`; accepted by SLEAP-team review.
 - **Tracking:** ties to existing talmolab/sleap-app#155; cross-repo with the SLEAP team; buy-in secured
   in Tier 0.5; **draft the sub-issue set and get SLEAP-team go-ahead before filing in their repo.**
+  **Genuinely off critical path now**, since Tier 6.5 already unblocks real review/correction work
+  without it.
 
 ### Tier 9 — Mask generalist-vs-specialist comparison
 - **Deliverable:** comparison table for mask models (generalist vs per-crop specialist).
