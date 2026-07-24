@@ -245,11 +245,25 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 
 ## Phase 2 — Segmentation masks (fall)
 
-### Tier 6 — SAM-predict glue (poses → predicted masks)
-- **Deliverable:** a pipeline step wrapping sleap-nn `run_sam_segmentation` to turn keypoint
-  poses into `PredictedSegmentationMask` for review.
-- **Oracle:** predicted masks on a sample (using keypoints from the unified skeleton, Tier 2.7)
-  reach a mask-IoU threshold vs a hand-checked set.
+### Tier 6 — Segmentation mask bootstrapping (per-crop method selection)
+- **Deliverable:** for each crop/platform, empirically compare the available mask-generation
+  methods rather than prescribing one:
+  - **Zero-shot SAM** (optionally prompted with existing pose keypoints/bounding boxes)
+  - **Talmo's pose-derived pseudo-mask heuristic** (fixed-width band around the skeleton — cheap,
+    no training required, got decent results in his own experiments; documented in
+    `sleap-nn`'s `scratch/2026-07-05-plant-seg-experiments/analysis/E_synthesis/FINDINGS.md` and
+    `.../analysis/gt_ceiling/README.md`)
+  - **Real hand-labeled masks**, where #23's inventory already has them (cylinder Arabidopsis;
+    smaller rice/sorghum/soybean batches)
+
+  Pick (and document) whichever produces usable, review-ready masks for that crop's actual
+  morphology — mirrors this roadmap's existing "establish then reproduce-or-beat" oracle
+  philosophy rather than assuming one method wins everywhere.
+- **Oracle:** a per-crop comparison table (method vs. mask-IoU/clDice against a small hand-checked
+  reference set) with a documented decision per crop.
+- **Depends on:** #23 (need the real-label inventory to know which crops get a "real labels" arm).
+- **Compute note:** doesn't require Run:AI specifically — may run on the A5000 workstation, same
+  as Tier 7.
 - **Tracking:** Tier-6 EPIC. *(Re-verify sleap-nn mask state + pins at kickoff.)*
 
 ### Tier 7 — Pipeline mask training
