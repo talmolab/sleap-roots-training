@@ -204,8 +204,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 
 ### Tier 3 — Multi-dataset / generalist training + sweeps
 - **Deliverable:** train a generalist model across ≥2 species **on the unified skeleton (Tier
-  2.7)**; config-driven sweeps on Run:AI. **Draft the comparison matrix** (crops × root types)
-  with Elizabeth to scope Tier 4.
+  2.7)**; config-driven sweeps **on Run:AI when available, or the A5000 workstation otherwise —
+  compute location isn't prescribed, given Run:AI's sparse availability.** **Draft the comparison
+  matrix** (crops × root types) with Elizabeth to scope Tier 4.
 - **Oracle:** generalist model matches/exceeds the old generalist-notebook result on held-out
   test sets; comparison matrix drafted. *(Depends on Tier 2 lineage + Tier 2.7 unified skeleton.)*
 - **Tracking:** Tier-3 EPIC. *(Splits into a "runs it" role and a "builds the tooling" role.)*
