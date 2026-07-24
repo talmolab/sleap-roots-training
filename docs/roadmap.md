@@ -266,6 +266,33 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   as Tier 7.
 - **Tracking:** Tier-6 EPIC. *(Re-verify sleap-nn mask state + pins at kickoff.)*
 
+### Tier 6.5 — Standalone segmentation correction GUI
+- **Deliverable:** build out a review/correction tool — extending the `vibes.tlab.sh` prototypes
+  (`sam3-segmenter`, `labelroi`), built on `sleap-io.js` — that lets someone load candidate masks
+  (from whichever Tier 6 method won for a crop) and correct them into real training labels,
+  round-tripping to `.slp`. Real, buildable-now roadmap content, no cross-repo dependency.
+- **Oracle:** a reviewer can load Tier 6's candidate masks for a crop, correct/accept/reject them,
+  and export a valid `.slp` with corrected masks — usable standalone.
+- **Depends on:** Tier 6 (needs candidate masks to correct against).
+- **Feeds:** Tier 7 (corrected masks become real training labels).
+- **Tracking:** Tier-6.5 EPIC. *(Good early pairing opportunity — engineering-track person builds
+  the tool, modeling-track person is the first real reviewer/user.)*
+- **Relationship to Tier 8:** Tier 8 is repurposed to be the later "upstream this into `sleap-app`"
+  migration — this tier is what actually gets labels reviewed now.
+
+### Tier 6.7 — Segmentation labeling strategy + coverage plan
+- **Deliverable:** per-crop assessment of whether #23's existing label inventory is sufficient for
+  Tier 7 training, or whether more labels are needed — plus a minimal QC checklist for
+  segmentation masks (mask-specific analog of Tier 2.5's pose checklist: no holes/disconnected
+  fragments, tight boundaries, sane foreground/background balance). Where more labels are needed,
+  Tier 6.5's correction GUI is the tool used to produce them.
+- **Oracle:** seed QC flags a planted set of known mask errors (mirrors Tier 2.5's oracle); a
+  documented per-crop verdict ("enough data" / "needs N more labeled frames") before Tier 7 sweeps
+  begin.
+- **Depends on:** Tier 6 (need the per-crop method comparison first), Tier 6.5 (the tool that
+  would produce more labels if needed).
+- **Tracking:** Tier-6.7 EPIC.
+
 ### Tier 7 — Pipeline mask training
 - **Deliverable:** train `bottomup_segmentation` / `centered_instance_segmentation` via the
   pipeline; config-driven.
