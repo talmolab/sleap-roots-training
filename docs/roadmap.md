@@ -1,7 +1,7 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
-**Last revised:** 2026-07-13 (see the dated revision log at the bottom for what changed and why).
+**Last revised:** 2026-07-24 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
@@ -494,3 +494,39 @@ then reviewed it. Reconciled:
   corrected to match.
 - **MINOR:** Tier 0.5 is **not** marked "done" here — completion is tracked by #9 + the CHANGELOG
   per the JIT tracking policy; this entry only corrects now-false forward-looking facts.
+
+**Roadmap revision (2026-07-24)** — Phase 2 rebuilt on Talmo's segmentation campaign + the real
+label inventory; two related Phase-1 fixes folded in.
+- **IMPORTANT (Phase 2 completeness):** **Tier 6 reframed** from a single prescribed method
+  ("SAM-predict glue") to a per-crop empirical comparison (SAM / Talmo's pose-derived pseudo-mask
+  heuristic / real labels per #23), matching the oracle philosophy already used elsewhere in this
+  document rather than assuming one method transfers universally.
+- **IMPORTANT (Phase 2 completeness):** **Tier 6.5 added** (standalone segmentation correction
+  GUI, built on the `vibes.tlab.sh` prototypes + `sleap-io.js`) so mask review/correction is real,
+  buildable-now work — not gated on `sleap-app`/SLEAP-team coordination the way the original
+  Tier 8 framing required. **Tier 8 repurposed** accordingly: it's now the later "upstream into
+  `sleap-app`" migration, genuinely off critical path since Tier 6.5 already unblocks review.
+- **IMPORTANT (Phase 2 completeness):** **Tier 6.7 added** (segmentation labeling strategy +
+  coverage/QC plan) — Tier 2.5 asked this question for pose labels before Tier 3's sweeps; nothing
+  analogous existed for segmentation before Tier 7's training.
+- **IMPORTANT (oracle grounding):** **Tier 7 now starts from Talmo's validated recipe**
+  (whole-frame UNet, output-stride 4, BCE/Dice 0.5/0.5, no `pos_weight`; tiling only for
+  small-object crops; top-down instance seg for compact roots) as its default, with a sweep clause
+  for crops the campaign didn't cover or where its own 2026-07-08 audit flagged single-seed/
+  single-crop scope — parity with Tier 3's existing sweep treatment for pose, rather than
+  assuming a borrowed recipe transfers untested. Concrete packaged `.pkg.slp` starting point for
+  cylinder Arabidopsis noted directly.
+- **IMPORTANT (completeness, Phase 1):** **Tier 4.5 added** (production model selection) — Tier 4
+  produced a generalist-vs-specialist comparison table, but nothing described the actual decision
+  process for choosing what ships to production per species, including "the generalist doesn't
+  work for this species" as a valid outcome. Reuses the existing `ModelCard`/`production`-alias
+  publishing mechanism.
+- **MINOR (compute realism):** **Tier 3 and Tier 7 no longer assume Run:AI exclusively** — both
+  now allow the A5000 workstation, given Run:AI's sparse availability.
+- **MINOR:** **Work tracks cross-references fixed** — the engineering-track and co-owned-seams
+  bullets named Tier 8 as the mask-review GUI and "Tiers 6 + 8" as the SAM-predict loop; both are
+  stale relative to the Tier 6/6.5/8 rewrite above and are corrected here.
+- **MINOR (parked idea):** **Phase 3 gained a joint pose+segmentation model entry** — not
+  currently possible given `sleap_nn`'s `@oneof`-constrained `HeadConfig` (verified directly
+  against `sleap_nn/config/model_config.py`); recorded as a future idea, not scheduled.
+- Design doc: `docs/superpowers/specs/2026-07-24-phase-2-segmentation-roadmap-revision-design.md`.
