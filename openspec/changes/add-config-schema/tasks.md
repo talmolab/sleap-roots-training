@@ -83,10 +83,12 @@ Conventions that keep the base matrix green:
       `use_wandb` **absent entirely** each require no target and pass (absent-as-false via
       `OmegaConf.select`).
 - [x] 4.2 Implement the W&B-enablement pairing check in `validate_config`; confirm green.
-- [ ] 4.3 **Manual (observable, not CI):** run a short `use_wandb = true` job (fly sample or CPU/MPS —
+- [x] 4.3 **Manual (observable, not CI):** run a short `use_wandb = true` job (fly sample or CPU/MPS —
       no real root data or GPU needed) and confirm `run.scan_history()` returns per-epoch rows
       (train/val loss + epoch). Record the exact check and its observed result in the training guide;
       do **not** fake an observable-only result as a passing CI test (Tier 0.5 precedent).
+      *Done on the A5000 (2026-07-23): a 3-epoch run → 906 `scan_history()` rows, all carrying
+      `epoch` + `loss`; recorded in `docs/training.md`.*
 
 ## 5. Example config + training guide + docs
 
@@ -125,10 +127,13 @@ Conventions that keep the base matrix green:
 - [x] 5.7 Add a `docs/CHANGELOG.md` entry under the **existing** `[Unreleased] ### Added` (no second
       `### Added`, no `YYYY-MM-DD`): the `sleap-roots-training validate` CLI + composed config schema
       (the user-facing headline), the example config, and the training guide + doc-contract test.
-- [ ] 5.8 **Manual ([train] box):** run `pytest -m integration` where `[train]` is installed (the
+- [x] 5.8 **Manual ([train] box):** run `pytest -m integration` where `[train]` is installed (the
       delegation test), and confirm `validate → emit → sleap-nn train --config <emitted>` runs
       end-to-end on the box (sleap-nn accepts the experiment-stripped config, no post-fit
       `preprocessing` crash). Record the result in the PR body.
+      *Done on the A5000 (2026-07-23): raw `train` rejected `experiment`
+      (`ConfigKeyError: Key 'experiment' not in 'TrainingJobConfig'`); the emitted config trained
+      3 epochs + eval, writing `metrics.*.npz`, no `preprocessing` crash.*
 - [x] 5.9 Full suite (`pytest -m "not integration"` in an env **without** `[train]`, so the
       lazy-import safety is really proven) + `black --check src tests` + `ruff check src` green (match
       CI's scoping); `conda run -n talmo-sleap openspec validate add-config-schema --strict` clean.

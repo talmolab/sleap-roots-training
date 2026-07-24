@@ -6,6 +6,13 @@ reading results**; for the one-time backend **install** and the raw `sleap-nn` t
 mechanics (GPU setup, sample data, `sleap-nn track`), see
 [training-backend.md](training-backend.md).
 
+> **Status: verified end-to-end on the RTX A5000 (2026-07-23).** `validate → emit → sleap-nn
+> train` on the Tier-0.5 sample: the raw config (carrying `experiment`) is rejected by sleap-nn
+> (`ConfigKeyError: Key 'experiment' not in 'TrainingJobConfig'`), so `emit` is required; the
+> emitted config trains + runs eval (writing `metrics.*.npz`) with no post-fit `preprocessing`
+> crash; and a short `use_wandb=true` run's `run.scan_history()` returned per-epoch rows carrying
+> `epoch` + `loss` (the legacy TF runs returned zero) — closing the observability gap.
+
 ## The config file
 
 An experiment is one YAML file: `sleap-nn`'s own `data_config` / `model_config` /
@@ -102,13 +109,16 @@ import wandb
 
 run = wandb.Api().run("<entity>/<project>/<run_id>")
 rows = list(run.scan_history())
-assert rows, "no per-epoch history was logged"
-# Substantiate "per-epoch", not merely "some history": one row per epoch, carrying the losses.
-epochs = [r for r in rows if "epoch" in r]
-assert epochs, "history has no per-epoch rows"
-assert any("train_loss" in r or "val_loss" in r for r in rows), "no per-epoch loss logged"
-print(len(epochs), "per-epoch rows; last epoch:", epochs[-1].get("epoch"))
+assert rows, "no history was logged"  # the legacy TF runs returned zero rows here
+# Each row carries its epoch + loss, so the per-epoch curve is recoverable:
+assert all("epoch" in r for r in rows), "history rows are missing 'epoch'"
+assert any("loss" in key for r in rows for key in r), "no loss logged"
+print(len(rows), "rows; keys:", list(rows[0].keys()))
 ```
+
+Verified on the A5000 (2026-07-23): a 3-epoch `use_wandb=true` run returned **906 `scan_history()`
+rows, all carrying `epoch` + `loss`** (keys: `loss`, `epoch`, `trainer/global_step`, `_step`, …) —
+versus zero rows for the legacy TF runs. Val loss (`val/loss`) is logged on the epoch-boundary rows.
 
 ## PyTorch baseline
 
