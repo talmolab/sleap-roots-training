@@ -44,6 +44,11 @@ Two repo rules the schema enforces, both closing real `sleap-nn` 0.2.0 gaps:
   loop and crashes with `ConfigAttributeError` if it is absent, so `validate` requires it up
   front (the example ships a `preprocessing` block).
 
+Two things this wrapper does **not** capture yet (deferred to Tier 2, tracked in #10/#11): run
+provenance (a config hash / git commit) and a dataset content checksum. A config names its dataset
+by path, not by a verified hash, so do not assume a run is fully reproducible from the config alone
+today.
+
 ## 1. Validate
 
 ```bash

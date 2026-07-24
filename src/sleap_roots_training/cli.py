@@ -184,7 +184,14 @@ def validate_command(config_path: Path) -> None:
         raise click.ClickException(str(error))
     for note in notes:
         click.echo(f"note: {note}")
-    click.echo(f"OK: {config_path} is valid")
+    if notes:
+        # Deep sleap-nn validation was skipped (no train extra) — don't imply a full pass.
+        click.echo(
+            f"OK: {config_path} passed base checks (deep sleap-nn validation skipped; "
+            "install the 'train' extra to validate the backend config)"
+        )
+    else:
+        click.echo(f"OK: {config_path} is valid")
 
 
 @main.command(name="emit")
@@ -212,9 +219,12 @@ def emit_command(config_path: Path, output: Optional[Path]) -> None:
     sleap_nn_yaml = training_config.to_sleap_nn_yaml(cfg)
     if output is None:
         click.echo(sleap_nn_yaml, nl=False)
-    else:
+        return
+    try:
         output.write_text(sleap_nn_yaml, encoding="utf-8")
-        click.echo(f"wrote sleap-nn config to {output}")
+    except OSError as error:
+        raise click.ClickException(f"could not write {output}: {error}")
+    click.echo(f"wrote sleap-nn config to {output}")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -131,7 +131,13 @@ VALID_CONFIG: dict = {
     "data_config": {
         "train_labels_path": ["data/train.pkg.slp"],
         "val_labels_path": ["data/val.pkg.slp"],
-        "preprocessing": {"max_height": 192, "max_width": 192, "scale": 1.0},
+        "preprocessing": {
+            "ensure_rgb": False,
+            "ensure_grayscale": False,
+            "max_height": 192,
+            "max_width": 192,
+            "scale": 1.0,
+        },
     },
     "model_config": {
         "backbone_config": {"unet": {"filters": 32, "max_stride": 16}},

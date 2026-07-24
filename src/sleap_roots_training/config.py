@@ -18,16 +18,15 @@ from __future__ import annotations
 import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union
 
 from omegaconf import MISSING, DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
-from sleap_roots_training.registry.cards import _ROOT_SLOTS
 from sleap_roots_training.registry.chooser import MODE_VOCAB, SPECIES_VOCAB
 
-#: Root-type vocabulary, mirroring the selection matrix's root slots.
-ROOT_TYPE_VOCAB = frozenset(_ROOT_SLOTS)
+#: Root-type vocabulary. A local copy mirroring ``registry/cards.py``'s ``_ROOT_SLOTS``
+#: (not an import — that attribute is private and carries no stability contract).
+ROOT_TYPE_VOCAB = frozenset({"primary", "lateral", "crown"})
 
 #: Recognized ``sleap-nn`` top-level config keys (``TrainingJobConfig``). Any other
 #: top-level key besides our ``experiment`` block is rejected, not silently dropped.
@@ -79,7 +78,7 @@ class ExperimentConfig:
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
 
 
-def load_config(path: Union[str, Path]) -> DictConfig:
+def load_config(path: str | Path) -> DictConfig:
     """Load a training-config YAML into an OmegaConf mapping.
 
     Args:
@@ -202,7 +201,7 @@ def _validate_experiment(cfg: DictConfig) -> None:
     _check_vocab("experiment.root_type", merged.root_type, ROOT_TYPE_VOCAB)
 
 
-def _check_vocab(field_name: str, value: str, vocab: frozenset) -> None:
+def _check_vocab(field_name: str, value: str, vocab: frozenset[str]) -> None:
     """Raise if ``value`` is outside ``vocab``, naming the field and allowed values."""
     if value not in vocab:
         allowed = ", ".join(sorted(vocab))
@@ -221,23 +220,50 @@ def _check_seed(cfg: DictConfig) -> None:
         raise ConfigError(f"trainer_config.seed must be an integer, got {seed!r}")
 
 
-def _check_preprocessing(cfg: DictConfig) -> None:
-    """Require ``data_config.preprocessing`` (0.2.0 reads it post-fit and crashes if absent).
+#: Keys sleap-nn 0.2.0's ``run_training`` reads off ``data_config.preprocessing`` after the
+#: fit loop. A present-but-hollow block (non-mapping, ``{}``, or missing these) crashes the
+#: same way a missing block does, so we require them (a 0.2.0-specific repo policy).
+_REQUIRED_PREPROCESSING_KEYS = ("ensure_rgb", "ensure_grayscale")
 
-    sleap-nn 0.2.0's ``run_training`` reads ``config.data_config.preprocessing`` off the
-    user config *after* the fit loop without backfilling the schema default, so a config
-    that omits it trains and then crashes with ``ConfigAttributeError``. Requiring it here
-    (a repo policy, like the explicit seed) surfaces that at ``validate`` time instead.
+
+def _check_preprocessing(cfg: DictConfig) -> None:
+    """Require a well-formed ``data_config.preprocessing`` block (0.2.0 crash-prevention).
+
+    sleap-nn 0.2.0's ``run_training`` reads ``config.data_config.preprocessing.ensure_rgb``
+    (and ``.ensure_grayscale``) off the user config *after* the fit loop without backfilling
+    the schema default, so a config that omits the block — or supplies a non-mapping, ``{}``,
+    or one missing those keys — trains and then crashes with ``ConfigAttributeError``.
+    Validate the *shape*, not just presence, so it fails at ``validate`` time (on a Mac
+    without the ``train`` extra) rather than post-fit on the GPU box.
     """
-    if OmegaConf.select(cfg, "data_config.preprocessing", default=None) is None:
+    preprocessing = OmegaConf.select(cfg, "data_config.preprocessing", default=None)
+    if preprocessing is None:
         raise ConfigError(
             "data_config.preprocessing is required (sleap-nn 0.2.0 reads it after "
             "training and crashes if absent); include a preprocessing block"
         )
+    if not OmegaConf.is_dict(preprocessing):
+        raise ConfigError("data_config.preprocessing must be a mapping")
+    missing = [key for key in _REQUIRED_PREPROCESSING_KEYS if key not in preprocessing]
+    if missing:
+        raise ConfigError(
+            "data_config.preprocessing is missing required key(s): "
+            f"{', '.join(missing)} (sleap-nn 0.2.0 reads them post-fit, crashing if absent)"
+        )
 
 
 def _check_wandb(cfg: DictConfig) -> None:
-    """When ``trainer_config.use_wandb`` is true, require ``wandb.entity`` + ``project``."""
+    """Validate the W&B config.
+
+    ``trainer_config.wandb`` must be a mapping when present — **regardless of
+    ``use_wandb``**, since a malformed block is a broken config either way — and enabling
+    W&B (``use_wandb: true``) requires non-empty ``wandb.entity`` + ``wandb.project``.
+    """
+    # Shape check first, unconditionally: a list-/scalar-shaped `wandb` is rejected even
+    # when use_wandb is false or absent (the default).
+    wandb = OmegaConf.select(cfg, "trainer_config.wandb", default=None)
+    if wandb is not None and not OmegaConf.is_dict(wandb):
+        raise ConfigError("trainer_config.wandb must be a mapping")
     use_wandb = OmegaConf.select(cfg, "trainer_config.use_wandb", default=False)
     if not isinstance(use_wandb, bool):
         raise ConfigError(
@@ -245,15 +271,12 @@ def _check_wandb(cfg: DictConfig) -> None:
         )
     if not use_wandb:
         return
-    wandb = OmegaConf.select(cfg, "trainer_config.wandb", default=None)
-    if wandb is not None and not OmegaConf.is_dict(wandb):
-        raise ConfigError("trainer_config.wandb must be a mapping")
     for key in ("entity", "project"):
         value = OmegaConf.select(cfg, f"trainer_config.wandb.{key}", default=None)
-        if not value:
+        if not (isinstance(value, str) and value.strip()):
             raise ConfigError(
                 f"trainer_config.use_wandb is true but trainer_config.wandb.{key} is "
-                "not set"
+                "not set to a non-empty string"
             )
 
 
@@ -262,11 +285,22 @@ def _deep_validation_available() -> bool:
     return importlib.util.find_spec("sleap_nn") is not None
 
 
-def _deep_validate(cfg: DictConfig) -> None:
-    """Delegate validation of the sleap-nn portion to sleap-nn. Requires the train extra."""
+def _import_sleap_nn():
+    """Import and return sleap-nn's ``verify_training_cfg`` (a monkeypatchable seam).
+
+    Isolated so :func:`_deep_validate` can call it *inside* its ``try`` — a broken or
+    partial ``sleap_nn`` install then surfaces as a clean ``ConfigError`` rather than a raw
+    ``ModuleNotFoundError`` — and so tests can patch it. Requires the ``train`` extra.
+    """
     from sleap_nn.config.training_job_config import verify_training_cfg
 
+    return verify_training_cfg
+
+
+def _deep_validate(cfg: DictConfig) -> None:
+    """Delegate validation of the sleap-nn portion to sleap-nn. Requires the train extra."""
     try:
+        verify_training_cfg = _import_sleap_nn()
         verify_training_cfg(_strip_experiment(cfg))
-    except Exception as err:  # sleap-nn raises ValueError / OmegaConf errors
+    except Exception as err:  # import failure, sleap-nn ValueError, or OmegaConf error
         raise ConfigError(f"sleap-nn backend validation failed: {err}") from err

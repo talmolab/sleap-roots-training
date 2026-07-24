@@ -26,7 +26,9 @@ def _invoke(args):
 def test_validate_good_config_exits_zero(write_config):
     result = _invoke(["validate", str(write_config())])
     assert result.exit_code == 0, result.output
-    assert "valid" in result.output.lower()
+    assert "ok:" in result.output.lower()
+    # base-safe path (autouse) says deep validation was skipped rather than "valid".
+    assert "skipped" in result.output.lower()
 
 
 def test_validate_invalid_metadata_exits_nonzero(write_config):
@@ -85,3 +87,10 @@ def test_emit_invalid_config_exits_nonzero(write_config):
     result = _invoke(["emit", str(path)])
     assert result.exit_code != 0
     assert "seed" in result.output
+
+
+def test_emit_to_missing_dir_errors_cleanly(write_config, tmp_path):
+    out = tmp_path / "does_not_exist" / "resolved.yaml"  # parent dir absent
+    result = _invoke(["emit", str(write_config()), "-o", str(out)])
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output

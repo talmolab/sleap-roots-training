@@ -188,7 +188,9 @@ _VALID_EXP = (
     "dataset: {name: d, path: p}}\n"
 )
 # Experiment + a valid data_config so checks after _check_preprocessing (e.g. W&B) are reached.
-_VALID_BASE = _VALID_EXP + "data_config: {preprocessing: {scale: 1.0}}\n"
+_VALID_BASE = _VALID_EXP + (
+    "data_config: {preprocessing: {ensure_rgb: false, ensure_grayscale: false, scale: 1.0}}\n"
+)
 
 
 def _write(tmp_path, body: str):
@@ -236,3 +238,51 @@ def test_wandb_partial_target_is_rejected(tmp_path):
     )
     with pytest.raises(config.ConfigError, match="project"):
         config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+# --- preprocessing shape (not just presence) + wandb-when-disabled + deep-import guard ---
+
+_EXP_SEED = _VALID_EXP + "trainer_config: {seed: 1}\n"
+
+
+@pytest.mark.parametrize(
+    "preprocessing, match",
+    [
+        ("notadict", "must be a mapping"),  # scalar
+        ("[]", "must be a mapping"),  # list
+        ("{}", "missing required key"),  # empty mapping
+        ("{max_height: 192}", "missing required key"),  # mapping missing the 0.2.0 keys
+    ],
+)
+def test_malformed_preprocessing_is_rejected(tmp_path, preprocessing, match):
+    body = _EXP_SEED + f"data_config: {{preprocessing: {preprocessing}}}\n"
+    with pytest.raises(config.ConfigError, match=match):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+def test_list_shaped_wandb_rejected_even_when_use_wandb_absent(tmp_path):
+    # No use_wandb key (defaults to false) + a malformed wandb block -> still rejected.
+    body = _VALID_BASE + "trainer_config: {seed: 1, wandb: [a, b]}\n"
+    with pytest.raises(config.ConfigError, match="wandb must be a mapping"):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+def test_whitespace_wandb_target_is_rejected(tmp_path):
+    body = _VALID_BASE + (
+        'trainer_config: {seed: 1, use_wandb: true, wandb: {entity: "  ", project: p}}\n'
+    )
+    with pytest.raises(config.ConfigError, match="entity"):
+        config.validate_config(config.load_config(_write(tmp_path, body)))
+
+
+def test_deep_validation_import_failure_is_clean(write_config, monkeypatch):
+    # Force the deep path "available" but make the sleap_nn import fail -> a clean ConfigError,
+    # not a raw ModuleNotFoundError leaking out.
+    monkeypatch.setattr(config, "_deep_validation_available", lambda: True)
+
+    def _boom():
+        raise ImportError("simulated broken sleap_nn install")
+
+    monkeypatch.setattr(config, "_import_sleap_nn", _boom)
+    with pytest.raises(config.ConfigError, match="backend validation failed"):
+        config.validate_config(config.load_config(write_config()))

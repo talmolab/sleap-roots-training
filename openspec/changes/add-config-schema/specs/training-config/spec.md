@@ -83,8 +83,10 @@ The wrapper SHALL guarantee the configuration handed to `sleap-nn` is reproducib
 trigger `sleap-nn` 0.2.0's known post-fit failure. Validation SHALL reject a config whose
 `trainer_config.seed` is unset — treating an absent key and an explicit `null` alike, since 0.2.0
 supplies no default seed — and SHALL require the seed to be an integer. Validation SHALL also
-require a `data_config.preprocessing` block (0.2.0 reads it after the fit loop and crashes if it is
-absent). The wrapper SHALL provide an emit step that produces the sleap-nn-native config with the
+require a **well-formed** `data_config.preprocessing` block — a mapping carrying the keys 0.2.0
+reads post-fit (`ensure_rgb`, `ensure_grayscale`) — since a missing, non-mapping, or hollow block
+triggers the same post-fit crash. The wrapper SHALL provide an emit step that produces the
+sleap-nn-native config with the
 repo-owned `experiment` block stripped — sleap-nn's struct-mode config rejects unknown top-level
 keys — so that `sleap-nn train` receives a config it accepts. The emit step SHALL be
 base-install safe (no `train` extra required).
@@ -100,11 +102,12 @@ base-install safe (no `train` extra required).
 - **WHEN** a config sets `trainer_config.seed` to an integer
 - **THEN** the reproducibility check passes
 
-#### Scenario: Missing preprocessing is rejected
+#### Scenario: Missing or malformed preprocessing is rejected
 
-- **WHEN** a config omits `data_config.preprocessing`
+- **WHEN** a config omits `data_config.preprocessing`, sets it to a non-mapping, or supplies a
+  mapping missing the keys 0.2.0 reads (`ensure_rgb` / `ensure_grayscale`)
 - **THEN** validation fails naming `data_config.preprocessing`
-- **AND** the message explains sleap-nn 0.2.0 crashes post-fit without it
+- **AND** the message explains sleap-nn 0.2.0 crashes post-fit without a well-formed block
 
 #### Scenario: Emit strips the experiment block
 

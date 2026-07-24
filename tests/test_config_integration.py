@@ -33,3 +33,17 @@ def test_full_valid_config_passes_deep_validation(write_config):
     # VALID_CONFIG names a backbone + head + seed + preprocessing, so deep validation
     # runs and returns no notes.
     assert config.validate_config(config.load_config(write_config())) == []
+
+
+def test_sleap_nn_keys_match_training_job_config():
+    # Mechanically catch drift between our hand-maintained _SLEAP_NN_KEYS and the real
+    # TrainingJobConfig top-level fields (only checkable where sleap_nn is installed).
+    pytest.importorskip("sleap_nn")
+    import attrs
+    from sleap_nn.config.training_job_config import TrainingJobConfig
+
+    real = {f.name for f in attrs.fields(TrainingJobConfig)}
+    assert config._SLEAP_NN_KEYS == real, (
+        f"_SLEAP_NN_KEYS drifted: missing={real - config._SLEAP_NN_KEYS}, "
+        f"extra={config._SLEAP_NN_KEYS - real}"
+    )
