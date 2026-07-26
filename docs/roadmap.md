@@ -114,8 +114,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   v0.3.0 / sleap-io 0.8.0 release timeline** with the SLEAP team so Phase 2 can pin to releases.
 - **Secure SLEAP-team buy-in for talmolab/sleap-app#155** Phase-1 scope (render + accept/reject): draft
   the scope as a comment/sub-issue and get **written sign-off including an expected PR-review
-  turnaround**. If no go-ahead, Tier 8 drops to a contingency / Phase 3 — **it is not on the
-  mask-training critical path** (see Tier 7). Assign a `sleap-app` ramp task at Tier 0.5 kickoff —
+  turnaround**. Tier 8 is off the mask-training critical path regardless of this outcome (see
+  Tier 7) — Tier 6.5 already provides the review/correction path; this buy-in is only needed for
+  Tier 8's later upstream-migration goal. Assign a `sleap-app` ramp task at Tier 0.5 kickoff —
   reading its issues/code and optionally landing a small non-blocking PR during Phase 1 — so
   Tier 8 (Phase 2) isn't a cold start whenever it's picked up.
 - **Confirm repo name** `talmolab/sleap-roots-training`.
@@ -230,7 +231,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   table and trait-validation numbers. Explicitly allows "the generalist doesn't work for this
   species, use its specialist" as a valid, expected outcome, not an edge case. Reuses the existing
   publishing mechanism (`ModelCard`, `production` alias, `seed-registry` CLI) — no new registry
-  surface.
+  surface. Note: shipping N per-species specialists instead of one generalist has an ongoing
+  retraining/re-validation cost this tier doesn't size — flag that cost explicitly in the
+  documented decision wherever N is greater than 1, so it's an informed tradeoff, not a free one.
 - **Oracle:** every species in the drafted comparison matrix has a documented, evidence-backed
   production recommendation; recommendations are published to the registry via the existing
   mechanism.
@@ -250,18 +253,21 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 - **Deliverable:** for each crop/platform, empirically compare the available mask-generation
   methods rather than prescribing one:
   - **Zero-shot SAM** (optionally prompted with existing pose keypoints/bounding boxes)
-  - **Talmo's pose-derived pseudo-mask heuristic** (fixed-width band around the skeleton — cheap,
-    no training required, got decent results in his own experiments; documented in
-    `sleap-nn`'s `scratch/2026-07-05-plant-seg-experiments/analysis/E_synthesis/FINDINGS.md` and
-    `.../analysis/gt_ceiling/README.md`)
+  - **Talmo's (the SLEAP/`sleap-nn` maintainer) pose-derived pseudo-mask heuristic** (fixed-width
+    band around the skeleton — cheap, no training required, reported to get decent results; exact
+    documentation location not yet tracked down — confirm with Talmo directly at Tier 6 kickoff
+    before relying on it)
   - **Real hand-labeled masks**, where #23's inventory already has them (cylinder Arabidopsis;
     smaller rice/sorghum/soybean batches)
 
   Pick (and document) whichever produces usable, review-ready masks for that crop's actual
   morphology — mirrors this roadmap's existing "establish then reproduce-or-beat" oracle
   philosophy rather than assuming one method wins everywhere.
-- **Oracle:** a per-crop comparison table (method vs. mask-IoU/clDice against a small hand-checked
-  reference set) with a documented decision per crop.
+- **Oracle:** a per-crop comparison table (method vs. mask-IoU/clDice (centerline Dice — a
+  topology-aware metric better suited to thin, tubular root shapes than plain IoU) against a small hand-checked
+  reference set) with a documented decision per crop. If no method clears a usable bar for a given
+  crop, that crop is flagged and descoped from Phase 2 until Tier 6.5's correction GUI can produce
+  labels for it from scratch — don't force a low-quality method through just to have an answer.
 - **Depends on:** #23 (need the real-label inventory to know which crops get a "real labels" arm).
 - **Compute note:** doesn't require Run:AI specifically — may run on the A5000 workstation, same
   as Tier 7.
@@ -280,6 +286,13 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   the tool, modeling-track person is the first real reviewer/user.)*
 - **Relationship to Tier 8:** Tier 8 is repurposed to be the later "upstream this into `sleap-app`"
   migration — this tier is what actually gets labels reviewed now.
+- **Prototype risk:** `sam3-segmenter` and `labelroi` are early-stage prototypes, not versioned
+  packages — unlike this repo's disciplined `sleap-nn`/`sleap-io` release pinning (see "Upstream
+  version pins"), there's no pin or stability guarantee here. Confirm their current state and
+  scope the actual build-out effort at Tier 6.5 kickoff before committing to a timeline; this is a
+  cross-language (JS + `sleap-io.js`, against an otherwise Python-scaffolded repo) deliverable and
+  likely belongs in the "full-depth review" bucket alongside Tiers 4 and 8 (see Execution cadence),
+  not the "light review" bucket.
 
 ### Tier 6.7 — Segmentation labeling strategy + coverage plan
 - **Deliverable:** per-crop assessment of whether #23's existing label inventory is sufficient for
@@ -290,13 +303,17 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 - **Oracle:** seed QC flags a planted set of known mask errors (mirrors Tier 2.5's oracle); a
   documented per-crop verdict ("enough data" / "needs N more labeled frames") before Tier 7 sweeps
   begin.
-- **Depends on:** Tier 6 (need the per-crop method comparison first), Tier 6.5 (the tool that
-  would produce more labels if needed).
+- **Depends on:** Tier 6 (need the per-crop method comparison first to assess label sufficiency).
+  Only the remediation path (producing more labels where the inventory falls short) depends on
+  Tier 6.5's correction GUI — the sufficiency assessment itself can start as soon as Tier 6 lands,
+  in parallel with Tier 6.5 being built, mirroring how Tier 2.5 (pose) runs before Tier 5's full
+  QC tooling rather than waiting on it.
 - **Tracking:** Tier-6.7 EPIC.
 
 ### Tier 7 — Pipeline mask training
 - **Deliverable:** train `bottomup_segmentation`/`centered_instance_segmentation` (or whole-frame
-  semantic, per Tier 6's per-crop decision) via the config-driven pipeline from Tier 1, starting
+  semantic, chosen by crop morphology per the guidance below) via the config-driven pipeline from
+  Tier 1, starting
   from Talmo's validated recipe as the default rather than an open hyperparameter search:
   whole-frame UNet, output-stride 4, BCE/Dice 0.5/0.5, no `pos_weight`; tiling only when a crop's
   objects are smaller than the tile (compact/lateral roots — never elongated primaries); top-down
@@ -304,8 +321,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   campaign's audit — mislabels/misses roughly half even after the grouping-field retrain).
 - **Sweep clause (parity with Tier 3's pose sweeps):** for crops where Talmo's campaign already
   validated the recipe on that exact crop (e.g. cylinder Arabidopsis — SAM3 zero-shot clDice
-  0.808 vs. trained UNet clDice 0.866, n=17), reuse it directly. For crops it didn't cover, or
-  where the audit flagged single-seed/single-crop scope (most results are soy_lateral-only), run a
+  0.808 vs. trained UNet clDice 0.866, n=17 held-out images), reuse it directly. For crops it didn't cover, or
+  where the audit flagged single-seed scope and found every instance/backbone result is
+  soy_lateral-only (not "most" — reported p-values there are per-frame variance, not per-seed), run a
   light confirmatory config-driven sweep (backbone, output-stride, tile size) before committing —
   do not assume the borrowed recipe transfers untested.
 - **Concrete starting point:** for cylinder Arabidopsis specifically, packaged train/val
@@ -355,7 +373,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   `bottomup`, two multi-class variants, `bottomup_segmentation`,
   `centered_instance_segmentation`, `semantic_segmentation`). Would require new upstream
   `sleap-nn` capability — a combined head type or relaxing the `@oneof` constraint — not
-  achievable from this repo's config layer alone.
+  achievable from this repo's config layer alone. No current owner or ask-path for raising this
+  with the `sleap-nn`/SLEAP team (unlike Tier 0.5's `sleap-app#155` buy-in template) — if this
+  becomes worth pursuing, it needs the same treatment: draft the ask, get written scope + turnaround
+  from the SLEAP team, before any implementation work starts here.
 
 ---
 
@@ -364,7 +385,11 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 From the pragmatism review — keep throughput high and de-risk the likely-overrun tiers:
 
 - **Weekly team check-in** (Elizabeth + the team, ~30 min): blockers, next-tier kickoff plan,
-  compute/infra status (Run:AI, W&B), SLEAP-app coordination. **Escalation rule:** if a tier's
+  compute/infra status (Run:AI, the A5000 workstation, W&B), SLEAP-app coordination. **Watch for
+  A5000 contention:** Tiers 3, 6, and 7 can all fall back to the same single workstation when
+  Run:AI is unavailable — if more than one needs it concurrently, that's a real bottleneck to
+  surface at the weekly check-in, not something this roadmap schedules around in advance.
+  **Escalation rule:** if a tier's
   oracle isn't trending toward met by mid-tier, escalate immediately — don't silently debug.
 - **Right-size the per-tier review:** keep the adversarial OpenSpec *proposal* review, but run it
   **light for the straightforward tiers (1–3)** and **full-depth for the complex/cross-repo tiers
