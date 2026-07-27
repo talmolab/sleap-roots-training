@@ -252,6 +252,16 @@ _EXP_SEED = _VALID_EXP + "trainer_config: {seed: 1}\n"
         ("[]", "must be a mapping"),  # list
         ("{}", "missing required key"),  # empty mapping
         ("{max_height: 192}", "missing required key"),  # mapping missing the 0.2.0 keys
+        # present but wrong-typed flags are as broken as absent (sleap-nn reads bools):
+        (
+            "{ensure_rgb: notabool, ensure_grayscale: false}",
+            "must be a boolean",
+        ),  # string
+        ("{ensure_rgb: false, ensure_grayscale: null}", "must be a boolean"),  # null
+        (
+            "{ensure_rgb: 1, ensure_grayscale: false}",
+            "must be a boolean",
+        ),  # int, not bool
     ],
 )
 def test_malformed_preprocessing_is_rejected(tmp_path, preprocessing, match):
@@ -286,3 +296,16 @@ def test_deep_validation_import_failure_is_clean(write_config, monkeypatch):
     monkeypatch.setattr(config, "_import_sleap_nn", _boom)
     with pytest.raises(config.ConfigError, match="backend validation failed"):
         config.validate_config(config.load_config(write_config()))
+
+
+# --- Vocab drift guard ------------------------------------------------------------------
+
+
+def test_root_type_vocab_mirrors_cards_slots():
+    # ROOT_TYPE_VOCAB is a hand-maintained local mirror of registry/cards.py's private
+    # _ROOT_SLOTS (kept local, not imported, per the PR #20 review). Guard against silent
+    # drift the same way _SLEAP_NN_KEYS is guarded against TrainingJobConfig drift — so if
+    # cards.py ever adds/removes a root slot, this module does not go stale unnoticed.
+    from sleap_roots_training.registry import cards
+
+    assert config.ROOT_TYPE_VOCAB == frozenset(cards._ROOT_SLOTS)

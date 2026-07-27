@@ -233,7 +233,9 @@ def _check_preprocessing(cfg: DictConfig) -> None:
     (and ``.ensure_grayscale``) off the user config *after* the fit loop without backfilling
     the schema default, so a config that omits the block — or supplies a non-mapping, ``{}``,
     or one missing those keys — trains and then crashes with ``ConfigAttributeError``.
-    Validate the *shape*, not just presence, so it fails at ``validate`` time (on a Mac
+    Validate the *shape*, not just presence — the block must be a mapping carrying both
+    keys, and each flag must be a boolean (a string / null / int is rejected the same way,
+    mirroring the ``wandb`` leaf-value check) — so it fails at ``validate`` time (on a Mac
     without the ``train`` extra) rather than post-fit on the GPU box.
     """
     preprocessing = OmegaConf.select(cfg, "data_config.preprocessing", default=None)
@@ -250,6 +252,15 @@ def _check_preprocessing(cfg: DictConfig) -> None:
             "data_config.preprocessing is missing required key(s): "
             f"{', '.join(missing)} (sleap-nn 0.2.0 reads them post-fit, crashing if absent)"
         )
+    # Present but wrong-typed is as broken as absent: sleap-nn reads these as booleans, so a
+    # non-bool flag is rejected here too (matching the wandb leaf-value check in the same
+    # feature) rather than surfacing later on the GPU box.
+    for key in _REQUIRED_PREPROCESSING_KEYS:
+        value = preprocessing[key]
+        if not isinstance(value, bool):
+            raise ConfigError(
+                f"data_config.preprocessing.{key} must be a boolean, got {value!r}"
+            )
 
 
 def _check_wandb(cfg: DictConfig) -> None:
