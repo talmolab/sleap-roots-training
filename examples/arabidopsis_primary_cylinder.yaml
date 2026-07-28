@@ -2,10 +2,13 @@
 #
 # One YAML = sleap-nn's native data_config / model_config / trainer_config, PLUS a
 # repo-owned `experiment` block (species / mode / root_type / dataset identity).
-# Validate it, then train:
+# Validate it, emit the sleap-nn-native config (with the `experiment` block stripped), then
+# train from the EMITTED file:
 #   sleap-roots-training validate examples/arabidopsis_primary_cylinder.yaml
-#   sleap-nn train --config examples/arabidopsis_primary_cylinder.yaml   # needs the [train] extra
-# See docs/training.md.
+#   sleap-roots-training emit examples/arabidopsis_primary_cylinder.yaml -o resolved.yaml
+#   sleap-nn train --config resolved.yaml   # needs the [train] extra
+# Do NOT `sleap-nn train` this file directly: sleap-nn rejects the repo-owned `experiment` key
+# (ConfigKeyError: Key 'experiment' not in 'TrainingJobConfig'). See docs/training.md.
 
 experiment:
   species: arabidopsis      # SPECIES_VOCAB (registry/chooser.py)

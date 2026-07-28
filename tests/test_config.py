@@ -59,6 +59,14 @@ def test_missing_required_experiment_field_is_rejected(write_config):
         config.validate_config(config.load_config(path))
 
 
+def test_missing_required_dataset_field_is_rejected(write_config):
+    # experiment.dataset.{name,path} are MISSING-by-default in the schema; dropping one must be
+    # rejected the same way a missing experiment.species is (only species was exercised before).
+    path = write_config(drop=("experiment.dataset.name",))
+    with pytest.raises(config.ConfigError, match="dataset"):
+        config.validate_config(config.load_config(path))
+
+
 def test_unknown_top_level_key_is_rejected(write_config):
     path = write_config(overrides={"trainer_confg": {"seed": 1}})
     with pytest.raises(config.ConfigError, match="trainer_confg"):
@@ -106,6 +114,15 @@ def test_non_integer_seed_is_rejected(write_config):
 def test_integer_seed_passes(write_config):
     path = write_config(overrides={"trainer_config": {"seed": 7}})
     config.validate_config(config.load_config(path))  # must not raise
+
+
+@pytest.mark.parametrize("seed", [True, False])
+def test_boolean_seed_is_rejected(write_config, seed):
+    # bool is an int subclass, so `isinstance(seed, int)` alone would accept True/False;
+    # _check_seed guards it explicitly. Pin that guard so deleting it fails a test.
+    path = write_config(overrides={"trainer_config": {"seed": seed}})
+    with pytest.raises(config.ConfigError, match="integer"):
+        config.validate_config(config.load_config(path))
 
 
 def test_missing_preprocessing_is_rejected(write_config):
