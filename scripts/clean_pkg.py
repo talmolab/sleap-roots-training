@@ -29,7 +29,8 @@ def clean(inp: str, out: str) -> None:
     labels = sio.load_slp(inp, open_videos=False)  # don't touch the share-backed source video
     for video in labels.videos:
         video.source_video = None  # drop the dangling provenance pointer
-    sio.save_slp(out, labels, embed=True)  # self-contained: frames embedded, no external refs
+    # sleap-io signature is save_slp(labels, filename, ...): labels FIRST, path SECOND.
+    sio.save_slp(labels, out, embed=True)  # self-contained: frames embedded, no external refs
 
     nodes = [n.name for n in labels.skeletons[0].nodes]
     print(f"{out}: {len(labels)} frames, nodes={nodes}")
