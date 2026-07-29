@@ -31,6 +31,11 @@ def _emit(key: str, value: object) -> None:
     if arr.ndim == 0:
         print(f"   {key} = {arr.item()}")
         return
+    if not np.issubdtype(arr.dtype, np.number):
+        # non-numeric array (e.g. embedded source filenames) — just show a sample
+        sample = arr.ravel()[:1].tolist()
+        print(f"   {key}: shape={arr.shape} dtype={arr.dtype} sample={sample}")
+        return
     flat = arr.astype(float).ravel()
     if flat.size and not np.all(np.isnan(flat)):
         print(f"   {key}: shape={arr.shape} mean={np.nanmean(flat):.4f}")
