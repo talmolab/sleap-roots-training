@@ -31,7 +31,9 @@ Goals (built out tier by tier; see the program roadmap):
   (`sleap_roots_training`).
 
 ### Architecture Patterns
-- Config-driven: a typed OmegaConf schema defines each experiment; the CLI runs configs.
+- Config-driven: an experiment is a config file — a thin, repo-owned `experiment` block composed
+  over `sleap-nn`'s own `TrainingJobConfig` (validation delegated, not reimplemented); the
+  `validate` CLI checks configs.
 - Thin, well-bounded modules with clear interfaces; mirror `sleap-roots-analyze` structure.
 - `sleap-nn` / `sleap-io` are consumed as libraries (pinned to tagged releases; commit pins only as
   a documented last-resort stopgap) — we do not modify their internals.

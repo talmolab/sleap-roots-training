@@ -17,6 +17,18 @@ All notable changes to this project are documented here. The format is based on
   before the confirmation prompt rather than deep inside `wandb.init()`.
 
 ### Added
+- `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
+  config-driven training-config schema + CLI. A config is `sleap-nn`'s native
+  `data_config`/`model_config`/`trainer_config` **plus** a repo-owned `experiment` block
+  (species/mode/root_type/dataset). `validate` checks the experiment metadata, requires an explicit
+  integer `trainer_config.seed` (0.2.0 has no default) and a `data_config.preprocessing` block
+  (0.2.0 crashes post-fit without it), checks the W&B-enablement pairing, and **delegates** deep
+  validation to `sleap-nn`'s `verify_training_cfg` when the `train` extra is installed (else a
+  clear skip note) — it does not reimplement `sleap-nn`'s config. `emit` writes the sleap-nn-native
+  config with the `experiment` block stripped (sleap-nn rejects that key) for `sleap-nn train`.
+  `sleap_nn` is lazy-imported and `emit` is base-safe, so the base install/CI stay lean.
+- `docs/training.md` config-driven training guide + `examples/arabidopsis_primary_cylinder.yaml`,
+  locked by `tests/test_training_docs.py` and `tests/test_examples_validate.py`.
 - Shared test-fixture layer (`tests/conftest.py`) with `tiny_matrix`, `stub_models_root`,
   `isolate_wandb_env` (clears the wandb/registry env vars **and** `NETRC` and repoints
   `HOME`/`USERPROFILE`), and TF-reference payload loaders.
