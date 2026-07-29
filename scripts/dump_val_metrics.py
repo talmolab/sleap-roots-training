@@ -44,6 +44,7 @@ def _emit(key: str, value: object) -> None:
 
 
 def dump(run: str) -> None:
+    """Print the val metrics saved for one run (all-NaN means it collapsed)."""
     path = os.path.join("models", run, "metrics.val.0.npz")
     if not os.path.exists(path):
         print(f"=== {run} ===\n   MISSING ({path})")
@@ -55,8 +56,12 @@ def dump(run: str) -> None:
 
 
 def main(argv: list[str]) -> int:
+    """CLI entry point: dump val metrics for each run name in argv."""
     if len(argv) < 2:
-        print("usage: python scripts/dump_val_metrics.py <run_name> [<run_name> ...]", file=sys.stderr)
+        print(
+            "usage: python scripts/dump_val_metrics.py <run_name> [<run_name> ...]",
+            file=sys.stderr,
+        )
         return 2
     for run in argv[1:]:
         dump(run)

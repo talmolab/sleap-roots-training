@@ -127,12 +127,79 @@ versus zero rows for the legacy TF runs. Val loss (`val/loss`) is logged on the 
 
 ## PyTorch baseline
 
-> **Reserved** — the PyTorch baseline numbers are established by the follow-up baseline PR
-> (roadmap Tier 1). Until then, the legacy TensorFlow reference in
-> [tf-reference.md](tf-reference.md) is shown **for context only**, as a range — same-config
-> seed/replicate spread is real, so it is not a single point, and exact parity with the old
-> TensorFlow backend is **not** the bar.
+**Established (2026-07-29) on the RTX A5000.** The Tier 1 PyTorch-native baseline is
+Arabidopsis primary-root, multi-plant cylinder, bottom-up keypoints on the **exact original v000
+held-out split** (99 train / 21 val frames, 6-node skeleton `r1..r6`), evaluated on
+`val.pkg.slp`. It is reported as a **range across 3 same-config runs varying only
+`trainer_config.seed`** (42 / 43 / 44) — that range, not TF parity, is what later tiers
+reproduce-or-beat. Metrics are read from each run's `metrics.val.0.npz` (`distance_metrics.avg`
+→ `dist_avg`, `.p50` → `dist_p50`, `visibility_metrics.recall` → `vis_recall`); `oks_map` is
+excluded (mis-calibrated for this domain, #17).
 
-The baseline is 2–3 runs with the **same config but a different `trainer_config.seed` each run**
-(so the range reflects real seed spread, not a fixed-seed point); that baseline — not the TF
-number — becomes the reference later tiers reproduce-or-beat.
+Two output resolutions were run (see the collapse finding below); the reported baseline is the
+stable **`output_stride 4`** config, [`examples/baseline_bottomup_v000_os4.yaml`](../examples/baseline_bottomup_v000_os4.yaml).
+Reproduce a single run with:
+
+```bash
+sleap-roots-training validate examples/baseline_bottomup_v000_os4.yaml
+sleap-roots-training emit     examples/baseline_bottomup_v000_os4.yaml -o resolved.yaml
+sleap-nn train --config resolved.yaml
+```
+
+Key hyperparameters (full config in the file above): UNet `filters 16`, `filters_rate 2.0`,
+`max_stride 32`, `output_stride 4`; bottom-up head confmaps `sigma 2.5` / `output_stride 4`, PAFs
+`sigma 75` / `output_stride 8`; input `scale 0.5` (net sees 544×1024); Adam `lr 1e-4`, `batch_size
+4`, `max_epochs 200` with early stopping (`patience 10`); `online_hard_keypoint_mining` on.
+
+### Baseline range — `output_stride 4` (val)
+
+| seed | `dist_avg` (px) | `dist_p50` (px) | `dist_p90` (px) | `vis_recall` | instances detected | W&B |
+|------|-----------------|-----------------|-----------------|--------------|--------------------|-----|
+| 42   | 30.09 | 18.62 | 72.36 | 0.912 | 44 / 44 | [p297iqwv](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/p297iqwv) |
+| 43   | 37.79 | 21.23 | 73.63 | 0.850 | 44 / 44 | [u1vhk114](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/u1vhk114) |
+| 44   | 30.55 | 17.73 | 66.75 | 0.885 | 44 / 44 | [67sjzrus](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/67sjzrus) |
+| **range** | **30.1 – 37.8** | **17.7 – 21.2** | 66.8 – 73.6 | **0.85 – 0.91** | all detected | — |
+
+All three seeds converged and detected every ground-truth instance (`vis_recall` here is
+keypoint-level visibility recall among matched instances). The seed-42 point is the detection
+smoke run (`baseline_smoke_v000_os4_seed42`), which uses the identical `output_stride 4` config.
+Per-epoch train/val loss is recoverable via `run.scan_history()` for every run (confirmed:
+thousands of rows carrying `epoch`), closing the observability gap the legacy TF runs left — the
+[W&B project](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline)
+holds the loss curves.
+
+### TensorFlow reference — context only, not a gate
+
+The legacy TensorFlow `sleap-train` runs (see [tf-reference.md](tf-reference.md)) are shown as a
+range, per run-to-run spread, and are **not** a pass/fail bar (`docs/roadmap.md`, "Oracle /
+validation philosophy" — exact backend parity is the wrong bar):
+
+| TF reference (stride) | `dist_avg` (px) |
+|-----------------------|-----------------|
+| stride 16 | 0.989 – 1.710 |
+| stride 32 | 1.383 – 2.078 |
+
+The PyTorch baseline lands ~20–40× above the TF numbers. That gap is **expected and is itself the
+finding**, not a regression: escaping the loss collapse below forces a coarse, downscaled output,
+which caps localization precision. TF trained at full resolution with a loss the current backend
+does not replicate.
+
+### Finding: `output_stride 2` collapses (why the baseline is `output_stride 4`)
+
+sleap-nn 0.2.0's bottom-up loss is a plain per-pixel `nn.MSELoss()` with no foreground weighting
+(`sleap_nn/training/lightning_modules.py`). On these large images the keypoint confmap targets are
+a tiny fraction of foreground, so the loss is minimized by predicting ~0 everywhere → no peaks → no
+detected instances. Densifying the targets (input `scale 0.5`, coarse `output_stride`, deep
+`max_stride 32`, online hard-keypoint mining) escapes it — but the higher-resolution
+[`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) sits right at the failure boundary
+and is **seed-unstable**:
+
+| seed | `output_stride 2` result (val) |
+|------|--------------------------------|
+| 42 | partial — `dist_avg` 29.13 px, but `vis_recall` 0.58 (only 25 / 44 instances detected) |
+| 43 | **collapsed** — 0 predicted instances, all metrics NaN |
+| 44 | **collapsed** — 0 predicted instances, all metrics NaN |
+
+Only 1 of 3 os2 seeds produced numbers, and that one missed ~43% of instances. os2 therefore has
+no usable range and is **not** the baseline; it is documented here as the resolution ceiling for
+this backend/dataset. The stable `output_stride 4` config is the reported Tier 1 baseline.

@@ -3,9 +3,9 @@
 CI-safe: reads ``docs/training.md`` from disk and asserts it documents the workflow — a fenced
 ``sleap-roots-training validate`` command, a fenced ``sleap-nn train --config`` command, the
 empirical ``scan_history()`` per-epoch-W&B check, a pointer to the backend runbook, and the
-reserved-baseline marker (present, so it can't be silently dropped) — while forbidding any
-``TODO`` / ``TBD`` placeholder. The command assertions are scoped to **fenced code blocks** so a
-mutated command fails rather than passing on an unrelated prose mention.
+**established** PyTorch baseline (real headline metrics present, the reserved placeholder gone) —
+while forbidding any ``TODO`` / ``TBD`` placeholder. The command assertions are scoped to
+**fenced code blocks** so a mutated command fails rather than passing on an unrelated prose mention.
 
 Reads with explicit ``utf-8`` and normalizes ``\\r\\n`` so the assertions hold on the Windows CI
 leg regardless of checkout line endings.
@@ -19,8 +19,8 @@ from pathlib import Path
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "training.md"
 _FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
-#: The exact reserved-baseline marker the follow-up baseline PR replaces with real numbers.
-#: Asserted present so the reservation can't be silently deleted; kept free of TODO/TBD.
+#: The reserved-baseline placeholder the baseline PR replaced with real numbers. Asserted ABSENT
+#: now, so a regression that reintroduces a placeholder instead of real numbers fails.
 _RESERVED_MARKER = "**Reserved** — the PyTorch baseline numbers are established by the follow-up baseline PR"
 
 
@@ -69,10 +69,19 @@ def test_guide_points_to_backend_runbook():
     ), "guide should point to the backend runbook (docs/training-backend.md)"
 
 
-def test_guide_reserves_baseline_section():
+def test_guide_documents_established_baseline():
+    text = _read()
+    # The reserved placeholder must be gone — replaced by real established-baseline numbers.
     assert (
-        _RESERVED_MARKER in _read()
-    ), "guide missing the reserved PyTorch-baseline marker"
+        _RESERVED_MARKER not in text
+    ), "baseline section still shows the reserved placeholder"
+    # The section reports the real accuracy headline (localization distance + visibility recall).
+    for token in ("PyTorch baseline", "dist_avg", "vis_recall"):
+        assert token in text, f"baseline section missing {token!r}"
+    # The TF reference is cited as context only, not a gate.
+    assert (
+        "tf-reference.md" in text
+    ), "baseline should cite the TF reference (context only)"
 
 
 def test_guide_has_no_placeholders():

@@ -140,8 +140,16 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   a range, not a point** (#8), because same-config seed/replicate spread is real (~1.5–1.73×
   `dist_avg` in the legacy runs; see `docs/tf-reference.md`) and must not be mistaken for
   architecture-driven variation from a sweep. *(W&B versioning is retrofitted in Tier 2.)*
-- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`.
-  **Depends on** Tier 0.5 (#9).
+- **Oracle — ESTABLISHED (2026-07-29, #21):** PyTorch-native baseline set on the v000 held-out
+  val split (Arabidopsis primary-root, multi-plant cylinder, bottom-up), `output_stride 4`, 3
+  same-config seeds: `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall`
+  **0.85–0.91** (all instances detected, per-epoch W&B logging confirmed). Reported alongside the
+  TF reference range (stride 16 0.99–1.71 px; stride 32 1.38–2.08 px) as context only, not a gate.
+  The ~20–40× gap is the documented resolution ceiling of sleap-nn 0.2.0's plain bottom-up MSELoss
+  on these large images: the finer `output_stride 2` collapses to zero predictions on 2 of 3 seeds.
+  Full write-up + per-run links: `docs/training.md` ("PyTorch baseline").
+- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`;
+  baseline established in #21. **Depends on** Tier 0.5 (#9).
 
 ### Tier 2 — Dataset registry + W&B artifact integration
 - **Deliverable:** labeled `.slp` datasets and trained models versioned as W&B artifacts

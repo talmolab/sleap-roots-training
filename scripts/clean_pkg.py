@@ -37,7 +37,9 @@ def clean(inp: str, out: str) -> None:
        a frame-less video is useless for training, we drop it (identity-based, to sidestep any
        ``Video`` hashability quirks) before re-embedding.
     """
-    labels = sio.load_slp(inp, open_videos=False)  # don't touch the share-backed source video
+    labels = sio.load_slp(
+        inp, open_videos=False
+    )  # don't touch the share-backed source video
 
     for video in labels.videos:
         video.source_video = None  # drop the dangling provenance pointer
@@ -56,7 +58,9 @@ def clean(inp: str, out: str) -> None:
         labels.videos = keep
 
     # sleap-io signature is save_slp(labels, filename, ...): labels FIRST, path SECOND.
-    sio.save_slp(labels, out, embed=True)  # self-contained: frames embedded, no external refs
+    sio.save_slp(
+        labels, out, embed=True
+    )  # self-contained: frames embedded, no external refs
 
     nodes = [n.name for n in labels.skeletons[0].nodes]
     shapes = [v.shape for v in labels.videos]
@@ -67,8 +71,12 @@ def clean(inp: str, out: str) -> None:
 
 
 def main(argv: list[str]) -> int:
+    """CLI entry point: clean the input ``.pkg.slp`` (argv[1]) into the output path (argv[2])."""
     if len(argv) != 3:
-        print("usage: python scripts/clean_pkg.py <in.pkg.slp> <out.pkg.slp>", file=sys.stderr)
+        print(
+            "usage: python scripts/clean_pkg.py <in.pkg.slp> <out.pkg.slp>",
+            file=sys.stderr,
+        )
         return 2
     clean(argv[1], argv[2])
     return 0
