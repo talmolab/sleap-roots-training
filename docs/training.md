@@ -86,12 +86,13 @@ see the runbook.)
 
 ## 4. Read the metrics
 
-The eval metrics land in `metrics.val.npz` / `metrics.train.npz` next to the checkpoint:
+The eval metrics land in `metrics.val.0.npz` / `metrics.train.0.npz` next to the checkpoint (the
+`.0.` is sleap-nn's per-eval-dataset index):
 
 ```python
 import numpy as np
 
-m = np.load("models/cyl_arabidopsis_primary/metrics.val.npz", allow_pickle=True)
+m = np.load("models/cyl_arabidopsis_primary/metrics.val.0.npz", allow_pickle=True)
 print(m.files)  # the exact metric arrays sleap-nn wrote (localization distance, OKS, PCK, ...)
 ```
 
@@ -132,9 +133,21 @@ Arabidopsis primary-root, multi-plant cylinder, bottom-up keypoints on the **exa
 held-out split** (99 train / 21 val frames, 6-node skeleton `r1..r6`), evaluated on
 `val.pkg.slp`. It is reported as a **range across 3 same-config runs varying only
 `trainer_config.seed`** (42 / 43 / 44) — that range, not TF parity, is what later tiers
-reproduce-or-beat. Metrics are read from each run's `metrics.val.0.npz` (`distance_metrics.avg`
-→ `dist_avg`, `.p50` → `dist_p50`, `visibility_metrics.recall` → `vis_recall`); `oks_map` is
-excluded (mis-calibrated for this domain, #17).
+reproduce-or-beat.
+
+**Data provenance.** The three v000 files were made self-contained for the offline GPU box with
+[`scripts/clean_pkg.py`](../scripts/clean_pkg.py) (drops the `source_video` share pointer and a
+frame-less stray video, re-embeds frames); the labeled-frame set is unchanged (99 train / 21 val,
+`r1..r6`). Dataset content is identified by path, not yet a verified hash (deferred to #10/#11).
+
+**Metrics.** Read from each run's `metrics.val.0.npz` with
+[`scripts/dump_val_metrics.py`](../scripts/dump_val_metrics.py): `distance_metrics.avg` →
+`dist_avg`, `.p50` → `dist_p50`, `visibility_metrics.recall` → `vis_recall` (the dumper prefixes
+these with the top-level `metrics.` key). Distances are in **original-image pixels** — predictions
+are rescaled from the `scale: 0.5` input back to the source 1088×2048 coordinates before matching
+the original-coordinate ground truth — so they are directly comparable to the TF reference's native
+pixels. `oks_map` is excluded (mis-calibrated for this domain, #17); PCK is present in the npz but
+not used as the headline.
 
 Two output resolutions were run (see the collapse finding below); the reported baseline is the
 stable **`output_stride 4`** config, [`examples/baseline_bottomup_v000_os4.yaml`](../examples/baseline_bottomup_v000_os4.yaml).
@@ -146,10 +159,13 @@ sleap-roots-training emit     examples/baseline_bottomup_v000_os4.yaml -o resolv
 sleap-nn train --config resolved.yaml
 ```
 
-Key hyperparameters (full config in the file above): UNet `filters 16`, `filters_rate 2.0`,
+Key hyperparameters, all pinned in the config file above: UNet `filters 16`, `filters_rate 2.0`,
 `max_stride 32`, `output_stride 4`; bottom-up head confmaps `sigma 2.5` / `output_stride 4`, PAFs
 `sigma 75` / `output_stride 8`; input `scale 0.5` (net sees 544×1024); Adam `lr 1e-4`, `batch_size
-4`, `max_epochs 200` with early stopping (`patience 10`); `online_hard_keypoint_mining` on.
+4`, `reduce_lr_on_plateau`, `max_epochs 200` with early stopping (`patience 10`);
+`online_hard_keypoint_mining` on. The optimizer / batch size / LR schedule / early-stopping values
+were sleap-nn 0.2.0 defaults the runs used, now pinned explicitly in the config so the baseline is
+reconstructable regardless of backend default changes.
 
 ### Baseline range — `output_stride 4` (val)
 
@@ -160,9 +176,13 @@ Key hyperparameters (full config in the file above): UNet `filters 16`, `filters
 | 44   | 30.55 | 17.73 | 66.75 | 0.885 | 44 / 44 | [67sjzrus](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/67sjzrus) |
 | **range** | **30.1 – 37.8** | **17.7 – 21.2** | 66.8 – 73.6 | **0.85 – 0.91** | all detected | — |
 
-All three seeds converged and detected every ground-truth instance (`vis_recall` here is
-keypoint-level visibility recall among matched instances). The seed-42 point is the detection
-smoke run (`baseline_smoke_v000_os4_seed42`), which uses the identical `output_stride 4` config.
+All three seeds converged and detected every ground-truth instance (Unmatched GT = 0), so the
+"instances detected" column is 44/44. `vis_recall` is a **separate**, keypoint-level metric — the
+fraction of visible ground-truth keypoints recalled among the matched instances — not an
+instance-detection rate. The seed-42 point is the detection smoke run
+(`baseline_smoke_v000_os4_seed42`); it uses the identical `output_stride 4` config and ran the full
+regime (early-stopped epoch 83, like seeds 43/44), so it is a valid same-config replicate — only
+its `run_name` differs.
 Per-epoch train/val loss is recoverable via `run.scan_history()` for every run (confirmed:
 thousands of rows carrying `epoch`), closing the observability gap the legacy TF runs left — the
 [W&B project](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline)
@@ -179,10 +199,10 @@ validation philosophy" — exact backend parity is the wrong bar):
 | stride 16 | 0.989 – 1.710 |
 | stride 32 | 1.383 – 2.078 |
 
-The PyTorch baseline lands ~20–40× above the TF numbers. That gap is **expected and is itself the
-finding**, not a regression: escaping the loss collapse below forces a coarse, downscaled output,
-which caps localization precision. TF trained at full resolution with a loss the current backend
-does not replicate.
+In that same original-pixel space, the PyTorch baseline lands ~20–40× above the TF numbers. That
+gap is **expected and is itself the finding**, not a regression: escaping the loss collapse below
+forces a coarse, downscaled output, which caps localization precision. TF trained at full
+resolution with a loss the current backend does not replicate.
 
 ### Finding: `output_stride 2` collapses (why the baseline is `output_stride 4`)
 
@@ -196,7 +216,7 @@ and is **seed-unstable**:
 
 | seed | `output_stride 2` result (val) |
 |------|--------------------------------|
-| 42 | partial — `dist_avg` 29.13 px, but `vis_recall` 0.58 (only 25 / 44 instances detected) |
+| 42 | partial — **25 / 44 instances detected**; on those, `dist_avg` 29.13 px, `dist_p50` 16.63 px, `vis_recall` 0.58 |
 | 43 | **collapsed** — 0 predicted instances, all metrics NaN |
 | 44 | **collapsed** — 0 predicted instances, all metrics NaN |
 

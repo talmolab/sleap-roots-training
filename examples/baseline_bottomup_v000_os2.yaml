@@ -3,8 +3,10 @@
 # One of TWO configs in the Tier 1 baseline comparison (issue #21): this `output_stride 2` variant
 # and its `output_stride 4` sibling (examples/baseline_bottomup_v000_os4.yaml). Each is run across
 # seeds 42 / 43 / 44 (vary only `trainer_config.seed` + the `run_name` suffix) on the exact v000
-# held-out split, evaluated on val.pkg.slp. On v000 val, os2 gives marginally better median
-# localization but detects far fewer instances than os4 (recall ~0.58 vs ~0.91) — see docs/training.md.
+# held-out split, evaluated on val.pkg.slp. WARNING: os2 is seed-UNSTABLE — it collapsed to zero
+# predictions (all-NaN) on 2 of the 3 seeds, and the one that ran missed ~43% of instances. It is
+# NOT the reported baseline (that is the os4 sibling); it is kept only to document the collapse.
+# See docs/training.md ("PyTorch baseline").
 #
 #   sleap-roots-training validate examples/baseline_bottomup_v000_os2.yaml
 #   sleap-roots-training emit     examples/baseline_bottomup_v000_os2.yaml -o resolved.yaml
@@ -65,6 +67,26 @@ model_config:
 trainer_config:
   max_epochs: 200               # early-stops well before this
   min_train_steps_per_epoch: 25
+  # sleap-nn 0.2.0 trainer defaults the reported runs used, PINNED explicitly so the baseline is
+  # reconstructable even if a future 0.2.x patch changes a default (see docs/training.md).
+  train_data_loader:
+    batch_size: 4
+  optimizer_name: Adam
+  optimizer:
+    lr: 0.0001
+    amsgrad: false
+  lr_scheduler:
+    reduce_lr_on_plateau:
+      threshold: 1.0e-06
+      threshold_mode: abs
+      cooldown: 3
+      patience: 5
+      factor: 0.5
+      min_lr: 1.0e-08
+  early_stopping:
+    stop_training_on_plateau: true
+    min_delta: 1.0e-08
+    patience: 10
   seed: 42                      # vary 42 / 43 / 44 across the 3 runs
   save_ckpt: true
   ckpt_dir: models

@@ -44,12 +44,22 @@ def clean(inp: str, out: str) -> None:
     for video in labels.videos:
         video.source_video = None  # drop the dangling provenance pointer
 
+    n_frames_before = len(labels)
+
     # Keep only videos that actually carry labeled frames (drops the frame-less stray).
     used_ids: set[int] = set()
     for lf in labels:
         used_ids.add(id(lf.video))
     keep = [v for v in labels.videos if id(v) in used_ids]
     dropped = len(labels.videos) - len(keep)
+
+    # Refuse to write an empty package: a file with no labeled frames is not a valid training
+    # input, and a silent 0-frame .pkg.slp would defeat the point of this script.
+    if not keep:
+        raise SystemExit(
+            f"{inp}: no videos carry labeled frames; refusing to write empty {out}"
+        )
+
     if dropped:
         # Prune suggestions pointing at videos we're about to drop, then swap the video list.
         labels.suggestions = [
@@ -57,12 +67,18 @@ def clean(inp: str, out: str) -> None:
         ]
         labels.videos = keep
 
-    # sleap-io signature is save_slp(labels, filename, ...): labels FIRST, path SECOND.
+    # Dropping frame-less videos must not change the labeled-frame set (nothing references them).
+    assert (
+        len(labels) == n_frames_before
+    ), "labeled-frame count changed while dropping videos"
+
+    # Compute the summary before writing, so a summary failure can't leave a written-but-unreported
+    # file (sleap-io signature is save_slp(labels, filename, ...): labels FIRST, path SECOND).
+    nodes = [n.name for n in labels.skeletons[0].nodes]
     sio.save_slp(
         labels, out, embed=True
     )  # self-contained: frames embedded, no external refs
 
-    nodes = [n.name for n in labels.skeletons[0].nodes]
     shapes = [v.shape for v in labels.videos]
     print(
         f"{out}: {len(labels)} frames, {len(keep)} video(s) kept ({dropped} frame-less dropped), "

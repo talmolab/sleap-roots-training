@@ -43,29 +43,39 @@ def _emit(key: str, value: object) -> None:
         print(f"   {key}: shape={arr.shape} (all-nan/empty)")
 
 
-def dump(run: str) -> None:
-    """Print the val metrics saved for one run (all-NaN means it collapsed)."""
+def dump(run: str) -> bool:
+    """Print the val metrics for one run; return True on success (all-NaN means it collapsed).
+
+    ``models/<run>`` is relative to the current directory, matching the configs' ``ckpt_dir: models``;
+    run this from the repo root. The ``.0.`` in the filename is sleap-nn's per-eval-dataset index.
+    """
     path = os.path.join("models", run, "metrics.val.0.npz")
     if not os.path.exists(path):
         print(f"=== {run} ===\n   MISSING ({path})")
-        return
-    data = np.load(path, allow_pickle=True)
-    print(f"=== {run} ===  (keys: {list(data.files)})")
-    for key in data.files:
-        _emit(key, data[key])
+        return False
+    try:
+        data = np.load(path, allow_pickle=True)
+        print(f"=== {run} ===  (keys: {list(data.files)})")
+        for key in data.files:
+            _emit(key, data[key])
+    except (
+        Exception
+    ) as exc:  # a truncated/corrupt npz must not abort the rest of the batch
+        print(f"=== {run} ===\n   CORRUPT ({path}): {type(exc).__name__}: {exc}")
+        return False
+    return True
 
 
 def main(argv: list[str]) -> int:
-    """CLI entry point: dump val metrics for each run name in argv."""
+    """CLI entry point: dump val metrics for each run name in argv (nonzero if any failed)."""
     if len(argv) < 2:
         print(
             "usage: python scripts/dump_val_metrics.py <run_name> [<run_name> ...]",
             file=sys.stderr,
         )
         return 2
-    for run in argv[1:]:
-        dump(run)
-    return 0
+    ok = all([dump(run) for run in argv[1:]])
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
