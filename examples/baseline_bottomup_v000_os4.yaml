@@ -11,12 +11,14 @@
 #   sleap-nn train --config resolved.yaml      # needs the [train] extra (GPU box only)
 #
 # WHY THIS LOOKS NOTHING LIKE THE LEGACY TF CONFIG (do NOT "fix" it back toward TF values):
-# sleap-nn 0.2.0's bottom-up loss is a plain per-pixel MSELoss with no foreground weighting. On a
-# 1088x2048 image the keypoint confmap targets are ~0.004% foreground, so a full-resolution run
-# collapses to ~0 predictions → NaN metrics. The escape is to DENSIFY the targets: downscale the
-# input (`scale: 0.5`), a coarse `output_stride` with a deep backbone (`max_stride: 32`), and online
-# hard-keypoint mining. Accuracy is therefore resolution-limited and lands above the legacy TF
-# ~1–1.7 px; that gap is an expected, documented finding, not a gate (docs/roadmap.md oracle philosophy).
+# sleap-nn 0.2.0's bottom-up confmap loss is a plain per-pixel MSELoss with no foreground weighting.
+# On a 1088x2048 image the targets are ~0.004% foreground, so a full-resolution run tends to collapse
+# to ~0 predictions → NaN metrics. This config escapes that by downscaling the input (`scale: 0.5`)
+# with a coarse `output_stride` and a deep backbone (`max_stride: 32`); `online_hard_keypoint_mining`
+# additionally reweights the loss toward hard keypoints (it does NOT change target density). The
+# resulting error sits well above the legacy TF ~1–1.7 px, but that gap is dominated by detection
+# quality on a small dataset, not purely output resolution — see docs/training.md "PyTorch baseline".
+# TF is context-only, not a gate (docs/roadmap.md oracle philosophy).
 
 experiment:
   species: arabidopsis          # SPECIES_VOCAB (registry/chooser.py)

@@ -133,21 +133,19 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   summaries — `scan_history()` returns zero rows, so there is no loss curve and no epoch count.
   That gap made the Tier-0 onboarding repro (#1) impossible to compare against the original run.
   Log per-epoch train/val loss and the stopping epoch.
-- **Oracle:** establish a **PyTorch-native baseline** (2–3 **same-config** runs to get a stable
-  range — not a hyperparameter sweep, which is a different axis of variation) on the held-out data;
-  document config, hyperparameters, loss curves, and accuracy. This baseline — not exact parity with
-  the old TF model — is the reference for later tiers; the old TF number is reported alongside **as
-  a range, not a point** (#8), because same-config seed/replicate spread is real (~1.5–1.73×
-  `dist_avg` in the legacy runs; see `docs/tf-reference.md`) and must not be mistaken for
-  architecture-driven variation from a sweep. *(W&B versioning is retrofitted in Tier 2.)*
-- **Oracle — ESTABLISHED (2026-07-29, #21):** PyTorch-native baseline set on the v000 held-out
-  val split (Arabidopsis primary-root, multi-plant cylinder, bottom-up), `output_stride 4`, 3
-  same-config seeds: `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall`
-  **0.85–0.91** (all instances detected, per-epoch W&B logging confirmed). Reported alongside the
-  TF reference range (stride 16 0.99–1.71 px; stride 32 1.38–2.08 px) as context only, not a gate.
-  The ~20–40× gap is the documented resolution ceiling of sleap-nn 0.2.0's plain bottom-up MSELoss
-  on these large images: the finer `output_stride 2` collapses to zero predictions on 2 of 3 seeds.
-  Full write-up + per-run links: `docs/training.md` ("PyTorch baseline").
+- **Oracle — ESTABLISHED (2026-07-29, #21):** a **PyTorch-native baseline** (2–3 **same-config**
+  seeds for a stable range — not a hyperparameter sweep) on the v000 held-out val split (Arabidopsis
+  primary-root, multi-plant cylinder, bottom-up, `output_stride 4`): `dist_avg` **30.1–37.8 px**,
+  `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all instances detected; per-epoch W&B
+  logging confirmed; config, hyperparameters, loss curves documented). This baseline — not TF
+  parity — is the reproduce-or-beat reference for later tiers; the old TF numbers are reported **as
+  a range, not a point** and for context only (stride 16 `dist_avg` 0.99–1.71 px @ `vis_recall`
+  0.47–0.63; stride 32 1.38–2.08 px @ 0.83; see `docs/tf-reference.md`). Caveats carried forward:
+  the PyTorch↔TF `dist` gap is **recall-confounded** (PyTorch detects more, localizes looser) and is
+  **not** a settled resolution ceiling — the error is dominated by detection/association quality, and
+  the finer `output_stride 2` collapses on 2/3 seeds for a cause not yet isolated (unweighted MSE
+  loss vs. a tight `sigma` at high output stride). Full write-up + open questions: `docs/training.md`
+  ("PyTorch baseline"). *(W&B versioning is retrofitted in Tier 2.)*
 - **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`;
   baseline established in #21. **Depends on** Tier 0.5 (#9).
 

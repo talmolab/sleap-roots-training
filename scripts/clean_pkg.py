@@ -11,6 +11,9 @@ unmounted (which proves it is self-contained).
 Loading with ``open_videos=False`` means the share-backed source video is never opened, so this
 runs anywhere the file is reachable -- including the GPU box, which never sees the share.
 
+``sleap_io`` is imported lazily (train-extra-only), so this module stays importable in the base
+env for unit tests of the pure selection/guard logic.
+
 Usage (run on the GPU box, which has the ``[train]`` extra with ``sleap-io`` installed):
     uv run --no-sync python scripts/clean_pkg.py <in.pkg.slp> <out.pkg.slp>
 
@@ -19,9 +22,35 @@ Sanity check the printed summary: nodes should be ``r1..r6`` and images 1088x204
 
 from __future__ import annotations
 
+import hashlib
 import sys
+from pathlib import Path
 
-import sleap_io as sio
+#: SMB-share markers a cleaned file's ``source_video`` must never still point at.
+_SHARE_MARKERS = ("multilab-na", "hpi_dev")
+
+
+def _sha256(path: str) -> str:
+    """Streamed sha256 of a file, so a cleaned dataset carries a content fingerprint now."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _select_videos(labels: object) -> tuple[list, set[int]]:
+    """Return ``(keep, used_ids)``: videos referenced by >=1 labeled frame, matched by identity.
+
+    sleap-io's ``Video`` is unhashable (attrs ``eq=True``), so we key on ``id()``. After
+    ``load_slp`` every ``LabeledFrame.video`` is the same object instance as an entry in
+    ``labels.videos``, so identity matching is exact — not merely empirical.
+    """
+    used_ids: set[int] = set()
+    for lf in labels:
+        used_ids.add(id(lf.video))
+    keep = [v for v in labels.videos if id(v) in used_ids]
+    return keep, used_ids
 
 
 def clean(inp: str, out: str) -> None:
@@ -34,9 +63,19 @@ def clean(inp: str, out: str) -> None:
     2. The files carry a stray video with **zero labeled frames** whose shape can't be resolved
        off the share. sleap-io's ``embed_all_videos`` path (the default in ``save_slp``) then
        calls ``_create_empty_embedded_video`` for it and crashes on ``video.shape is None``. Since
-       a frame-less video is useless for training, we drop it (identity-based, to sidestep any
-       ``Video`` hashability quirks) before re-embedding.
+       a frame-less video is useless for training, we drop it before re-embedding.
+
+    Refuses to overwrite the input in place, guards the labeled-frame invariant explicitly (not via
+    ``assert``, which ``python -O`` strips), and re-loads the output to confirm no share-backed
+    ``source_video`` survived.
     """
+    if Path(inp).resolve() == Path(out).resolve():
+        raise SystemExit(
+            f"refusing to overwrite the input in place: inp == out ({inp})"
+        )
+
+    import sleap_io as sio  # lazy: train-extra-only; keeps this module importable in the base env
+
     labels = sio.load_slp(
         inp, open_videos=False
     )  # don't touch the share-backed source video
@@ -45,12 +84,7 @@ def clean(inp: str, out: str) -> None:
         video.source_video = None  # drop the dangling provenance pointer
 
     n_frames_before = len(labels)
-
-    # Keep only videos that actually carry labeled frames (drops the frame-less stray).
-    used_ids: set[int] = set()
-    for lf in labels:
-        used_ids.add(id(lf.video))
-    keep = [v for v in labels.videos if id(v) in used_ids]
+    keep, used_ids = _select_videos(labels)
     dropped = len(labels.videos) - len(keep)
 
     # Refuse to write an empty package: a file with no labeled frames is not a valid training
@@ -67,22 +101,33 @@ def clean(inp: str, out: str) -> None:
         ]
         labels.videos = keep
 
-    # Dropping frame-less videos must not change the labeled-frame set (nothing references them).
-    assert (
-        len(labels) == n_frames_before
-    ), "labeled-frame count changed while dropping videos"
+    # Dropping frame-less videos must not change the labeled-frame set nor orphan any frame.
+    # Explicit checks (a bare `assert` would be stripped under `python -O`).
+    if len(labels) != n_frames_before:
+        raise ValueError("labeled-frame count changed while dropping videos")
+    kept_ids = {id(v) for v in labels.videos}
+    if any(id(lf.video) not in kept_ids for lf in labels):
+        raise ValueError("a labeled frame references a dropped video")
 
-    # Compute the summary before writing, so a summary failure can't leave a written-but-unreported
-    # file (sleap-io signature is save_slp(labels, filename, ...): labels FIRST, path SECOND).
     nodes = [n.name for n in labels.skeletons[0].nodes]
     sio.save_slp(
         labels, out, embed=True
     )  # self-contained: frames embedded, no external refs
 
+    # Verify the cleaned file is really self-contained: re-load it (the box never sees the share)
+    # and confirm no surviving `source_video` still points at the SMB share.
+    reloaded = sio.load_slp(out, open_videos=False)
+    for v in reloaded.videos:
+        fn = str(getattr(v.source_video, "filename", "") or "")
+        if any(marker in fn for marker in _SHARE_MARKERS):
+            raise ValueError(f"{out} still points at the share via source_video: {fn}")
+
     shapes = [v.shape for v in labels.videos]
     print(
         f"{out}: {len(labels)} frames, {len(keep)} video(s) kept ({dropped} frame-less dropped), "
-        f"nodes={nodes}, shapes={shapes}"
+        f"nodes={nodes}, shapes={shapes}\n"
+        f"  sha256(in={Path(inp).name})={_sha256(inp)}\n"
+        f"  sha256(out={Path(out).name})={_sha256(out)}"
     )
 
 

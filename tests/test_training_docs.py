@@ -75,13 +75,19 @@ def test_guide_documents_established_baseline():
     assert (
         _RESERVED_MARKER not in text
     ), "baseline section still shows the reserved placeholder"
-    # The section reports the real accuracy headline (localization distance + visibility recall).
-    for token in ("PyTorch baseline", "dist_avg", "vis_recall"):
+    # The section reports the real accuracy headline and cites the TF reference (context only).
+    for token in ("PyTorch baseline", "dist_avg", "vis_recall", "tf-reference.md"):
         assert token in text, f"baseline section missing {token!r}"
-    # The TF reference is cited as context only, not a gate.
-    assert (
-        "tf-reference.md" in text
-    ), "baseline should cite the TF reference (context only)"
+    # os4 is the baseline, os2 is the documented collapse — both named (guards an os4/os2 swap).
+    assert "output_stride 4" in text and "output_stride 2" in text
+    assert "collapsed" in text, "the os2 collapse finding must stay documented"
+    # The os4 dist_avg range must parse to two sane floats (lo <= hi) — not merely be a substring.
+    range_lines = [ln for ln in text.splitlines() if "**range**" in ln]
+    assert range_lines, "no os4 baseline `**range**` row found"
+    nums = [float(x) for x in re.findall(r"\d+\.\d+", range_lines[0])]
+    assert len(nums) >= 2, f"range row has too few numbers: {range_lines[0]!r}"
+    lo, hi = nums[0], nums[1]
+    assert 1.0 < lo <= hi < 200.0, f"dist_avg range is not sane px: {lo}-{hi}"
 
 
 def test_guide_has_no_placeholders():

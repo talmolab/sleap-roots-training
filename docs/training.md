@@ -145,9 +145,12 @@ frame-less stray video, re-embeds frames); the labeled-frame set is unchanged (9
 `dist_avg`, `.p50` → `dist_p50`, `visibility_metrics.recall` → `vis_recall` (the dumper prefixes
 these with the top-level `metrics.` key). Distances are in **original-image pixels** — predictions
 are rescaled from the `scale: 0.5` input back to the source 1088×2048 coordinates before matching
-the original-coordinate ground truth — so they are directly comparable to the TF reference's native
-pixels. `oks_map` is excluded (mis-calibrated for this domain, #17); PCK is present in the npz but
-not used as the headline.
+the original-coordinate ground truth, so they are directly comparable to the TF reference's native
+pixels. (Verified in sleap-nn 0.2.0 source: `sleap_nn/inference/{single_instance,topdown,bottomup}.py`
+divide predicted peaks by `input_scale` then `eff_scale`, and `sleap_nn/training/lightning_modules.py`'s
+`validation_step` transforms predictions **and** GT back to original-image space before
+`sleap_nn/evaluation.py` — which itself does no rescaling — computes the distances.) `oks_map` is
+excluded (mis-calibrated for this domain, #17); PCK is present in the npz but not used as the headline.
 
 Two output resolutions were run (see the collapse finding below); the reported baseline is the
 stable **`output_stride 4`** config, [`examples/baseline_bottomup_v000_os4.yaml`](../examples/baseline_bottomup_v000_os4.yaml).
@@ -165,7 +168,9 @@ Key hyperparameters, all pinned in the config file above: UNet `filters 16`, `fi
 4`, `reduce_lr_on_plateau`, `max_epochs 200` with early stopping (`patience 10`);
 `online_hard_keypoint_mining` on. The optimizer / batch size / LR schedule / early-stopping values
 were sleap-nn 0.2.0 defaults the runs used, now pinned explicitly in the config so the baseline is
-reconstructable regardless of backend default changes.
+reconstructable regardless of backend default changes. (These explicit pins were committed **after**
+the six reported runs; each value is byte-equal to the 0.2.0 default the runs actually used —
+checked against the saved `Training Config` — so a re-run from this config reproduces the numbers.)
 
 ### Baseline range — `output_stride 4` (val)
 
@@ -179,10 +184,11 @@ reconstructable regardless of backend default changes.
 All three seeds converged and detected every ground-truth instance (Unmatched GT = 0), so the
 "instances detected" column is 44/44. `vis_recall` is a **separate**, keypoint-level metric — the
 fraction of visible ground-truth keypoints recalled among the matched instances — not an
-instance-detection rate. The seed-42 point is the detection smoke run
-(`baseline_smoke_v000_os4_seed42`); it uses the identical `output_stride 4` config and ran the full
-regime (early-stopped epoch 83, like seeds 43/44), so it is a valid same-config replicate — only
-its `run_name` differs.
+instance-detection rate. The three os4 seeds early-stopped at epochs **83 / 105 / 118** (42/43/44),
+i.e. each ran the full early-stopping regime. The seed-42 point is the detection smoke run
+(`baseline_smoke_v000_os4_seed42`): it uses the identical `output_stride 4` config — only the
+`run_name` differs from `examples/baseline_bottomup_v000_os4.yaml`, verifiable from the run's logged
+config in W&B ([p297iqwv](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/p297iqwv)).
 Per-epoch train/val loss is recoverable via `run.scan_history()` for every run (confirmed:
 thousands of rows carrying `epoch`), closing the observability gap the legacy TF runs left — the
 [W&B project](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline)
@@ -194,25 +200,24 @@ The legacy TensorFlow `sleap-train` runs (see [tf-reference.md](tf-reference.md)
 range, per run-to-run spread, and are **not** a pass/fail bar (`docs/roadmap.md`, "Oracle /
 validation philosophy" — exact backend parity is the wrong bar):
 
-| TF reference (stride) | `dist_avg` (px) |
-|-----------------------|-----------------|
-| stride 16 | 0.989 – 1.710 |
-| stride 32 | 1.383 – 2.078 |
+| TF reference (`max_stride`) | `dist_avg` (px) | `vis_recall` |
+|-----------------------------|-----------------|--------------|
+| 16 | 0.989 – 1.710 | 0.47 – 0.63 |
+| 32 | 1.383 – 2.078 | 0.83 |
 
-In that same original-pixel space, the PyTorch baseline lands ~20–40× above the TF numbers. That
-gap is **expected and is itself the finding**, not a regression: escaping the loss collapse below
-forces a coarse, downscaled output, which caps localization precision. TF trained at full
-resolution with a loss the current backend does not replicate.
+**Read the two columns together — the comparison is recall-confounded.** The PyTorch baseline's
+`dist_avg` is ~20–40× the TF `dist_avg`, but its `vis_recall` (0.85–0.91) is **higher than every TF
+run** (0.47–0.83): the PyTorch model detects *more* keypoints and localizes them *looser*, whereas
+TF localized a smaller, higher-confidence subset very tightly. Because each backend's `dist_*` is
+measured over a different population, the raw `dist` ratio overstates the gap — report both
+directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinct** from the
+`output_stride` of the PyTorch configs; `tf-reference.md` warns against conflating them.) TF remains
+context only, not a gate.
 
-### Finding: `output_stride 2` collapses (why the baseline is `output_stride 4`)
+### Finding: `output_stride 2` is seed-unstable and collapses
 
-sleap-nn 0.2.0's bottom-up loss is a plain per-pixel `nn.MSELoss()` with no foreground weighting
-(`sleap_nn/training/lightning_modules.py`). On these large images the keypoint confmap targets are
-a tiny fraction of foreground, so the loss is minimized by predicting ~0 everywhere → no peaks → no
-detected instances. Densifying the targets (input `scale 0.5`, coarse `output_stride`, deep
-`max_stride 32`, online hard-keypoint mining) escapes it — but the higher-resolution
-[`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) sits right at the failure boundary
-and is **seed-unstable**:
+The higher-resolution [`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) config
+(sibling of the os4 baseline) was run across the same 3 seeds:
 
 | seed | `output_stride 2` result (val) |
 |------|--------------------------------|
@@ -220,6 +225,23 @@ and is **seed-unstable**:
 | 43 | **collapsed** — 0 predicted instances, all metrics NaN |
 | 44 | **collapsed** — 0 predicted instances, all metrics NaN |
 
-Only 1 of 3 os2 seeds produced numbers, and that one missed ~43% of instances. os2 therefore has
-no usable range and is **not** the baseline; it is documented here as the resolution ceiling for
-this backend/dataset. The stable `output_stride 4` config is the reported Tier 1 baseline.
+Only 1 of 3 os2 seeds produced numbers, and that one missed ~43% of instances, so os2 has no usable
+range and is **not** the baseline — `output_stride 4` is. What the collapse *means* is deliberately
+stated cautiously here, because two candidate causes are not yet separated:
+
+- **Mechanism inferred from source, not ablated.** The likely driver is that sleap-nn 0.2.0's
+  bottom-up confmap loss is a plain per-pixel `nn.MSELoss()` with no foreground weighting
+  (`sleap_nn/training/lightning_modules.py`, read from source): with a tiny foreground fraction the
+  loss is minimized by predicting ~0 everywhere → no peaks → no instances (the collapsed os2 runs
+  have near-zero `val/confmaps_loss` — the collapse signature). **But** os2 also uses
+  `confmaps.sigma 2.5` (half sleap-nn's default) at a finer `output_stride`, shrinking each target to
+  roughly sub-cell support — a tighter-target effect that could cause the same collapse independently
+  of the loss. A single os2 run at `sigma 5.0` would discriminate the two; it is noted as follow-up
+  and raised upstream with sleap-nn. (`online_hard_keypoint_mining` *reweights* the loss toward hard
+  keypoints — it does not change target density.)
+- **This is not a proven resolution ceiling.** At `output_stride 4` + `scale 0.5` one output cell ≈ 8
+  original pixels and peak refinement is sub-cell, so output-stride quantization bounds the error at
+  only a few px — far below the observed `dist_p50` 17.7–21.2 px. The heavy tail (`dist_p90`
+  67–74 px ≈ 8–9 output cells) points to **detection/association quality and under-fitting on a
+  99-frame training set**, not to resolution. Treat 30–38 px as this config's current number, not as
+  a lower bound for the backend/dataset.

@@ -5,20 +5,29 @@ files and prints the headline keypoint metrics so the Tier 1 baseline table can 
 the saved artifacts rather than by scrolling back through the training logs. A run that collapsed
 to zero predicted instances shows up as all-NaN (see docs/training.md).
 
+``numpy`` is imported lazily (it rides in with the train extra), so this module stays importable in
+the base env for unit tests of the MISSING / arg-handling paths.
+
 Usage (on the GPU box, from the repo dir):
     uv run --no-sync python scripts/dump_val_metrics.py <run_name> [<run_name> ...]
 """
 
 from __future__ import annotations
 
-import os
 import sys
-
-import numpy as np
+import zipfile
+from pathlib import Path
 
 
 def _emit(key: str, value: object) -> None:
-    """Print one metric, summarizing arrays and unwrapping 0-d object dicts."""
+    """Print one metric, summarizing arrays and unwrapping 0-d object dicts.
+
+    Object arrays that wrap a dict are assumed 0-d (the shape sleap-nn writes); an ``ndim >= 1``
+    object array of dicts would fall through to the generic sample branch — acceptable here, not a
+    crash.
+    """
+    import numpy as np
+
     arr = np.asarray(value)
     if arr.dtype == object and arr.ndim == 0:
         inner = arr.item()
@@ -37,8 +46,13 @@ def _emit(key: str, value: object) -> None:
         print(f"   {key}: shape={arr.shape} dtype={arr.dtype} sample={sample}")
         return
     flat = arr.astype(float).ravel()
-    if flat.size and not np.all(np.isnan(flat)):
-        print(f"   {key}: shape={arr.shape} mean={np.nanmean(flat):.4f}")
+    valid = int(np.count_nonzero(~np.isnan(flat)))
+    if valid:
+        # Surface the valid/total count so a *partial* collapse can't hide behind a plausible mean.
+        print(
+            f"   {key}: shape={arr.shape} mean={np.nanmean(flat):.4f} "
+            f"({valid}/{flat.size} valid)"
+        )
     else:
         print(f"   {key}: shape={arr.shape} (all-nan/empty)")
 
@@ -46,21 +60,23 @@ def _emit(key: str, value: object) -> None:
 def dump(run: str) -> bool:
     """Print the val metrics for one run; return True on success (all-NaN means it collapsed).
 
-    ``models/<run>`` is relative to the current directory, matching the configs' ``ckpt_dir: models``;
-    run this from the repo root. The ``.0.`` in the filename is sleap-nn's per-eval-dataset index.
+    ``models/<run>`` is relative to the current directory, matching the configs' ``ckpt_dir:
+    models``; run this from the repo root. The ``.0.`` in the filename is sleap-nn's
+    per-eval-dataset index.
     """
-    path = os.path.join("models", run, "metrics.val.0.npz")
-    if not os.path.exists(path):
+    path = Path("models") / run / "metrics.val.0.npz"
+    if not path.exists():
         print(f"=== {run} ===\n   MISSING ({path})")
         return False
+    import numpy as np  # lazy: needed only once we actually have a file to load
+
     try:
         data = np.load(path, allow_pickle=True)
         print(f"=== {run} ===  (keys: {list(data.files)})")
         for key in data.files:
             _emit(key, data[key])
-    except (
-        Exception
-    ) as exc:  # a truncated/corrupt npz must not abort the rest of the batch
+    except (OSError, ValueError, EOFError, zipfile.BadZipFile) as exc:
+        # a truncated/corrupt npz must not abort the rest of the batch
         print(f"=== {run} ===\n   CORRUPT ({path}): {type(exc).__name__}: {exc}")
         return False
     return True
@@ -74,8 +90,9 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
-    ok = all([dump(run) for run in argv[1:]])
-    return 0 if ok else 1
+    # Materialize to a list (not a generator) so EVERY run is dumped even if an earlier one fails.
+    results = [dump(run) for run in argv[1:]]
+    return 0 if all(results) else 1
 
 
 if __name__ == "__main__":
