@@ -22,11 +22,13 @@ All notable changes to this project are documented here. The format is based on
   bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:
   `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all
   instances detected), with per-epoch W&B logging confirmed. The TF reference is shown alongside as
-  context only, not a gate. Documented finding: the finer `output_stride 2` collapses to zero
-  predictions on 2 of 3 seeds (sleap-nn 0.2.0's plain bottom-up MSELoss on sparse large-image
-  targets), which is why the baseline is `output_stride 4`. Adds `examples/baseline_bottomup_v000_os4.yaml`
-  + `examples/baseline_bottomup_v000_os2.yaml`, `scripts/clean_pkg.py` (make the v000 `.pkg.slp`
-  self-contained for the offline GPU box), and `scripts/dump_val_metrics.py`; write-up in
+  context only, not a gate (and the `dist` gap is recall-confounded — PyTorch detects more,
+  localizes looser). Documented finding: the finer `output_stride 2` collapses to zero predictions
+  on 2 of 3 seeds at `confmaps.sigma 2.5`; a `sigma` ablation (`sigma 5.0` trains stably on all 3
+  seeds) shows the cause is too-tight confmap targets, not a resolution ceiling or the loss — so the
+  baseline stays `output_stride 4`. Adds `examples/baseline_bottomup_v000_os4.yaml` +
+  `..._os2.yaml` + `..._os2_sigma5.yaml` (the ablation), `scripts/clean_pkg.py` (make the v000
+  `.pkg.slp` self-contained for the offline GPU box), and `scripts/dump_val_metrics.py`; write-up in
   `docs/training.md` ("PyTorch baseline").
 - `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
   config-driven training-config schema + CLI. A config is `sleap-nn`'s native

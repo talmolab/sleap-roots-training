@@ -3,10 +3,12 @@
 # One of TWO configs in the Tier 1 baseline comparison (issue #21): this `output_stride 2` variant
 # and its `output_stride 4` sibling (examples/baseline_bottomup_v000_os4.yaml). Each is run across
 # seeds 42 / 43 / 44 (vary only `trainer_config.seed` + the `run_name` suffix) on the exact v000
-# held-out split, evaluated on val.pkg.slp. WARNING: os2 is seed-UNSTABLE — it collapsed to zero
-# predictions (all-NaN) on 2 of the 3 seeds, and the one that ran missed ~43% of instances. It is
-# NOT the reported baseline (that is the os4 sibling); it is kept only to document the collapse.
-# See docs/training.md ("PyTorch baseline").
+# held-out split, evaluated on val.pkg.slp. WARNING: with THIS `confmaps.sigma: 2.5` at
+# `output_stride 2`, the config is seed-UNSTABLE — it collapsed to zero predictions (all-NaN) on 2
+# of the 3 seeds; the one that ran missed ~43% of instances. A sigma ablation settled the cause: the
+# sibling examples/baseline_bottomup_v000_os2_sigma5.yaml (only `sigma` -> 5.0) trains stably on all
+# 3 seeds, so the collapse was the tight sigma, not resolution or the loss. It is NOT the reported
+# baseline (that is the os4 sibling); kept to document the collapse. See docs/training.md.
 #
 #   sleap-roots-training validate examples/baseline_bottomup_v000_os2.yaml
 #   sleap-roots-training emit     examples/baseline_bottomup_v000_os2.yaml -o resolved.yaml

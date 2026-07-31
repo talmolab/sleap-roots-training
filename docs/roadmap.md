@@ -142,10 +142,11 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   a range, not a point** and for context only (stride 16 `dist_avg` 0.99–1.71 px @ `vis_recall`
   0.47–0.63; stride 32 1.38–2.08 px @ 0.83; see `docs/tf-reference.md`). Caveats carried forward:
   the PyTorch↔TF `dist` gap is **recall-confounded** (PyTorch detects more, localizes looser) and is
-  **not** a settled resolution ceiling — the error is dominated by detection/association quality, and
-  the finer `output_stride 2` collapses on 2/3 seeds for a cause not yet isolated (unweighted MSE
-  loss vs. a tight `sigma` at high output stride). Full write-up + open questions: `docs/training.md`
-  ("PyTorch baseline"). *(W&B versioning is retrofitted in Tier 2.)*
+  **not** a resolution ceiling — the error is dominated by detection/association quality (higher
+  output resolution buys no gain). A `sigma` ablation settled the earlier `output_stride 2` collapse:
+  it was too-tight confmap targets at `sigma 2.5` (`sigma 5.0` trains stably on all 3 seeds), not the
+  loss or resolution. Full write-up: `docs/training.md` ("PyTorch baseline"). *(W&B versioning is
+  retrofitted in Tier 2.)*
 - **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`;
   baseline established in #21. **Depends on** Tier 0.5 (#9).
 

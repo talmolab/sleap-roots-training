@@ -214,34 +214,32 @@ directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinc
 `output_stride` of the PyTorch configs; `tf-reference.md` warns against conflating them.) TF remains
 context only, not a gate.
 
-### Finding: `output_stride 2` is seed-unstable and collapses
+### Finding: the `output_stride 2` collapse was the confmap sigma — not resolution, not the loss
 
-The higher-resolution [`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) config
-(sibling of the os4 baseline) was run across the same 3 seeds:
+The finer [`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) config is seed-unstable at
+`confmaps.sigma 2.5`, but a controlled ablation (same config, same 3 seeds, **only `sigma`
+changed** — [`..._os2_sigma5.yaml`](../examples/baseline_bottomup_v000_os2_sigma5.yaml)) settles the
+cause:
 
-| seed | `output_stride 2` result (val) |
-|------|--------------------------------|
-| 42 | partial — **25 / 44 instances detected**; on those, `dist_avg` 29.13 px, `dist_p50` 16.63 px, `vis_recall` 0.58 |
-| 43 | **collapsed** — 0 predicted instances, all metrics NaN |
-| 44 | **collapsed** — 0 predicted instances, all metrics NaN |
+| os2 config | seed 42 | seed 43 | seed 44 | stable? | `val/confmaps_loss` |
+|------------|---------|---------|---------|:-------:|---------------------|
+| **σ = 2.5** | partial: 25 / 44, recall 0.58 | **collapsed** (0, NaN) | **collapsed** (0, NaN) | ✗ | ~0.0015 (near-zero) |
+| **σ = 5.0** | 43 / 44, recall 0.87 | 44 / 44, recall 0.88 | 43 / 44, recall 0.80 | ✓ | ~0.0047 (healthy) |
 
-Only 1 of 3 os2 seeds produced numbers, and that one missed ~43% of instances, so os2 has no usable
-range and is **not** the baseline — `output_stride 4` is. What the collapse *means* is deliberately
-stated cautiously here, because two candidate causes are not yet separated:
+With σ=5.0 (sleap-nn's default) `output_stride 2` trains on **every** seed and detects ~all
+instances; with σ=2.5 the confmap loss sits near zero — the signature of a target minimized by
+predicting ~0. So the collapse was **too-tight confmap targets at the finer output stride**, not a
+resolution ceiling and not fundamentally the loss. (sleap-nn 0.2.0's bottom-up loss is a plain
+per-pixel `nn.MSELoss()` with no foreground weighting, `sleap_nn/training/lightning_modules.py` —
+which is *why* sub-support targets vanish; a foreground-weighted loss would make σ far less finicky.
+Raised upstream with sleap-nn.) `online_hard_keypoint_mining` reweights the loss toward hard
+keypoints; it does not change target density.
 
-- **Mechanism inferred from source, not ablated.** The likely driver is that sleap-nn 0.2.0's
-  bottom-up confmap loss is a plain per-pixel `nn.MSELoss()` with no foreground weighting
-  (`sleap_nn/training/lightning_modules.py`, read from source): with a tiny foreground fraction the
-  loss is minimized by predicting ~0 everywhere → no peaks → no instances (the collapsed os2 runs
-  have near-zero `val/confmaps_loss` — the collapse signature). **But** os2 also uses
-  `confmaps.sigma 2.5` (half sleap-nn's default) at a finer `output_stride`, shrinking each target to
-  roughly sub-cell support — a tighter-target effect that could cause the same collapse independently
-  of the loss. A single os2 run at `sigma 5.0` would discriminate the two; it is noted as follow-up
-  and raised upstream with sleap-nn. (`online_hard_keypoint_mining` *reweights* the loss toward hard
-  keypoints — it does not change target density.)
-- **This is not a proven resolution ceiling.** At `output_stride 4` + `scale 0.5` one output cell ≈ 8
-  original pixels and peak refinement is sub-cell, so output-stride quantization bounds the error at
-  only a few px — far below the observed `dist_p50` 17.7–21.2 px. The heavy tail (`dist_p90`
-  67–74 px ≈ 8–9 output cells) points to **detection/association quality and under-fitting on a
-  99-frame training set**, not to resolution. Treat 30–38 px as this config's current number, not as
-  a lower bound for the backend/dataset.
+**os2 σ=5.0 is still not the baseline.** Its val range — `dist_avg` **31.7–36.5 px**, `dist_p50`
+**18.2–23.1 px**, `vis_recall` **0.80–0.88** — is on par with or marginally worse than os4
+(30.1–37.8 / 17.7–21.2 / 0.85–0.91): the higher output resolution buys **no** localization gain. That
+is consistent with the arithmetic — at os4 one output cell ≈ 8 original px with sub-cell refinement,
+so quantization bounds the error at only a few px, far below the observed `dist_p50` ~18–21 px and
+the `dist_p90` 67–74 px tail. The error is **detection/association quality + under-fitting on a
+99-frame training set**, not resolution — treat 30–38 px as this dataset/backbone's current number,
+not a lower bound. `output_stride 4` remains the reported Tier 1 baseline.
