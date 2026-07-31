@@ -243,3 +243,38 @@ so quantization bounds the error at only a few px, far below the observed `dist_
 the `dist_p90` 67–74 px tail. The error is **detection/association quality + under-fitting on a
 99-frame training set**, not resolution — treat 30–38 px as this dataset/backbone's current number,
 not a lower bound. `output_stride 4` remains the reported Tier 1 baseline.
+
+> **Caveat (issue #36, pending re-run):** the "under-fitting" contribution is partly confounded by an
+> unintended training-schedule mismatch vs the TF reference — the reported runs used
+> `min_train_steps_per_epoch: 25` (one pass over 99 frames) vs TF's ~8× oversampling, so ~250 vs
+> ~2000 gradient steps of early-stopping patience, and they inherited sleap-nn's default geometric
+> augmentation rather than TF's flip-only. [`examples/baseline_bottomup_v000_os4_aligned.yaml`](../examples/baseline_bottomup_v000_os4_aligned.yaml)
+> fixes both; an aligned re-run is pending to separate a **fixable schedule artifact** from an inherent
+> limit. Full divergence list in the parity table below.
+
+### Hyperparameter parity vs the TF reference (issue #36)
+
+The Tier 1 baseline is meant to be analogous to the legacy TF models, so every hyperparameter is
+tracked against `tests/fixtures/tf_reference/nxe8xgsd.config.json`. "reported" is the merged os4
+baseline; "aligned" is [`..._os4_aligned.yaml`](../examples/baseline_bottomup_v000_os4_aligned.yaml).
+
+| hyperparameter | TF | os4 (reported) | os4 aligned | status |
+|---|---|---|---|---|
+| optimizer / lr | Adam / 1e-4 | Adam / 1e-4 | same | match |
+| LR-plateau (factor/patience/cooldown/threshold/min_lr) | 0.5 / 5 / 3 / 1e-6 / 1e-8 | same | same | match |
+| batch size | 4 | 4 | 4 | match |
+| max_epochs | 200 | 200 | 200 | match |
+| hard-mining (ratio / loss_scale / min,max) | 2 / 5 / 2,null | same | same | match |
+| confmap sigma / PAF sigma·stride | 2.5 / 75·8 | same | same | match |
+| confmap `output_stride` | 2 | 4 | 4 | deliberate (collapse-escape, documented) |
+| input `scale` | 1.0 | 0.5 | 0.5 | deliberate (collapse-escape, documented) |
+| `online_mining` | false | true | true | deliberate (collapse-escape, documented) |
+| augmentation | flip only | sleap-nn default (rot ±15, scale 0.9–1.1) | **off** | #36: unintentional → aligned |
+| `min_train_steps_per_epoch` | 200 | 25 | **200** | #36: unintentional → aligned |
+| `early_stopping.min_delta` | 1e-6 | 1e-8 | **1e-6** | #36: unintentional → aligned |
+| backbone `filters` / `filters_rate` | 24 / 1.5 | 16 / 2.0 | 16 / 2.0 | #36 item 4: divergent, decision pending |
+| backbone `max_stride` | 16 | 32 | 32 | deliberate (deep backbone; revisit) |
+
+The three "aligned" rows are the unintentional drift #36 flagged; the aligned config fixes them and a
+re-run is pending to check whether the accuracy gap narrows. Backbone width and `max_stride` are left
+as documented divergences for a joint decision (tracked in #36).
