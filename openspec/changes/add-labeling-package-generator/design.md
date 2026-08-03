@@ -219,6 +219,41 @@ the work is to give them one structured home — not to invent them.
 Separately, `select_samples.py:85` hardcodes `total_views = 72` with no validation. An experiment
 with a different view count silently selects wrong indices rather than failing.
 
+## Section 2 findings (port executed 2026-08-03)
+
+Surfaced by the characterization pass, not by reading. Both were invisible to the source read: the
+first because the workflow doc routes around it, the second because it needs two runs to see.
+
+### F9 — The multi-file glob branch cannot express the layout it was written for
+
+`select_samples.py:47` globs `cleaned_path.parent.glob(cleaned_path.name)`, which can only match a
+wildcard in the *filename*. But QC writes one `10_final_data.csv` per age-group **directory**, and
+the branch's own logging (`:51`, printing `f.parent.name`) assumes exactly that — it labels each
+loaded file by its parent directory, which is only informative when the files sit in different
+directories. Passing `<qc_out>/*/10_final_data.csv` sets `parent` to a literal `*` directory, which
+does not exist, so the branch raises `FileNotFoundError` for its intended input.
+
+Nobody noticed because the workflow doc never exercises it: `build-labeling-package.md:128-133`
+concatenates the per-age-group files with a hand-written `pd.concat` in Phase 1 and passes the
+single `all_cleaned.csv` to the script. The glob branch is therefore dead code in the documented
+path, and the manual concat is a workaround for a bug rather than a step with a reason.
+
+Held as a strict `xfail` against the port; the fix and its consequence for the workflow doc belong
+to the deviation pass.
+
+### F10 — Determinism holds for identical bytes, not for identical content
+
+Task 2.4 expected an immediate GREEN and got one for the stated property: the same `scans.csv`
+selects the same frames on every run. The characterization pass then found the property is narrower
+than Decision 5 needs. `.sample(random_state=seed)` draws by *position* within the group, so
+re-exporting `scans.csv` with the same rows in a different order selects a different set of plants.
+
+That matters because `scans.csv` is a Bloom export, not a committed artifact: the recovery path in
+Decision 6 re-fetches it. A re-download that returns the same scans in a different order silently
+produces a different label set — the same failure F3 describes, reached without changing any
+parameter at all. The 2.7 fix closes both, since ordering by a content-derived key does not depend
+on row order.
+
 ## Decision 1: Port first, change second — characterization tests before behavior changes
 
 Sequence: bring each script in with its behavior preserved, pin that behavior in tests, *then* make
