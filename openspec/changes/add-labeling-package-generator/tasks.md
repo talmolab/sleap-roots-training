@@ -100,16 +100,34 @@ the scripts do.
 
 ## 2. Port `select_samples.py` faithfully
 
-- [ ] 2.1 Copy the script in as `labeling/select_samples.py` with **behavior preserved**, adapting
+- [x] 2.1 Copy the script in as `labeling/select_samples.py` with **behavior preserved**, adapting
       only what cannot run here (Windows path assumptions, interactive prompts, unpinned imports).
       Record every deviation as a task under section 7 — deviations are decisions, not cleanup
-- [ ] 2.2 (RED) Characterization tests over a small fixture: the frames selected, their order, and
+      **Done 2026-08-03.** Ported as `labeling/select_samples.py`. Adaptations forced by the move
+      into a library: the PEP-723 `# /// script` header and the `argparse`/`__main__` block are
+      dropped (the CLI is 8.4's job, and a second entry point would be a second place the defaults
+      live); `print` becomes `logging` on a module logger, matching `registry/publish.py`.
+      **`pandas` is now a direct dependency** — the 1.1 open item. The port imports it, and it was
+      importable only *transitively* via sleap-io; a direct import of a transitive dependency breaks
+      the day the intermediary drops it. Declared `pandas>=2.2.0,<4.0.0`. `uv lock`: no version churn
+- [x] 2.2 (RED) Characterization tests over a small fixture: the frames selected, their order, and
       the manifest rows produced. These pin the *ported* behavior before anything changes
-- [ ] 2.3 (GREEN) Make the characterization tests pass without altering selection semantics
-- [ ] 2.4 (RED) Test that selection is deterministic — the same inputs and parameters select the same
+- [x] 2.3 (GREEN) Make the characterization tests pass without altering selection semantics
+      **Done 2026-08-03 — 16 characterization tests GREEN against the faithful port**, before any
+      behavior change, which is the commit Decision 1 asks for. The port reproduces the original
+      exactly, including the view formula (`[1,25,49]` / `[1,19,37,55]` / `[1,13,25,37,49,61]`) and
+      the manifest row order. Two further tests are held as **strict `xfail`** — they are defects in
+      the *original*, not port errors: F9 (the glob branch cannot express its own documented layout)
+      and F10 (determinism holds for identical bytes, not identical content). Strict, so whichever
+      task fixes them must remove the marker rather than absorb the change silently
+- [x] 2.4 (RED) Test that selection is deterministic — the same inputs and parameters select the same
       frames in the same order across runs. **Expected GREEN against the port** (F3): the draw is
       seeded and group ordering is stable. If it passes immediately, say so rather than manufacturing
       a failure
+      **Done 2026-08-03 — GREEN immediately, as predicted; no failure manufactured.** But the
+      property is narrower than Decision 5 needs: it holds for identical *bytes*, not identical
+      *content* (**F10**). Since Decision 6's recovery path re-fetches `scans.csv` from Bloom, a
+      re-download that reorders rows silently changes the label set. 2.7 closes it
 - [ ] 2.5 Pin `total_views = 72` as a characterized assumption and decide whether an experiment with
       a different view count should fail loudly rather than mis-select (F4)
 - [ ] 2.6 (RED) Test that a widened re-run is a superset of the narrower one. **Known to fail against
