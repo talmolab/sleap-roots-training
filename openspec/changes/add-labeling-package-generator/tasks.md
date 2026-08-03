@@ -109,38 +109,61 @@ the scripts do.
       live); `print` becomes `logging` on a module logger, matching `registry/publish.py`.
       **`pandas` is now a direct dependency** — the 1.1 open item. The port imports it, and it was
       importable only *transitively* via sleap-io; a direct import of a transitive dependency breaks
-      the day the intermediary drops it. Declared `pandas>=2.2.0,<4.0.0`. `uv lock`: no version churn
+      the day the intermediary drops it. Declared `pandas>=2.2.0,<4.0.0`, deliberately wide: the API
+      used is `read_csv`/`groupby`/`to_csv`, and 2.7 removed the one version-sensitive behavior, so
+      pandas' RNG can no longer move which frames a package labels. `uv lock`: **no version churn**
 - [x] 2.2 (RED) Characterization tests over a small fixture: the frames selected, their order, and
       the manifest rows produced. These pin the *ported* behavior before anything changes
 - [x] 2.3 (GREEN) Make the characterization tests pass without altering selection semantics
-      **Done 2026-08-03 — 16 characterization tests GREEN against the faithful port**, before any
+      **Done 2026-08-03 — 13 characterization tests GREEN against the faithful port**, before any
       behavior change, which is the commit Decision 1 asks for. The port reproduces the original
       exactly, including the view formula (`[1,25,49]` / `[1,19,37,55]` / `[1,13,25,37,49,61]`) and
-      the manifest row order. Two further tests are held as **strict `xfail`** — they are defects in
-      the *original*, not port errors: F9 (the glob branch cannot express its own documented layout)
-      and F10 (determinism holds for identical bytes, not identical content). Strict, so whichever
-      task fixes them must remove the marker rather than absorb the change silently
+      the manifest row order. Two tests written in the same pass failed — **both are defects in the
+      original, not port errors**: see F9 (the glob branch) and F10 (row-order determinism)
 - [x] 2.4 (RED) Test that selection is deterministic — the same inputs and parameters select the same
       frames in the same order across runs. **Expected GREEN against the port** (F3): the draw is
       seeded and group ordering is stable. If it passes immediately, say so rather than manufacturing
       a failure
       **Done 2026-08-03 — GREEN immediately, as predicted; no failure manufactured.** But the
       property is narrower than Decision 5 needs: it holds for identical *bytes*, not identical
-      *content* (**F10**). Since Decision 6's recovery path re-fetches `scans.csv` from Bloom, a
-      re-download that reorders rows silently changes the label set. 2.7 closes it
-- [ ] 2.5 Pin `total_views = 72` as a characterized assumption and decide whether an experiment with
+      *content*. `.sample()` draws by position, so re-exporting `scans.csv` with the same rows in a
+      different order selects different plants (**F10**). Since Decision 6's recovery path re-fetches
+      `scans.csv` from Bloom, a re-download that reorders rows silently changes the label set. The
+      2.7 fix closes it
+- [x] 2.5 Pin `total_views = 72` as a characterized assumption and decide whether an experiment with
       a different view count should fail loudly rather than mis-select (F4)
-- [ ] 2.6 (RED) Test that a widened re-run is a superset of the narrower one. **Known to fail against
+      **Done 2026-08-03 — fail loudly.** `TOTAL_VIEWS = 72` is now a documented default parameter
+      rather than a constant, and selection rejects `views_per_plant` outside `1..total_views`
+      instead of computing a `step` of 0 and mis-selecting. **Scope boundary:** selection reads two
+      CSVs and never touches the filesystem (F2), so it cannot check the count against what a scan
+      actually holds — that check belongs to the copy step, the first stage that sees the images.
+      **Obligation on 3.x:** verify the on-disk view count. **Obligation on 8.3:** record
+      `total_views` in the package metadata, since it is a selection parameter a consumer needs and
+      the manifest's enumerated columns do not carry it
+- [x] 2.6 (RED) Test that a widened re-run is a superset of the narrower one. **Known to fail against
       the port** (F3) — `.sample(n, random_state)` re-draws rather than extends, and
       `step = 72 // views_per_plant` gives `[1,19,37,55]` for 4 views against `[1,25,49]` for 3
-- [ ] 2.7 (GREEN) Make widening monotone in both dimensions — a stable ordering over an explicit key,
+      **Done 2026-08-03 — RED against the port exactly as predicted, in both dimensions**
+- [x] 2.7 (GREEN) Make widening monotone in both dimensions — a stable ordering over an explicit key,
       the wider run taking a prefix-superset — and record it in section 7 as a deliberate deviation.
       Decision 6's recovery path depends on this; it is not a cleanup
-- [ ] 2.8 (RED) Test that `sample_manifest.csv` has one row per selected frame and carries every
+      **Done 2026-08-03.** *Plants:* ordered by `sha256(f"{seed}:{barcode}")`, prefix taken. Nested
+      by construction, and — unlike `.sample()` — independent of `scans.csv` row order and of pandas'
+      RNG, which closes F10 as well. *Views:* greedy farthest-point dispersion, nested by
+      construction; verified nested for **every** count 1..72, not just the sampled ones. Distance is
+      measured **circularly**, because view 72 and view 1 are adjacent angles on a cylinder — the
+      linear formula treated them as opposite extremes, so a nested-but-linear scheme would have
+      paired two near-identical views. Four views are unchanged from the original (`[1,19,37,55]`);
+      three become `[1,19,37]` instead of `[1,25,49]`. **Consequence recorded in design.md:**
+      monotonicity is a guarantee *from this port forward*; the eight pre-port collections cannot be
+      re-derived as supersets, so widening one is a new label set rather than a v2
+- [x] 2.8 (RED) Test that `sample_manifest.csv` has one row per selected frame and carries every
       required column (`scan_id`, `plant_qr_code`, `plant_age_days`, `accession_id`,
       `accession_name`, `wave_number`, `view_index`, `frame_index`, `source_scan_path`,
       `source_image`, `output_filename`)
-- [ ] 2.9 (RED) **Test that `output_filename` is unique across the manifest** (F6). The counter is
+      **Done 2026-08-03.** Column set and order pinned against `MANIFEST_COLUMNS`, which is asserted
+      against Decision 3's enumeration so the contract and the code cannot drift apart silently
+- [x] 2.9 (RED) **Test that `output_filename` is unique across the manifest** (F6). The counter is
       keyed by `scan_id` but the name is not, so two scans of the same `(plant_qr_code,
       plant_age_days)` collide — and every downstream layer absorbs it silently. Construct the
       fixture to contain that case; assert selection fails with an error naming the colliding rows.
@@ -148,10 +171,19 @@ the scripts do.
       artifact of the upstream record, so the check exists to surface it, not to accommodate it; the
       error must name the colliding `scan_id`s. Filenames are unchanged, which keeps the eight
       published collections comparable. Record in section 7
-- [ ] 2.10 (RED) Pin which derivation of a frame's position is authoritative (F6): the manifest's
+      **Done 2026-08-03 as decided.** The fixture manufactures the colliding rescan; the error names
+      the filename and both `scan_id`s and points at the upstream record. Also asserted: **no
+      manifest is written on collision**, so a failed run cannot leave a file a later stage mistakes
+      for a good one. Filenames are unchanged
+- [x] 2.10 (RED) Pin which derivation of a frame's position is authoritative (F6): the manifest's
       `frame_index` column, or `build_slp_project.py:105,136`'s sort-by-`view_index`-and-enumerate,
       which never reads that column. They agree only because `selected_views` is ascending. Make the
       builder read the manifest, or delete the unused column — not both derivations
+      **Done 2026-08-03 — `frame_index` is authoritative; the column stays** (Decision 3 and the
+      spec both require it, so deleting it was not open). The test pins it as the within-scan rank
+      and proves the sort-and-enumerate derivation agrees, so the builder can switch without a
+      behavior change. **Obligation on 4.1: the builder reads `frame_index` and does not re-derive
+      position.** Until it does, the two derivations still both exist
 
 ## 3. Port the image-copy step (unblocked by 0.6)
 
@@ -180,6 +212,12 @@ the scripts do.
       silently overwritten (F6). Pairs with 2.9, which is where the duplicate should be caught
       first — this is the second line of defence, since a hand-edited manifest can reach the copy
       step directly
+- [ ] 3.5a (RED) **Obligation from 2.5:** verify the scan's actual view count against the
+      `total_views` selection assumed. Selection reads only CSVs, so it cannot check it; the copy
+      step is the first stage that sees the images. A scan holding fewer views than assumed produces
+      manifest rows pointing at `.jpg` files that do not exist — which 3.4's fail-loud rule catches
+      per-row, but reports as N unrelated missing files rather than as the one wrong parameter that
+      caused them. Name the assumption in the error
 - [ ] 3.6 Decide whether the copy step remains a separate stage or folds into the builder once
       `embed=True` lands (5.5). Keep them separate through section 5 so the characterization tests
       stay meaningful; revisit after
@@ -188,6 +226,11 @@ the scripts do.
 
 - [ ] 4.1 Copy the script in as `labeling/build_package.py`, behavior preserved (**including
       `embed=False` at this step** — the embed change is section 5, as its own visible commit)
+      **Obligation from 2.10:** the builder reads `frame_index` from the manifest instead of
+      re-deriving position by sorting on `view_index` and enumerating. 2.10 pinned `frame_index` as
+      authoritative and proved the two derivations currently agree, so this is a swap with no
+      behavior change — but until it happens, both derivations still exist and F6 is only half
+      closed. Do it in the port rather than deferring it, and note it in section 7
 - [ ] 4.2 (RED) Characterization tests over a fixture: the package directory produced, its contents,
       and the `.slp` it writes
 - [ ] 4.3 (GREEN) Make them pass without changing behavior
@@ -254,6 +297,28 @@ the scripts do.
       (8.3a, F7); (j) POSIX-normalized separators in `source_scan_path`/`source_image` so a manifest
       written on the vault machine resolves here (F5)
 
+      **Recorded from section 2 (`select_samples.py`, 2026-08-03).** Caller-visible unless noted:
+      1. **Plant draw** — `.sample(n, random_state=seed)` to a prefix of a `sha256(seed:barcode)`
+         ordering (2.7, F3/F10). Widening is now monotone, and selection no longer depends on
+         `scans.csv` row order or on pandas' RNG. **A given seed selects different plants than the
+         vault script did** — this is the deviation with the widest blast radius in the change.
+      2. **View indices** — `step = total_views // views_per_plant` to circular farthest-point
+         dispersion (2.7, F3). Nested for every count; four views unchanged (`[1,19,37,55]`), three
+         change to `[1,19,37]` from `[1,25,49]`.
+      3. **`total_views`** — hardcoded constant to a validated default parameter; an out-of-range
+         `views_per_plant` now raises rather than mis-selecting (2.5, F4).
+      4. **`output_filename` uniqueness** — now asserted before the manifest is written; a collision
+         raises and names the offending `scan_id`s, and no manifest is written (2.9, F6, per 0.8).
+         Filenames themselves are unchanged.
+      5. **Glob branch** — anchored at the last wildcard-free component, so a wildcard in a
+         *directory* component resolves (F9). The vault version raised `FileNotFoundError` for the
+         layout QC actually writes. **Makes `build-labeling-package.md`'s Phase 1 manual `pd.concat`
+         unnecessary — 8.6 should drop that step when it ports the doc.**
+      6. **POSIX separators** — `Path` to `PurePosixPath` with backslash normalization, so a manifest
+         written on the vault's Windows machine resolves here (7j, F5).
+      7. **Not caller-visible:** PEP-723 header and `argparse`/`__main__` block dropped (the CLI is
+         8.4); `print` to `logging`; `pandas` declared as a direct dependency rather than relied on
+         transitively via sleap-io (2.1, the open item from 1.1).
 - [ ] 7.2 **Open, decide during section 3:** 3.4 resolves `source_image` against the directory
       holding the `scans.csv` it came from. That base has to reach the copy step somehow, and the two
       options are not equivalent in blast radius:
@@ -277,7 +342,11 @@ the scripts do.
       the vault scripts emits capture mode, skeleton name, or `bloom_experiment_id` in a parseable
       form. Source its *values* from where they live today (F7): `bloom_experiment_id` from
       `generate_readme.py:66`, the accession map from `:85-89`, the skeleton from `skeletons.yaml`
-      per Decision 7. Each of those has two hand-synced copies today; this file is what makes it one
+      per Decision 7. Each of those has two hand-synced copies today; this file is what makes it one.
+      **Obligation from 2.5:** also record the selection parameters — `seed`, `plants_per_group`,
+      `views_per_plant`, and `total_views`. They determine which frames the package holds, and the
+      manifest's enumerated columns carry none of them, so without this the selection is not
+      reproducible from the artifact alone (Decision 5) even though it is deterministic
 - [ ] 8.3a Port `generate_readme.py` as `labeling/render_readme.py`, rendering the README **from the
       8.3 metadata file and the manifest** rather than from hardcoded prose. The labeler-facing
       content (SLEAP install, Notion guide, `v000`/`v001` versioning convention) stays as-is — it is
@@ -296,7 +365,12 @@ the scripts do.
       package path; a validation failure exits non-zero with the error and writes nothing
 - [ ] 8.6 Port `/build-labeling-package` into `.claude/commands/build-labeling-package.md`, updated
       to drive the in-repo CLI rather than vault script paths, and to record the Bloom
-      accession-name lookup as a manual prerequisite (F2) rather than an in-repo step
+      accession-name lookup as a manual prerequisite (F2) rather than an in-repo step.
+      **Obligation from F9:** drop Phase 1 step 4's manual `pd.concat` of the per-age-group QC files
+      (`build-labeling-package.md:128-133`). It existed only because the script's glob branch could
+      not resolve a wildcard directory; the port fixes that, so the CLI now takes
+      `<qc_out>/*/10_final_data.csv` directly. Leaving the step in would keep a workaround for a bug
+      that no longer exists
 - [ ] 8.7 Document continue-labeling as **re-derive + republish** in the workflow doc: re-fetch via
       `bloomctl download --experiment-id <id>`, re-select wider, publish a new version — with the
       `save_slp` truncation reason stated, not just the instruction

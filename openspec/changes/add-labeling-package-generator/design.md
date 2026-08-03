@@ -238,8 +238,9 @@ concatenates the per-age-group files with a hand-written `pd.concat` in Phase 1 
 single `all_cleaned.csv` to the script. The glob branch is therefore dead code in the documented
 path, and the manual concat is a workaround for a bug rather than a step with a reason.
 
-Held as a strict `xfail` against the port; the fix and its consequence for the workflow doc belong
-to the deviation pass.
+**Resolved in the port:** the branch anchors at the last wildcard-free component, so a wildcard in a
+directory component resolves. The doc's manual concatenation step becomes unnecessary — a change to
+Phase 1 that section 8.6 should make when it ports the command doc.
 
 ### F10 — Determinism holds for identical bytes, not for identical content
 
@@ -253,6 +254,19 @@ Decision 6 re-fetches it. A re-download that returns the same scans in a differe
 produces a different label set — the same failure F3 describes, reached without changing any
 parameter at all. The 2.7 fix closes both, since ordering by a content-derived key does not depend
 on row order.
+
+### The monotonicity guarantee starts here, not retroactively
+
+Worth stating plainly because Decision 6 reads as though it applies to what already exists: 2.7
+changes *which* plants and views a given seed selects. Widening is monotone **from this port
+forward** — a package built by this code can be re-derived wider and yield a superset. The eight
+collections published by the vault script cannot. Re-deriving one of them with the same seed
+produces a different, non-superset selection.
+
+This is not a regression the port introduces; the old selection had no superset property to lose
+(F3). But it does mean "re-derive + republish" is a forward guarantee, and widening a
+pre-port collection is a **new label set**, not a v2 of the old one. #10's `LabelCard` versioning
+should not present it as one.
 
 ## Decision 1: Port first, change second — characterization tests before behavior changes
 

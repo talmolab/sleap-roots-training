@@ -31,10 +31,17 @@ dependencies = [
     # pandas is DIRECT, not transitive (task 2.1). The ported selection code imports it
     # itself; it happened to be importable already only because sleap-io depends on it,
     # and relying on that would break silently the day sleap-io drops it.
-    # The range is wide on purpose: the API used here is read_csv/groupby/to_csv, and the
-    # only version-sensitive behavior is `.sample()`'s draw, which section 2's monotone
-    # widening task removes. uv.lock pins the version CI actually exercises.
+    # The range is wide on purpose: the API used here is read_csv/groupby/to_csv, and
+    # task 2.7 removed the one version-sensitive behavior — selection no longer goes
+    # through pandas' RNG, so `.sample()`'s draw semantics can no longer move the frames
+    # a package labels. uv.lock pins the version CI actually exercises.
     "pandas>=2.2.0,<4.0.0",
+    # sleap-io is a CORE dependency, not an extra (design.md Decision 4): building labeling
+    # packages is first-class CLI functionality, so a default install must not have a
+    # subcommand that fails on import. Extras are for heavy/platform-specific backends
+    # (sleap-nn, torch), not for merely-new dependencies.
+    # The <0.8.0 cap deliberately matches the `train` extra's pre-mask line so the two cannot
+    # disagree; sleap-io is declared in BOTH places on purpose — see the `train` comment.
     "sleap-io>=0.7.1,<0.8.0",
     "sleap-roots-contracts==0.1.0a3",
     "wandb>=0.28.0,<0.29.0",
