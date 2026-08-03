@@ -106,6 +106,37 @@ belongs upstream if it is wanted.
   matrix still contains only what we ship). Accepted.
 - **The exact pin means this repo must be bumped by hand for every contract release.** → Accepted;
   that is the point of the first decision above.
+- **A future contract release changes `Mode` from a `Literal` to something else.** → `get_args()`
+  returns `()` for a non-parameterized type *without raising*, so `MODE_VOCAB` would degrade to the
+  empty set — "no mode is valid" — and the failure would surface far from its cause, as every real
+  mode being rejected. `chooser` therefore raises at import when the derived vocabulary is empty,
+  naming what changed. Note the two tests named for this invariant cannot catch it on their own:
+  `test_mode_vocab_is_the_contract_vocabulary_unforked` re-derives the set exactly as production
+  does, so both sides degrade together and it still passes, and a `MODE_VOCAB`-parametrized test
+  degrades to a *skip*, not a failure. Both now carry an independent literal witness alongside the
+  re-derivation.
+- **A future contract narrowing invalidates hand-written configs, not just matrix rows.**
+  → `MODE_VOCAB` also backs `validate`'s check on `experiment.mode`, so the contract now governs a
+  user-authoring surface. The committed matrix and `examples/` were already guarded; `docs/training.md`
+  is the third authoring surface and nothing read it, so a test now asserts every `mode:` the guide
+  tells users to write stays contract-valid. Flagged in the CHANGELOG for downstream config authors.
+- **Eager import cost.** `from sleap_roots_contracts import Mode` at `chooser` module scope is the
+  first place this package actually imports the contract (and transitively pydantic) — `lineage.py`
+  only read its version via `importlib.metadata`. Since `config.py` imports `chooser` eagerly, this
+  lands on the CLI's import path: measured here at ~183 ms added to a bare-interpreter start (~199 ms
+  vs ~16 ms), ~124 ms of which is the contract/pydantic import itself. Accepted — a one-time
+  cold-start cost, immaterial next to training runtime — but it does cut against this repo's lazy-
+  import convention for heavy dependencies (`wandb`, `sleap-nn`), so it is recorded rather than
+  silent. Deferring it would mean making `MODE_VOCAB` a function, which trades a public constant two
+  modules consume for a cost nobody has felt.
+
+**Deliberate scope boundary: `root_type` is not collapsed.** `config.ROOT_TYPE_VOCAB` and
+`cards._ROOT_SLOTS` are still hand-maintained local copies of what is now a contract-owned
+`RootType` (`('primary', 'lateral', 'crown')`, verified against `0.1.0a6`) — the identical
+duplication this change removes for `mode`, and `get_args(<contract Literal>)` is now the
+established pattern for fixing it. Left out on purpose so the bump stays one reviewable change with
+one behavior claim; it is an oversight only if nobody writes it down, so this is the note. Worth a
+follow-up issue.
 
 ## Migration Plan
 

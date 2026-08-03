@@ -15,6 +15,7 @@ OmegaConf alone, so ``validate`` works (partially, with a clear note) without th
 
 from __future__ import annotations
 
+import difflib
 import importlib.util
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -202,10 +203,20 @@ def _validate_experiment(cfg: DictConfig) -> None:
 
 
 def _check_vocab(field_name: str, value: str, vocab: frozenset[str]) -> None:
-    """Raise if ``value`` is outside ``vocab``, naming the field and allowed values."""
-    if value not in vocab:
-        allowed = ", ".join(sorted(vocab))
-        raise ConfigError(f"invalid {field_name}: {value!r} (allowed: {allowed})")
+    """Raise if ``value`` is outside ``vocab``, naming the field and allowed values.
+
+    Matching is exact — no case or whitespace normalization anywhere, deliberately, so
+    that a value this accepts is a value the published card and the consumer accept too.
+    A near miss therefore gets a *hint*, never a silent correction.
+    """
+    if value in vocab:
+        return
+    allowed = ", ".join(sorted(vocab))
+    message = f"invalid {field_name}: {value!r} (allowed: {allowed})"
+    close = difflib.get_close_matches(str(value).strip().lower(), sorted(vocab), n=1)
+    if close:
+        message += f" — did you mean {close[0]!r}?"
+    raise ConfigError(message)
 
 
 def _check_seed(cfg: DictConfig) -> None:

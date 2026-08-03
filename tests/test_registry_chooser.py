@@ -104,11 +104,57 @@ def test_mode_vocab_is_the_contract_vocabulary_unforked():
     from sleap_roots_contracts import Mode
 
     assert chooser.MODE_VOCAB == frozenset(get_args(Mode))
+    # Deliberately NOT re-derived via get_args: that is how production builds the set, so
+    # comparing the two only proves they agree, including when both are empty. If `Mode`
+    # stops being a `Literal`, get_args() returns () on both sides and the check above
+    # still passes. This literal is the independent witness.
+    assert chooser.MODE_VOCAB == {"cylinder", "multiplant cylinder", "plate"}
+
+
+def test_mode_vocab_is_non_empty():
+    # The degradation the assertion above cannot see on its own: get_args() returns ()
+    # rather than raising for a non-parameterized type, so an upstream Literal -> Enum
+    # change would silently mean "no mode is valid". chooser raises at import for this;
+    # keep a named test so the intent survives a refactor of that guard.
+    assert chooser.MODE_VOCAB
 
 
 def test_species_vocab_stays_local():
     # The mirror of the above: ModelCard.species is a free `str`, so there is no
     # contract-side species vocabulary to defer to. Guards against a future reader
     # assuming both constants moved.
+    import sleap_roots_contracts
+    from sleap_roots_contracts import ModelCard
+
     assert "soybean" in chooser.SPECIES_VOCAB
-    assert not hasattr(__import__("sleap_roots_contracts"), "Species")
+    # The actual invariant, asserted on the field rather than on a symbol name: a
+    # contract-side species vocabulary would arrive the way `Mode` did -- as a Literal
+    # annotation on ModelCard.species -- which a `hasattr(..., "Species")` probe would
+    # not see. The symbol check stays as the secondary signal.
+    assert ModelCard.model_fields["species"].annotation is str
+    assert not hasattr(sleap_roots_contracts, "Species")
+
+
+def test_every_committed_matrix_mode_is_contract_valid():
+    """The spec scenario, asserted against the committed file rather than the loader.
+
+    Reading via ``load_selection_matrix`` would be vacuous: the loader already rejects a
+    row whose mode is outside ``MODE_VOCAB``, so anything reachable through
+    ``matrix.rows`` satisfies this by construction. Parsing the YAML directly is what
+    makes it a real check on the *data* — it fails if a row is committed with a bad mode
+    and the loader's guard is ever loosened, which is the pair the scenario is about.
+    """
+    from importlib.resources import as_file, files
+    from typing import get_args
+
+    from omegaconf import OmegaConf
+    from sleap_roots_contracts import Mode
+
+    resource = files(chooser._DATA_PACKAGE).joinpath(chooser._DATA_RESOURCE)
+    with as_file(resource) as path:
+        raw = OmegaConf.load(path)
+
+    modes = [row["mode"] for row in raw["models"]]
+    assert modes, "committed selection matrix has no rows"
+    for mode in modes:
+        assert mode in get_args(Mode), f"committed mode {mode!r} is out of vocabulary"

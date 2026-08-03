@@ -79,3 +79,28 @@ def test_guide_has_no_placeholders():
     text = _read()
     for placeholder in ("TODO", "TBD"):
         assert placeholder not in text, f"guide still has a {placeholder} placeholder"
+
+
+def test_documented_experiment_modes_stay_contract_valid():
+    """Every ``mode:`` the guide tells a user to write must still be accepted.
+
+    ``MODE_VOCAB`` now comes from ``sleap_roots_contracts.Mode``, so the contract governs
+    a **user-authoring** surface, not only published card metadata. An upstream narrowing
+    of ``Mode`` would therefore invalidate configs people have already written by copying
+    this guide. The shipped ``examples/`` are covered by ``test_examples_validate``; this
+    is the other authoring surface, and nothing else reads it.
+    """
+    from sleap_roots_training.registry.chooser import MODE_VOCAB
+
+    documented = [
+        line.split(":", 1)[1].split("#", 1)[0].strip()
+        for block in _FENCE.findall(_read())
+        for line in block.splitlines()
+        if line.strip().startswith("mode:")
+    ]
+    assert documented, "guide documents no `mode:` value — did the example block move?"
+    for mode in documented:
+        assert mode in MODE_VOCAB, (
+            f"docs/training.md tells users to write mode: {mode!r}, which the contract "
+            f"vocabulary no longer accepts (allowed: {sorted(MODE_VOCAB)})"
+        )

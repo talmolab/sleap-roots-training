@@ -23,6 +23,20 @@ All notable changes to this project are documented here. The format is based on
   surface (no case or whitespace normalization — `Cylinder` and `multiplant-cylinder` are errors,
   as before), which is now a recorded decision rather than incidental behavior. This also unblocks
   `add-label-registry` (#10), which needs `LabelCard` (new in `0.1.0a6`).
+
+  **For config authors:** because `experiment.mode` is now validated against the contract's
+  vocabulary rather than a local copy, a future `sleap-roots-contracts` release that *narrows*
+  `Mode` would reject a `mode:` you have already written. The three authoring surfaces are guarded
+  in CI — the committed selection matrix, the shipped `examples/`, and every `mode:` documented in
+  `docs/training.md` — so a narrowing fails at bump time here rather than in your config. Modes are
+  still matched exactly (no case or whitespace normalization); a near miss now gets a "did you
+  mean" hint on the error, never a silent correction.
+
+  **Cold-start cost:** this is the first code path in the package that actually imports
+  `sleap_roots_contracts` (and transitively `pydantic`) rather than only reading its version, and
+  `chooser` is on the CLI's import path. Measured at ~183 ms added to interpreter start. Immaterial
+  next to a training run, but noted because it departs from the lazy-import convention this repo
+  uses for `wandb` and `sleap-nn`.
 - The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
   wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
   `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb

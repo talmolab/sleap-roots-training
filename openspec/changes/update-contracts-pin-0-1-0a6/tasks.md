@@ -36,13 +36,24 @@ regression guards on an invariant that previously held only because two lists ag
 - [x] 3.1 `tests/test_registry_chooser.py`: assert `MODE_VOCAB` is the contract vocabulary
       **unforked**, plus a mirror asserting `SPECIES_VOCAB` stays local. Follows the existing
       `test_root_type_vocab_mirrors_cards_slots` drift-guard idiom.
-      **Deviation from the proposal:** the originally-planned test ("every mode in the committed
-      matrix is contract-valid") is *unwritable as a failing test* — the loader validates rows
-      against `MODE_VOCAB`, which is now derived from `Mode`, so the assertion holds by
-      construction and can never fail. That scenario's real enforcement is the loader raising at
-      load time, already covered by `test_load_selection_matrix_has_seven_rows`. What is written
-      instead guards the failure that *can* happen: a human re-forking the vocabulary locally
-      (`frozenset(get_args(Mode)) | {"cyl"}`) to let a stray value through.
+      **Corrected after review.** The original note claimed the planned test ("every mode in the
+      committed matrix is contract-valid") was *unwritable as a failing test*, and attributed the
+      scenario to `test_load_selection_matrix_has_seven_rows`. Both were wrong in the same way.
+      That test asserts row counts, checksums, and model ids — it contains no assertion about mode
+      validity, and satisfies the scenario only as a side effect (a `Mode` narrowing breaks the
+      loader, which breaks it as collateral damage). And the test *is* writable: it is vacuous only
+      if it reads rows back through `load_selection_matrix`, which already rejects an
+      out-of-vocabulary mode. `test_every_committed_matrix_mode_is_contract_valid` parses the
+      committed YAML directly, which checks the data rather than the guard, and so fails if a bad
+      row is committed and the loader's check is ever loosened.
+      Also written, guarding the failure that *can* happen: a human re-forking the vocabulary
+      locally (`frozenset(get_args(Mode)) | {"cyl"}`) to let a stray value through.
+      **Hardened after review:** `test_mode_vocab_is_the_contract_vocabulary_unforked` re-derived
+      the vocabulary exactly as production does, so an upstream `Literal` → `Enum` change degraded
+      both sides to `frozenset()` and the assertion still passed. It now carries an independent
+      literal witness, `chooser` raises at import on an empty vocabulary, and
+      `test_species_vocab_stays_local` asserts on `ModelCard.model_fields["species"].annotation`
+      rather than probing for a top-level `Species` symbol the realistic drift path would not add.
 - [x] 3.2 `tests/test_registry_cards.py`: parametrized over every mode the loader accepts — a card's
       metadata validates against the real `ModelCard` and round-trips `mode` unchanged. Verified
       non-vacuous: the contract rejects `multiplant-cylinder`, `Cylinder`, `cyl`, and `" cylinder"`,

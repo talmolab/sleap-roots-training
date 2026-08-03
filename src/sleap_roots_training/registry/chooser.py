@@ -21,12 +21,26 @@ from sleap_roots_contracts import Mode
 #: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned
 #: here, not by the contract: ``ModelCard.species`` is a free ``str``, so there is no
 #: contract-side vocabulary to defer to.
-SPECIES_VOCAB = frozenset({"soybean", "canola", "pennycress", "arabidopsis", "rice"})
+SPECIES_VOCAB: frozenset[str] = frozenset(
+    {"soybean", "canola", "pennycress", "arabidopsis", "rice"}
+)
 #: Canonical mode vocabulary the consumer selects on, derived from the contract-owned
 #: ``sleap_roots_contracts.Mode`` rather than restated here. ``ModelCard.mode`` matches
 #: this vocabulary exactly (no case or whitespace normalization), so a mode this loader
 #: accepts is a mode the consumer can match — by construction, not by reconciliation.
-MODE_VOCAB = frozenset(get_args(Mode))
+MODE_VOCAB: frozenset[str] = frozenset(get_args(Mode))
+
+if not MODE_VOCAB:
+    # `typing.get_args()` returns `()` for anything that is not a parameterized generic,
+    # and does not raise. So if an upstream release ever changes `Mode` from a `Literal`
+    # to an `Enum` (or a plain `str` alias), this vocabulary degrades to "no mode is
+    # valid" rather than failing. That surfaces far from its cause — every real mode
+    # starts getting rejected — so fail here, at the seam, naming what changed.
+    raise RuntimeError(
+        "sleap_roots_contracts.Mode produced an empty vocabulary via typing.get_args(). "
+        "Mode is probably no longer a Literal; MODE_VOCAB cannot be derived from it. "
+        f"Got: {Mode!r}"
+    )
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"
