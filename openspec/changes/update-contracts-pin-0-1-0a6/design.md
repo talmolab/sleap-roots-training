@@ -135,8 +135,11 @@ belongs upstream if it is wanted.
 `RootType` (`('primary', 'lateral', 'crown')`, verified against `0.1.0a6`) — the identical
 duplication this change removes for `mode`, and `get_args(<contract Literal>)` is now the
 established pattern for fixing it. Left out on purpose so the bump stays one reviewable change with
-one behavior claim; it is an oversight only if nobody writes it down, so this is the note. Worth a
-follow-up issue.
+one behavior claim; it is an oversight only if nobody writes it down, so this is the note. Tracked
+in #38, which also records the wrinkle that makes it more than a find-and-replace: `_ROOT_SLOTS` is
+an *ordered* tuple driving card emission order, while `ROOT_TYPE_VOCAB` is an unordered membership
+set, so deriving both from `get_args(RootType)` would couple emission order to the contract's
+declaration order.
 
 ## Migration Plan
 
