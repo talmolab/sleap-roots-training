@@ -1,9 +1,9 @@
 ## Why
 
 **Every label artifact in `wandb-registry-sleap-roots-labels` was produced by code that does not
-exist in any `talmolab` repository.** `/build-labeling-package` and the scripts it drives
-(`build_slp_project.py`, `select_samples.py`) live only in a personal vault — not here, not tested,
-not run in CI, not reviewable. Issue #10's `publish-labels` path is specified to wrap them, and
+exist in any `talmolab` repository.** `/build-labeling-package` and the four scripts it drives
+(`select_samples.py`, `copy_selected_images.py`, `build_slp_project.py`, `generate_readme.py`) live
+only in a personal vault — not here, not tested, not run in CI, not reviewable. Issue #10's `publish-labels` path is specified to wrap them, and
 there is nothing public for it to wrap: anyone other than the original author is blocked from
 building, reviewing, or maintaining the label-publishing pipeline (#26).
 
@@ -45,6 +45,13 @@ labels can ever become.**
   does not inherit the truncation above.
 - Add **`sleap-io`** as a dependency (see design.md — it is not currently one, and this is the first
   code in the repo that reads or writes `.slp` files).
+- **Parameterize the builder by crop** off a committed, provenance-stamped `skeletons.yaml`. The
+  vault script hardcodes soybean's 6-node primary / 4-node lateral while the workflow doc advertises
+  `--crop` and a five-crop table, so this is new code with no original to port (design.md Decision
+  7). The table holds **native** skeletons — deliberately not Tier 2.7's unified node count.
+- **Make a widened re-selection monotone.** The ported selection re-draws rather than extends, so a
+  wider run is not a superset of a narrower one — which the re-derive-and-republish recovery path
+  below depends on (design.md F3). A recorded deviation, sequenced after the characterization tests.
 
 ## What This Change Does *Not* Do
 
@@ -68,6 +75,10 @@ consume rather than a described one.
 - **Affected code:** `src/sleap_roots_training/labeling/` (new), `cli.py`, `pyproject.toml`
   (`sleap-io`), `.claude/commands/build-labeling-package.md` (new), `tests/`, `docs/`.
 - **Affected issues:** closes #26; unblocks the `publish-labels` half of #10.
-- **Source material:** the port needs the vault scripts, mirrored to Box at
-  `Phenotyping_team_GH/sleap-roots-training/onboarding/`. Task 0 gates on obtaining them — the port
-  is not a rewrite, and characterization tests come before any behavior change (design.md).
+- **Source material — obtained in full; Task 0's source read is complete.** All four workflow
+  scripts are in hand (`select_samples.py` and `build_slp_project.py` 2026-07-29;
+  `copy_selected_images.py` and `generate_readme.py` 2026-08-03) and have been read end to end.
+  Every step now has an original to characterize against, so no part of this change is new code
+  standing in for a script that could not be recovered. Task 0's remaining items are confirmations
+  from eberrigan — the Decision 2 placement and the Decision 4 dependency call — not missing
+  material.
