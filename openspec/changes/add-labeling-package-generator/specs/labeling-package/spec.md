@@ -42,6 +42,39 @@ recoverable from the artifact alone without access to the original source filesy
 - **WHEN** a package is validated whose declared frame count disagrees with the manifest row count
 - **THEN** validation fails with an error reporting both numbers
 
+### Requirement: Curated Images Correspond One-To-One With Manifest Rows
+
+Every row of `sample_manifest.csv` SHALL correspond to exactly one curated image, and every curated
+image SHALL correspond to exactly one manifest row. `output_filename` SHALL be unique across the
+manifest, and the step that populates the curated image directory SHALL fail rather than skip a
+source it cannot resolve. Neither a dropped image nor a duplicate name SHALL be reported as a
+successful build.
+
+This is what stops two independent silent corruptions. A source path that resolves nowhere currently
+produces a warning and a zero exit at two separate stages, yielding an empty package that reports
+success. A duplicate `output_filename` currently overwrites, so two scans are drawn from one image
+while every count still reads correct.
+
+#### Scenario: An unresolvable source image fails the step
+
+- **WHEN** the curated image directory is populated and any row's `source_image` cannot be resolved
+  to an existing file
+- **THEN** the step fails with an error naming the row and the path it resolved to, and does not
+  report success with a partially populated directory
+
+#### Scenario: A duplicate curated filename is rejected
+
+- **WHEN** a selection or a manifest would assign the same `output_filename` to two different frames
+- **THEN** it fails with an error naming the colliding rows, rather than overwriting one with the
+  other
+
+#### Scenario: Validation catches a manifest/image mismatch
+
+- **WHEN** a package directory is validated whose curated image count disagrees with its manifest
+  row count
+- **THEN** validation fails with an error reporting both numbers, rather than the discrepancy
+  surfacing only as prose in the README
+
 ### Requirement: Deliberate Image Embedding
 
 The package builder SHALL write the `.slp` with images embedded, as an explicit and tested step. A
