@@ -4149,15 +4149,15 @@ wheels = [
 
 [[package]]
 name = "sleap-roots-contracts"
-version = "0.1.0a3"
+version = "0.1.0a6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/35/5c/acd1f870f68f29a05d9d9af4bfb9030521e3d43a88c3ebc40a57b4e5dad1/sleap_roots_contracts-0.1.0a3.tar.gz", hash = "sha256:2c7b5e229994c62e2ef800289d01c4137cba857c42ce22ae0e83f858a4aeaa95", size = 18146, upload-time = "2026-07-04T19:54:54.616Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/b5/3c3072c02e977a30f4713a0bae531ec651902192d206915d7ac0450efb79/sleap_roots_contracts-0.1.0a6.tar.gz", hash = "sha256:e4ae4598f771f22beccf78ea0f72acc922f87e39f1fed2f88f5796f38e29eed1", size = 27970, upload-time = "2026-07-31T22:06:33.256Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2a/68/1305aa91d80b8ba37d5af79c989cef542188d8212516e77c4ed30af0114b/sleap_roots_contracts-0.1.0a3-py3-none-any.whl", hash = "sha256:7175e1ba5365c6085f9970f03cd3caf746788abd12ef4baec6c703a148cb5c47", size = 24250, upload-time = "2026-07-04T19:54:53.67Z" },
+    { url = "https://files.pythonhosted.org/packages/25/35/d4b4f1d7ed702b1d70db54ab83461ede644ed7f95af7e99a774928cff80d/sleap_roots_contracts-0.1.0a6-py3-none-any.whl", hash = "sha256:5d779d8016db27ed19257603cb289165e75a14d1c9bc0aa2c546ef67f1c902ac", size = 35343, upload-time = "2026-07-31T22:06:32.093Z" },
 ]
 
 [[package]]
@@ -4194,7 +4194,7 @@ requires-dist = [
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "sleap-io", marker = "extra == 'train'", specifier = ">=0.7.1,<0.8.0" },
     { name = "sleap-nn", marker = "extra == 'train'", specifier = ">=0.2.0,<0.3.0" },
-    { name = "sleap-roots-contracts", specifier = "==0.1.0a3" },
+    { name = "sleap-roots-contracts", specifier = "==0.1.0a6" },
     { name = "torch", marker = "extra == 'train'", specifier = ">=2.5.0" },
     { name = "wandb", specifier = ">=0.28.0,<0.29.0" },
 ]

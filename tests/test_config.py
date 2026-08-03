@@ -326,3 +326,18 @@ def test_root_type_vocab_mirrors_cards_slots():
     from sleap_roots_training.registry import cards
 
     assert config.ROOT_TYPE_VOCAB == frozenset(cards._ROOT_SLOTS)
+
+
+@pytest.mark.parametrize(
+    "mode", ["Cylinder", "CYLINDER", " cylinder", "cylinder ", "multiplant-cylinder"]
+)
+def test_experiment_mode_is_matched_exactly(write_config, mode):
+    # Deliberate, not incidental: modes match exactly at every surface -- hand-written
+    # config, published card metadata, and consumer selection -- with no case or
+    # whitespace normalization anywhere. sleap-roots-contracts' ModelCard.mode does not
+    # normalize either, so accepting a cased or slugged mode here without canonicalizing
+    # it would merely move the failure to publish time, where it costs far more. Locked
+    # so a later "helpful" .lower() has to argue with a test first.
+    path = write_config(overrides={"experiment": {"mode": mode}})
+    with pytest.raises(config.ConfigError, match="mode"):
+        config.validate_config(config.load_config(path))

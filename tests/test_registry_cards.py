@@ -1,5 +1,7 @@
 from collections import Counter
 
+import pytest
+
 from sleap_roots_training.registry import cards, chooser
 from sleap_roots_training.registry.chooser import SelectionRow
 
@@ -120,6 +122,23 @@ def test_metadata_validates_against_real_modelcard():
     )
     assert model_card.sleap_nn_version is None  # despite extra source_model_id
     assert model_card.mode == "cylinder"
+
+
+@pytest.mark.parametrize("mode", sorted(chooser.MODE_VOCAB))
+def test_every_accepted_mode_round_trips_through_the_real_modelcard(mode):
+    # The loader accepting a mode is a set membership check; ModelCard accepting it is
+    # an exact Literal match that normalizes neither case nor whitespace. The two can
+    # diverge in the middle: if card_to_metadata ever emitted the hyphenated
+    # collection-id slug ("multiplant-cylinder"), the loader would still pass and the
+    # consumer would silently never match. Covers every mode, not just cylinder.
+    from sleap_roots_contracts import ModelCard
+
+    card = cards.Card("rice", mode, 2, 14, "primary", "r/p")
+    meta = cards.card_to_metadata(card)
+    model_card = ModelCard.model_validate(
+        {**meta, "registry_id": "rid", "version": "v1", "weights_checksum": "sha"}
+    )
+    assert model_card.mode == mode  # raw value survives, unslugged and uncased
 
 
 def test_collection_id_slugs_mode():

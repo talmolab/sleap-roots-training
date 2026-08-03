@@ -13,14 +13,20 @@ import hashlib
 from dataclasses import dataclass
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Optional
+from typing import Optional, get_args
 
 from omegaconf import OmegaConf
+from sleap_roots_contracts import Mode
 
-#: Canonical ``models-downloader`` species vocabulary the consumer selects on.
+#: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned
+#: here, not by the contract: ``ModelCard.species`` is a free ``str``, so there is no
+#: contract-side vocabulary to defer to.
 SPECIES_VOCAB = frozenset({"soybean", "canola", "pennycress", "arabidopsis", "rice"})
-#: Canonical ``models-downloader`` mode vocabulary the consumer selects on.
-MODE_VOCAB = frozenset({"cylinder", "multiplant cylinder", "plate"})
+#: Canonical mode vocabulary the consumer selects on, derived from the contract-owned
+#: ``sleap_roots_contracts.Mode`` rather than restated here. ``ModelCard.mode`` matches
+#: this vocabulary exactly (no case or whitespace normalization), so a mode this loader
+#: accepts is a mode the consumer can match — by construction, not by reconciliation.
+MODE_VOCAB = frozenset(get_args(Mode))
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"

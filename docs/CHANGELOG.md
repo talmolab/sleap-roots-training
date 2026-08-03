@@ -7,6 +7,22 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- Pinned `sleap-roots-contracts` to `0.1.0a6` (from `0.1.0a3`) and **collapsed the local mode
+  vocabulary into the contract-owned `Mode`**. `chooser.MODE_VOCAB` is now derived from
+  `sleap_roots_contracts.Mode` rather than restated here, so the producer and the
+  `sleap-roots-predict` consumer agree by construction instead of by reconciliation at acceptance.
+  `SPECIES_VOCAB` stays local — `ModelCard.species` is a free `str`, so there is no contract-side
+  species vocabulary to defer to. **No behavior change in this repo:** the contract's `Mode` is
+  set-identical to the vocabulary it replaces, and all 7 rows of the committed selection matrix are
+  already in vocabulary, so no card that validated before stops validating. Upstream, `0.1.0a6` is
+  a breaking *validation* tightening (`ModelCard.mode` is a `Mode` and no longer a free `str`,
+  matched exactly with no case or whitespace normalization; `age_min`/`age_max` reject `bool` and
+  `numpy.bool_`) — neither reaches anything this package produces. Note that `MODE_VOCAB` also
+  backs `validate`'s check on the hand-written `experiment.mode`, so the contract now governs a
+  user-facing config field as well as published metadata; modes are matched **exactly** at every
+  surface (no case or whitespace normalization — `Cylinder` and `multiplant-cylinder` are errors,
+  as before), which is now a recorded decision rather than incidental behavior. This also unblocks
+  `add-label-registry` (#10), which needs `LabelCard` (new in `0.1.0a6`).
 - The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
   wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
   `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb

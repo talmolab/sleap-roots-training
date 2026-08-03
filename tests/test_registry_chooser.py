@@ -92,3 +92,23 @@ def test_unknown_mode_raises(tmp_path):
     )
     with pytest.raises(ValueError, match="teacup"):
         chooser.load_selection_matrix(bad)
+
+
+def test_mode_vocab_is_the_contract_vocabulary_unforked():
+    # The mode vocabulary has exactly one owner: sleap-roots-contracts. This fails if
+    # it is ever re-forked locally (say, `frozenset(get_args(Mode)) | {"cyl"}` added to
+    # let a stray value load) -- which is precisely how producer and consumer drift
+    # apart with no error raised anywhere until a scan silently matches no model.
+    from typing import get_args
+
+    from sleap_roots_contracts import Mode
+
+    assert chooser.MODE_VOCAB == frozenset(get_args(Mode))
+
+
+def test_species_vocab_stays_local():
+    # The mirror of the above: ModelCard.species is a free `str`, so there is no
+    # contract-side species vocabulary to defer to. Guards against a future reader
+    # assuming both constants moved.
+    assert "soybean" in chooser.SPECIES_VOCAB
+    assert not hasattr(__import__("sleap_roots_contracts"), "Species")
