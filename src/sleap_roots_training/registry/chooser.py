@@ -30,16 +30,28 @@ SPECIES_VOCAB: frozenset[str] = frozenset(
 #: accepts is a mode the consumer can match — by construction, not by reconciliation.
 MODE_VOCAB: frozenset[str] = frozenset(get_args(Mode))
 
-if not MODE_VOCAB:
-    # `typing.get_args()` returns `()` for anything that is not a parameterized generic,
-    # and does not raise. So if an upstream release ever changes `Mode` from a `Literal`
-    # to an `Enum` (or a plain `str` alias), this vocabulary degrades to "no mode is
-    # valid" rather than failing. That surfaces far from its cause — every real mode
-    # starts getting rejected — so fail here, at the seam, naming what changed.
+if not MODE_VOCAB or not all(isinstance(mode, str) for mode in MODE_VOCAB):
+    # `typing.get_args()` does not raise on a shape it cannot destructure; it degrades,
+    # in two different directions, and neither one is an error until much later:
+    #
+    #   Mode = Enum / plain str alias  -> ()                       -> empty vocabulary
+    #   Annotated[Literal[...], Field] -> (Literal[...], FieldInfo) -> typing objects
+    #   Optional[Literal[...]]         -> (Literal[...], NoneType)  -> typing objects
+    #   Union[Literal[...], Literal[]] -> (Literal[...], Literal[]) -> typing objects
+    #
+    # Only the first is empty, so an emptiness check alone misses the other three — and
+    # `Annotated[..., Field(...)]` is idiomatic for a pydantic-first contracts package.
+    # In all four, no real mode is in `MODE_VOCAB` and the `frozenset[str]` annotation
+    # above becomes a runtime falsehood. Left to surface on its own it does so inside
+    # the *error-reporting* path (`sorted()` over mixed types) and at pytest collection
+    # time, far from the cause. So fail here, at the seam, naming what changed.
+    #
+    # Deliberately no `sorted()` on the members below: they are exactly the values whose
+    # type is in question, and sorting them is what crashes while reporting.
     raise RuntimeError(
-        "sleap_roots_contracts.Mode produced an empty vocabulary via typing.get_args(). "
-        "Mode is probably no longer a Literal; MODE_VOCAB cannot be derived from it. "
-        f"Got: {Mode!r}"
+        "sleap_roots_contracts.Mode did not yield a vocabulary of strings via "
+        "typing.get_args(); MODE_VOCAB cannot be derived from it. Mode is probably no "
+        f"longer a plain Literal. Got: {Mode!r} -> {[repr(a) for a in get_args(Mode)]}"
     )
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
