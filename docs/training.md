@@ -214,12 +214,12 @@ directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinc
 `output_stride` of the PyTorch configs; `tf-reference.md` warns against conflating them.) TF remains
 context only, not a gate.
 
-### Finding: at `output_stride 2`, `sigma 2.5` collapses but `sigma 5.0` trains (underlying cause unresolved)
+### Finding: the `output_stride 2` collapse is a training-schedule (step-count) artifact, not the loss
 
 The finer [`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) config is seed-unstable at
-`confmaps.sigma 2.5`, but a controlled ablation (same config, same 3 seeds, **only `sigma`
-changed** — [`..._os2_sigma5.yaml`](../examples/baseline_bottomup_v000_os2_sigma5.yaml)) settles the
-cause:
+`confmaps.sigma 2.5`. A controlled ablation (same config, same 3 seeds, **only `sigma`
+changed**, [`..._os2_sigma5.yaml`](../examples/baseline_bottomup_v000_os2_sigma5.yaml)) shows the
+`sigma` sensitivity:
 
 | os2 config | seed 42 | seed 43 | seed 44 | stable? | `val/confmaps_loss` |
 |------------|---------|---------|---------|:-------:|---------------------|
@@ -227,21 +227,22 @@ cause:
 | **σ = 5.0** | 43 / 44, recall 0.87 | 44 / 44, recall 0.88 | 43 / 44, recall 0.80 | ✓ | ~0.0047 (healthy) |
 
 With σ=5.0 (sleap-nn's default) `output_stride 2` trains on **every** seed and detects ~all
-instances; with σ=2.5 the confmap loss sits near zero — the signature of a target minimized by
-predicting ~0. So at the finer output stride, `sigma 2.5` is unstable where `sigma 5.0` is not — but
-**why** is not yet settled. sleap-nn 0.2.0's bottom-up loss is a plain per-pixel `nn.MSELoss()` with
-no foreground weighting (`sleap_nn/training/lightning_modules.py`), which would make sub-support
-targets easy to minimize by predicting ~0. That is **not confirmed as the cause**, though: per Divya
-(sleap-nn), legacy TF SLEAP also had no foreground weighting, yet TF trained `sigma 2.5` at
-`output_stride 2` / full resolution to ~1–2 px (`tests/fixtures/tf_reference/nxe8xgsd.config.json`).
-Since both backends lack fg weighting and only sleap-nn collapses, the loss formula cannot be the sole
-differentiator. A live alternative is the **training schedule**: our runs used a much shorter
-`min_train_steps_per_epoch` than TF (~8× fewer gradient steps and ~8× shorter early-stopping
-patience), which alone could deny sleap-nn the steps to climb out of the "predict background" minimum
-before early stopping. A schedule-matched TF-parity control
-([`examples/tf_parity_v000_os2_schedmatched.yaml`](../examples/tf_parity_v000_os2_schedmatched.yaml),
-issue #36 / sleap-nn#718) is pending to decide between the loss-formula and step-count explanations;
-until it runs, treat the cause as **unresolved** and `sigma 5.0` as a sleap-nn-specific workaround.
+instances; with σ=2.5 two of three seeds collapse. **The cause is sleap-nn's short default training
+schedule (step count), not the loss**, confirmed by a schedule-matched control. At the settings that
+collapse (full resolution, `output_stride 2`, `sigma 2.5`, TF architecture), all 3 seeds collapse
+under sleap-nn's default `min_train_steps_per_epoch` (~25 steps/epoch); with TF's schedule
+(`min_train_steps_per_epoch: 200` and matching patience,
+[`examples/tf_parity_v000_os2_schedmatched.yaml`](../examples/tf_parity_v000_os2_schedmatched.yaml))
+all 3 seeds train instead (train `dist_avg` 6.3–9.7 px, `dist_p50` 2.6–4.2 px; val `dist_p50`
+5.7–7.8 px, at low recall 0.38–0.63). Both sleap-nn and legacy TF use the same unweighted
+`nn.MSELoss()` (confirmed by Divya), and TF trained `sigma 2.5` at these settings to ~1–2 px, so the
+loss formula is not the differentiator; TF simply ran ~8× more gradient steps, escaping the "predict
+background" minimum before early stopping. `sigma 5.0` is thus one escape route (coarser targets give
+a stronger gradient toward peaks) and more steps is another. **`val/confmaps_loss` is not a reliable
+collapse signal:** the healthy schedule-matched runs sit at ~6e-5, at or below the collapsed runs,
+because on sparse targets both an all-background and a sharp-peak prediction have tiny MSE; the
+reliable signal is 0 matched instances / all-NaN. A foreground-weighted loss (sleap-nn#718) would
+still help convergence and robustness, but it is an enhancement, not the fix for this collapse.
 `online_hard_keypoint_mining` reweights the loss toward hard keypoints; it does not change target
 density.
 
