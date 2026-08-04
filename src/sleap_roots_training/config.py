@@ -29,6 +29,14 @@ from sleap_roots_training.registry.chooser import MODE_VOCAB, SPECIES_VOCAB
 #: (not an import — that attribute is private and carries no stability contract).
 ROOT_TYPE_VOCAB = frozenset({"primary", "lateral", "crown"})
 
+#: Similarity floor for the "did you mean" hint on an out-of-vocabulary value. Named and
+#: passed explicitly rather than left to ``difflib``'s implicit ``0.6``, because ``cyl``
+#: scores **0.545** against ``cylinder`` and would get no hint at the default — and
+#: ``cyl`` is the exact shorthand this vocabulary collapse exists to close. Everything
+#: else already lands well clear: ``Cylinder`` 1.0, ``multiplant-cylinder`` 0.947,
+#: ``cylnder`` 0.933, ``plaet`` 0.800, while ``teacup`` correctly gets nothing.
+_HINT_CUTOFF = 0.5
+
 #: Recognized ``sleap-nn`` top-level config keys (``TrainingJobConfig``). Any other
 #: top-level key besides our ``experiment`` block is rejected, not silently dropped.
 #: This mirrors ``TrainingJobConfig``'s top-level fields — a shallow list used only for
@@ -211,9 +219,17 @@ def _check_vocab(field_name: str, value: str, vocab: frozenset[str]) -> None:
     """
     if value in vocab:
         return
-    allowed = ", ".join(sorted(vocab))
-    message = f"invalid {field_name}: {value!r} (allowed: {allowed})"
-    close = difflib.get_close_matches(str(value).strip().lower(), sorted(vocab), n=1)
+    allowed = sorted(vocab)
+    # `repr` escapes non-printables but leaves printable non-ASCII alone, so a
+    # homoglyph paste renders identically to its own suggestion: `'сylinder'` with a
+    # Cyrillic `с`, beside "did you mean 'cylinder'?", is an unreadable error. Fall
+    # back to `ascii` only when the two differ, leaving `'Cylinder'` and `' cylinder'`
+    # untouched.
+    shown = repr(value) if ascii(value) == repr(value) else ascii(value)
+    message = f"invalid {field_name}: {shown} (allowed: {', '.join(allowed)})"
+    close = difflib.get_close_matches(
+        str(value).strip().lower(), allowed, n=1, cutoff=_HINT_CUTOFF
+    )
     if close:
         message += f" — did you mean {close[0]!r}?"
     raise ConfigError(message)
