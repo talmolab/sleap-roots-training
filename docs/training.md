@@ -214,7 +214,7 @@ directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinc
 `output_stride` of the PyTorch configs; `tf-reference.md` warns against conflating them.) TF remains
 context only, not a gate.
 
-### Finding: the `output_stride 2` collapse was the confmap sigma — not resolution, not the loss
+### Finding: at `output_stride 2`, `sigma 2.5` collapses but `sigma 5.0` trains (underlying cause unresolved)
 
 The finer [`output_stride 2`](../examples/baseline_bottomup_v000_os2.yaml) config is seed-unstable at
 `confmaps.sigma 2.5`, but a controlled ablation (same config, same 3 seeds, **only `sigma`
@@ -228,12 +228,22 @@ cause:
 
 With σ=5.0 (sleap-nn's default) `output_stride 2` trains on **every** seed and detects ~all
 instances; with σ=2.5 the confmap loss sits near zero — the signature of a target minimized by
-predicting ~0. So the collapse was **too-tight confmap targets at the finer output stride**, not a
-resolution ceiling and not fundamentally the loss. (sleap-nn 0.2.0's bottom-up loss is a plain
-per-pixel `nn.MSELoss()` with no foreground weighting, `sleap_nn/training/lightning_modules.py` —
-which is *why* sub-support targets vanish; a foreground-weighted loss would make σ far less finicky.
-Raised upstream with sleap-nn.) `online_hard_keypoint_mining` reweights the loss toward hard
-keypoints; it does not change target density.
+predicting ~0. So at the finer output stride, `sigma 2.5` is unstable where `sigma 5.0` is not — but
+**why** is not yet settled. sleap-nn 0.2.0's bottom-up loss is a plain per-pixel `nn.MSELoss()` with
+no foreground weighting (`sleap_nn/training/lightning_modules.py`), which would make sub-support
+targets easy to minimize by predicting ~0. That is **not confirmed as the cause**, though: per Divya
+(sleap-nn), legacy TF SLEAP also had no foreground weighting, yet TF trained `sigma 2.5` at
+`output_stride 2` / full resolution to ~1–2 px (`tests/fixtures/tf_reference/nxe8xgsd.config.json`).
+Since both backends lack fg weighting and only sleap-nn collapses, the loss formula cannot be the sole
+differentiator. A live alternative is the **training schedule**: our runs used a much shorter
+`min_train_steps_per_epoch` than TF (~8× fewer gradient steps and ~8× shorter early-stopping
+patience), which alone could deny sleap-nn the steps to climb out of the "predict background" minimum
+before early stopping. A schedule-matched TF-parity control
+([`examples/tf_parity_v000_os2_schedmatched.yaml`](../examples/tf_parity_v000_os2_schedmatched.yaml),
+issue #36 / sleap-nn#718) is pending to decide between the loss-formula and step-count explanations;
+until it runs, treat the cause as **unresolved** and `sigma 5.0` as a sleap-nn-specific workaround.
+`online_hard_keypoint_mining` reweights the loss toward hard keypoints; it does not change target
+density.
 
 **os2 σ=5.0 is still not the baseline.** Its val range — `dist_avg` **31.7–36.5 px**, `dist_p50`
 **18.2–23.1 px**, `vis_recall` **0.80–0.88** — is on par with or marginally worse than os4
@@ -244,13 +254,18 @@ the `dist_p90` 67–74 px tail. The error is **detection/association quality + u
 99-frame training set**, not resolution — treat 30–38 px as this dataset/backbone's current number,
 not a lower bound. `output_stride 4` remains the reported Tier 1 baseline.
 
-> **Caveat (issue #36, pending re-run):** the "under-fitting" contribution is partly confounded by an
-> unintended training-schedule mismatch vs the TF reference — the reported runs used
-> `min_train_steps_per_epoch: 25` (one pass over 99 frames) vs TF's ~8× oversampling, so ~250 vs
-> ~2000 gradient steps of early-stopping patience, and they inherited sleap-nn's default geometric
-> augmentation rather than TF's flip-only. [`examples/baseline_bottomup_v000_os4_aligned.yaml`](../examples/baseline_bottomup_v000_os4_aligned.yaml)
-> fixes both; an aligned re-run is pending to separate a **fixable schedule artifact** from an inherent
-> limit. Full divergence list in the parity table below.
+> **Update (issue #36, aligned re-run done):** the "under-fitting" was real on the training set but
+> does not explain the val gap. The reported os4 runs used `min_train_steps_per_epoch: 25` (one pass
+> over 99 frames) vs TF's ~8× oversampling (so ~250 vs ~2000 gradient steps of early-stopping
+> patience), and inherited sleap-nn's default geometric augmentation rather than TF's flip-only.
+> [`examples/baseline_bottomup_v000_os4_aligned.yaml`](../examples/baseline_bottomup_v000_os4_aligned.yaml)
+> fixes both. Re-running all 3 seeds, **train** error dropped sharply (seed44 train `dist_avg` 6.76 px,
+> seed43 11.53) confirming the short schedule really was under-fitting, but **val** barely moved
+> (aligned val `dist_avg` 28.2–32.6, `dist_p50` 14.7–16.6, `vis_recall` 0.89–0.95, vs reported
+> 30.1–37.8 / 17.7–21.2 / 0.85–0.91: within noise on the mean, marginally better on the median). With
+> train at ~6–12 px and val at ~28–33 px, the val gap is **small-data overfitting on 99 frames, not a
+> fixable schedule artifact** (and augmentation-off to match TF likely cost some generalization). os4
+> stays the reported baseline; the aligned config trains better but is not a better baseline on val.
 
 ### Hyperparameter parity vs the TF reference (issue #36)
 
@@ -275,6 +290,7 @@ baseline; "aligned" is [`..._os4_aligned.yaml`](../examples/baseline_bottomup_v0
 | backbone `filters` / `filters_rate` | 24 / 1.5 | 16 / 2.0 | 16 / 2.0 | #36 item 4: divergent, decision pending |
 | backbone `max_stride` | 16 | 32 | 32 | deliberate (deep backbone; revisit) |
 
-The three "aligned" rows are the unintentional drift #36 flagged; the aligned config fixes them and a
-re-run is pending to check whether the accuracy gap narrows. Backbone width and `max_stride` are left
-as documented divergences for a joint decision (tracked in #36).
+The three "aligned" rows are the unintentional drift #36 flagged; the aligned config fixes them. The
+re-run is now done (see the caveat above): fixing the schedule improved training substantially but the
+val gap did not close, so this drift was not the cause of the reported accuracy. Backbone width and
+`max_stride` are left as documented divergences for a joint decision (tracked in #36).
