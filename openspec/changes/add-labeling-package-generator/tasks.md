@@ -251,16 +251,30 @@ the scripts do.
 
 ## 4. Port `build_slp_project.py` faithfully
 
-- [ ] 4.1 Copy the script in as `labeling/build_package.py`, behavior preserved (**including
+- [x] 4.1 Copy the script in as `labeling/build_package.py`, behavior preserved (**including
       `embed=False` at this step** — the embed change is section 5, as its own visible commit)
       **Obligation from 2.10:** the builder reads `frame_index` from the manifest instead of
       re-deriving position by sorting on `view_index` and enumerating. 2.10 pinned `frame_index` as
       authoritative and proved the two derivations currently agree, so this is a swap with no
       behavior change — but until it happens, both derivations still exist and F6 is only half
       closed. Do it in the port rather than deferring it, and note it in section 7
-- [ ] 4.2 (RED) Characterization tests over a fixture: the package directory produced, its contents,
+      **Done 2026-08-04, obligation included.** Same adaptations as sections 2–3 (PEP-723 header and
+      `argparse`/`__main__` dropped, `print` to `logging`). `frame_index` is now the only derivation
+      of a frame's position, and the scan's video is ordered by it too — a position that indexed a
+      differently-ordered video would be a wrong package, so the two had to move together. One new
+      check the swap forces: `frame_index` must be a contiguous rank from zero within a scan, since
+      it indexes into that scan's video. Recorded in section 7
+- [x] 4.2 (RED) Characterization tests over a fixture: the package directory produced, its contents,
       and the `.slp` it writes
-- [ ] 4.3 (GREEN) Make them pass without changing behavior
+- [x] 4.3 (GREEN) Make them pass without changing behavior
+      **Done 2026-08-04 — 14 tests GREEN against the faithful port**, the Decision 1 commit. Pinned:
+      both versioned `soybean_weep_*` outputs, one `Video` per scan holding only the selected views,
+      the 1-based-view to 0-based-rotation translation (the fixture encodes each prediction's view in
+      its x coordinate, so an off-by-one would put another angle's landmarks on the frame), the
+      single canonical skeleton, the hardcoded 6/4-node soybean pair, per-root-type scan inclusion,
+      the multiple-prediction-file warning, and **`embed=False`** — the last is what 5.1 must break.
+      A shared 447-byte `TINY_JPEG` constant lives in `conftest.py` rather than generating images
+      with `imageio`, which is importable here only transitively via sleap-io (the 2.1 trap)
 - [ ] 4.4 (RED) **Characterize the silent-empty-package failure before fixing it** (F1): with an
       unpopulated `images_dir`, the port warns per scan, writes both `.slp` files, and exits 0. Pin
       that, then make it fail loudly — an empty selection is never a successful build
