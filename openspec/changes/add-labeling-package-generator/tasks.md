@@ -187,13 +187,21 @@ the scripts do.
 
 ## 3. Port the image-copy step (unblocked by 0.6)
 
-- [ ] 3.1 Port `copy_selected_images.py` as `labeling/copy_images.py`, behavior preserved —
+- [x] 3.1 Port `copy_selected_images.py` as `labeling/copy_images.py`, behavior preserved —
       including the warn-and-continue on a missing source and the exit-0 summary (F5). The fail-loud
       change is 3.4, as its own commit
-- [ ] 3.2 (RED) Characterization tests: the files copied and their names; that a pre-existing
+      **Done 2026-08-04.** Same adaptations section 2 made: PEP-723 header and `argparse`/`__main__`
+      dropped (the CLI is 8.4), `print` to `logging`. One further adaptation: the summary counts
+      become a **return value** `(copied, missing)` rather than stdout, because 3.4's fail-loud rule
+      has to act on them and parsing log text would make the deviation commit turn on string
+      matching. Recorded in section 7
+- [x] 3.2 (RED) Characterization tests: the files copied and their names; that a pre-existing
       destination is **overwritten silently** (`shutil.copy2`, `:41`); and that the reported
       `copied` count counts copy *calls*, not resulting files (`:42`)
-- [ ] 3.3 (RED) **Characterize the base-directory mismatch** (F8, which supersedes F5's absolute-path
+      **Done 2026-08-04 — GREEN against the faithful port**, which is the Decision 1 commit. Both
+      defects reproduce exactly: a duplicate `output_filename` yields 2 files while `copied` reports
+      3, and a missing source returns normally with a partially populated directory
+- [x] 3.3 (RED) **Characterize the base-directory mismatch** (F8, which supersedes F5's absolute-path
       hypothesis — see 0.9). Two fixtures, both with complete, present data: a `scan_path` in
       `bloomctl` form (`images/Wave1/Day3_.../QR`, relative to the dir holding `scans.csv`) and one in
       legacy form (`./images_downloader_output/images/...`, relative to `experiment_dir`). Pin that
@@ -201,6 +209,11 @@ the scripts do.
       path segment, yielding an empty `images/` with exit 0. Do **not** write an absolute-path
       characterization test — 0.9 established `bloomctl` never emits one, so there is no shipped
       behavior there to preserve
+      **Done 2026-08-04 — F8 reproduces exactly as design.md predicts.** The `bloomctl` fixture
+      misses all three rows and leaves an empty `images/`, with correct and present data; the same
+      manifest resolves when handed the download dir instead. A parametrized test pins that
+      **neither** convention resolves against the other's base, so 3.4 cannot fix this by detecting
+      which producer wrote the manifest — it has to be told
 - [ ] 3.4 (GREEN) Replace character-stripping with an explicit resolution rule: resolve
       `source_image` against **the directory containing the `scans.csv` it was derived from** (how
       that base reaches the copy step is 7.2 — decide it before writing this), and reject an absolute
