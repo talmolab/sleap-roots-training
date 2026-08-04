@@ -8,6 +8,7 @@ the committed TensorFlow-reference W&B payloads under ``tests/fixtures/tf_refere
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
 from pathlib import Path
@@ -59,6 +60,32 @@ checksums:
   soy/p: {sha}
   soy/l: {sha}
 """.format(sha="0" * 64)
+
+
+#: A 16x16 grayscale JPEG, committed as bytes rather than generated.
+#:
+#: The labeling builder opens curated images through sleap-io's ``ImageVideo`` backend,
+#: which decodes them, so its fixtures need real JPEGs rather than placeholder bytes.
+#: Writing them with ``imageio`` would make the tests depend on a package that is only
+#: importable *transitively* via sleap-io — the same trap task 2.1 closed for ``pandas``,
+#: and not worth a direct test dependency for 447 bytes of constant.
+TINY_JPEG = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a"
+    "HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAAQABABAREA/8QAHwAAAQUBAQEB"
+    "AQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1Fh"
+    "ByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZ"
+    "WmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXG"
+    "x8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APMfAfgP/hN/7Q/4mX2L"
+    "7H5f/LDzN+/d/tDGNv60ePPAf/CEf2f/AMTL7b9s8z/lh5ezZt/2jnO79KPAfjz/AIQj+0P+Jb9t"
+    "+2eX/wAt/L2bN3+yc53fpR488ef8Jv8A2f8A8S37F9j8z/lv5m/ft/2RjG39a//Z"
+)
+
+
+def write_jpeg(path: Path) -> Path:
+    """Write :data:`TINY_JPEG` to ``path``, creating parent directories."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(TINY_JPEG)
+    return path
 
 
 @pytest.fixture
