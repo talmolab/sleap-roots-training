@@ -12,31 +12,39 @@ All notable changes to this project are documented here. The format is based on
   `sleap_roots_contracts.Mode` rather than restated here, so the producer and the
   `sleap-roots-predict` consumer agree by construction instead of by reconciliation at acceptance.
   `SPECIES_VOCAB` stays local — `ModelCard.species` is a free `str`, so there is no contract-side
-  species vocabulary to defer to. **No behavior change in this repo:** the contract's `Mode` is
-  set-identical to the vocabulary it replaces, and all 7 rows of the committed selection matrix are
-  already in vocabulary, so no card that validated before stops validating. Upstream, `0.1.0a6` is
-  a breaking *validation* tightening (`ModelCard.mode` is a `Mode` and no longer a free `str`,
-  matched exactly with no case or whitespace normalization; `age_min`/`age_max` reject `bool` and
-  `numpy.bool_`) — neither reaches anything this package produces. Note that `MODE_VOCAB` also
-  backs `validate`'s check on the hand-written `experiment.mode`, so the contract now governs a
-  user-facing config field as well as published metadata; modes are matched **exactly** at every
-  surface (no case or whitespace normalization — `Cylinder` and `multiplant-cylinder` are errors,
-  as before), which is now a recorded decision rather than incidental behavior. This also unblocks
-  `add-label-registry` (#10), which needs `LabelCard` (new in `0.1.0a6`).
+  species vocabulary to defer to. **Nothing accepted or published changes:** the contract's `Mode`
+  is set-identical to the vocabulary it replaces, and all 7 rows of the committed selection matrix
+  are already in vocabulary, so no card that validated before stops validating and no config that
+  validated before stops validating. Two *error-reporting* surfaces did change, both noted below.
+  Upstream, `0.1.0a6` is
+  a breaking *validation* tightening (`ModelCard.mode` is a `Mode` and no longer a free `str`;
+  `age_min`/`age_max` reject `bool` and `numpy.bool_`) — neither reaches anything this package
+  produces. This also unblocks `add-label-registry` (#10), which needs `LabelCard`.
 
-  **For config authors:** because `experiment.mode` is now validated against the contract's
-  vocabulary rather than a local copy, a future `sleap-roots-contracts` release that *narrows*
-  `Mode` would reject a `mode:` you have already written. The three authoring surfaces are guarded
-  in CI — the committed selection matrix, the shipped `examples/`, and every `mode:` documented in
-  `docs/training.md` — so a narrowing fails at bump time here rather than in your config. Modes are
-  still matched exactly (no case or whitespace normalization); a near miss now gets a "did you
-  mean" hint on the error, never a silent correction.
+  **For config authors:** `MODE_VOCAB` also backs `validate`'s check on the hand-written
+  `experiment.mode`, so the contract now governs a user-facing config field and not only published
+  metadata. A future `sleap-roots-contracts` release that *narrows* `Mode` would therefore reject a
+  `mode:` you have already written. The three authoring surfaces are guarded in CI — the committed
+  selection matrix, the shipped `examples/`, and every `mode:` documented in `docs/training.md` — so
+  a narrowing fails at bump time here rather than in your config. Modes are matched **exactly** at
+  every surface (no case or whitespace normalization — `Cylinder` and `multiplant-cylinder` are
+  errors, as before); a near miss now gets a "did you mean" hint on the error, never a silent
+  correction. The hint comes from a shared helper, so it also applies to `experiment.species` and
+  `experiment.root_type`. Rationale and the full `a3 → a6` delta review are in the change's
+  `design.md`.
+
+  **For registry operators:** `seed-registry` now reports a rejected selection matrix (unreadable
+  file, out-of-vocabulary `species`/`mode`, non-contiguous `age`) as a clean `Error: ...` carrying
+  the loader's row-numbered message, instead of an unhandled traceback. Same failures, same
+  messages — only the packaging changed.
 
   **Cold-start cost:** this is the first code path in the package that actually imports
   `sleap_roots_contracts` (and transitively `pydantic`) rather than only reading its version, and
-  `chooser` is on the CLI's import path. Measured at ~183 ms added to interpreter start. Immaterial
-  next to a training run, but noted because it departs from the lazy-import convention this repo
-  uses for `wandb` and `sleap-nn`.
+  `chooser` is on the CLI's import path — so `--help`, `--version` and every shell TAB-completion
+  press pay it, not just `train` / `seed-registry`. Measured at **+72–87 ms** (machine-dependent;
+  an earlier draft of this entry said ~183 ms, which was `chooser`'s total import cost rather than
+  what this change adds). Immaterial next to a training run, but noted because it departs from the
+  lazy-import convention this repo uses for `wandb` and `sleap-nn`.
 - The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
   wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
   `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb

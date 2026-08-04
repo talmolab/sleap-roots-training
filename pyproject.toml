@@ -73,6 +73,9 @@ dev = [
 
 [tool.black]
 line-length = 88
+# Match `requires-python`. Without it black infers the newest grammar it knows and then
+# warns that its AST-equivalence safety check is degraded on the interpreter running it.
+target-version = ["py311"]
 
 [tool.ruff.lint]
 select = [
