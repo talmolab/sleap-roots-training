@@ -214,23 +214,37 @@ the scripts do.
       manifest resolves when handed the download dir instead. A parametrized test pins that
       **neither** convention resolves against the other's base, so 3.4 cannot fix this by detecting
       which producer wrote the manifest — it has to be told
-- [ ] 3.4 (GREEN) Replace character-stripping with an explicit resolution rule: resolve
+- [x] 3.4 (GREEN) Replace character-stripping with an explicit resolution rule: resolve
       `source_image` against **the directory containing the `scans.csv` it was derived from** (how
       that base reaches the copy step is 7.2 — decide it before writing this), and reject an absolute
       `source_image` outright rather than mangling it. This is producer-agnostic — it resolves both
       the `bloomctl` and legacy conventions without detecting which is in play. Make **any**
       unresolved source fail the step; an empty or partial copy is never a success. Record in
       section 7
-- [ ] 3.5 (RED) Test that a duplicate `output_filename` in the manifest is rejected rather than
+      **Done 2026-08-04, per the 7.2 decision below.** The step now takes `scans_csv` in place of
+      `experiment_dir` and resolves against its parent; a parametrized test proves both producers'
+      manifests resolve with no detection of which wrote them. The step is **all-or-nothing**: every
+      row is resolved before a single file is written, so a failure leaves no `images/` at all rather
+      than a partial one. Absolute paths are rejected by name instead of stripped
+- [x] 3.5 (RED) Test that a duplicate `output_filename` in the manifest is rejected rather than
       silently overwritten (F6). Pairs with 2.9, which is where the duplicate should be caught
       first — this is the second line of defence, since a hand-edited manifest can reach the copy
       step directly
-- [ ] 3.5a (RED) **Obligation from 2.5:** verify the scan's actual view count against the
+      **Done 2026-08-04.** `_assert_unique_output_filenames` became public
+      `assert_unique_output_filenames` and both stages call it, so the two lines of defence are one
+      rule rather than two that can drift. Asserted: nothing is written when it fires
+- [x] 3.5a (RED) **Obligation from 2.5:** verify the scan's actual view count against the
       `total_views` selection assumed. Selection reads only CSVs, so it cannot check it; the copy
       step is the first stage that sees the images. A scan holding fewer views than assumed produces
       manifest rows pointing at `.jpg` files that do not exist — which 3.4's fail-loud rule catches
       per-row, but reports as N unrelated missing files rather than as the one wrong parameter that
       caused them. Name the assumption in the error
+      **Done 2026-08-04, and it fails in *both* directions.** Too few views and the manifest names
+      files that do not exist; too many and the selected indices are the wrong angles — either way
+      the parameter is wrong, so the check is agreement rather than the number 72. The error reports
+      what the scan holds, what selection assumed, and the value to re-run with. Only `<int>.jpg`
+      counts as a view, so download sidecars do not perturb it. A test pins that this stage's default
+      is the same 72 selection defaults to, since drift between them would re-open the gap
 - [ ] 3.6 Decide whether the copy step remains a separate stage or folds into the builder once
       `embed=True` lands (5.5). Keep them separate through section 5 so the characterization tests
       stay meaningful; revisit after
@@ -332,18 +346,61 @@ the scripts do.
       7. **Not caller-visible:** PEP-723 header and `argparse`/`__main__` block dropped (the CLI is
          8.4); `print` to `logging`; `pandas` declared as a direct dependency rather than relied on
          transitively via sleap-io (2.1, the open item from 1.1).
-- [ ] 7.2 **Open, decide during section 3:** 3.4 resolves `source_image` against the directory
-      holding the `scans.csv` it came from. That base has to reach the copy step somehow, and the two
-      options are not equivalent in blast radius:
+
+      **Recorded from section 3 (`copy_selected_images.py`, 2026-08-04).** All caller-visible:
+      1. **Base directory** — the step takes `scans_csv` in place of `experiment_dir` and resolves
+         `source_image` against its parent (3.4, F8, per the 7.2 decision). This is what makes a
+         `bloomctl` export work at all: the vault rule missed **every** row by exactly one path
+         segment and reported success. Producer-agnostic — nothing detects which CLI wrote the
+         manifest. The manifest contract is unchanged.
+      2. **Wrong-`scans.csv` check** — every manifest row's `(scan_id, source_scan_path)` must be
+         described by the `scans.csv` it was handed, so the base cannot be silently wrong (3.4).
+         New behavior; the vault script had no equivalent because it had nothing to check against.
+      3. **Fail-loud, all-or-nothing** — every row resolves before anything is written, and any
+         unresolved source raises (3.4, F5). Replaces warn-per-row-and-return; the destination
+         directory is no longer created on a failed run, so a partial `images/` cannot be mistaken
+         for a complete one. The error names the rows and the paths, capped at ten with a count.
+      4. **Absolute paths rejected** — replaces `lstrip("./")`, a character-set strip that ate a
+         leading separator and resolved nowhere (3.4, F5, per 0.9). No shipped behavior was
+         preserved here because Bloom never emits one; the strip guarded a trap it also created.
+      5. **Duplicate `output_filename` rejected** — the same rule 2.9 applies at selection, now
+         enforced here too for a hand-edited manifest (3.5, F6). `_assert_unique_output_filenames`
+         became public `assert_unique_output_filenames` so both stages share one rule rather than
+         two that can drift.
+      6. **View-count check** — a scan whose image count contradicts `total_views` fails, naming the
+         assumption and the value to re-run with (3.5a, the obligation from 2.5). Fails in both
+         directions: too few and the manifest names absent files, too many and the selected indices
+         are the wrong angles.
+      7. **Return value** — `(copied, missing)` from 3.1's port collapses to `copied`, since a
+         missing source is now an exception. The vault script returned `None` and printed the
+         summary; the counts are a return value because 3.4's rule acts on them and log-text
+         matching would be a poor foundation for it.
+      8. **Preserved deliberately:** `shutil.copy2` still overwrites, which keeps re-running the
+         step idempotent. Only the *silent* half of that behavior was a defect, and 3.5 removes it
+         at its source rather than by refusing to overwrite.
+- [x] 7.2 ~~**Open, decide during section 3:**~~ **Decided 2026-08-04 — neither (a) nor (b): the copy
+      step takes the `scans.csv` itself.** 3.4 resolves `source_image` against the directory holding
+      the `scans.csv` it came from. That base has to reach the copy step somehow, and the two options
+      originally weighed were:
       (a) **carry it as a manifest column** — self-describing and immune to a wrong CLI argument, but
       it adds a column, so Decision 3's enumerated contract, task 2.8, the spec's manifest
       requirement, and #10's `LabelCard` consumer all move with it; or
       (b) **pass it as a CLI argument** to the copy step, replacing `experiment_dir` — no contract
       change, but a caller can still point it at the wrong directory, which is exactly the F8 failure
       re-opened one layer up.
-      Lean (a): F8 is a mismatch between what the manifest *means* and what the caller *assumes*, and
-      only (a) removes the assumption. But it changes a contract two changes read, so it is a
-      decision to take deliberately rather than absorb inside 3.4
+      The lean was (a), on the grounds that only it removes the caller's assumption. **A third option
+      removes the assumption at (b)'s blast radius, so it wins on the stated criterion.** The step
+      takes the `scans.csv` path in place of `experiment_dir` and derives the base as its parent —
+      and then *checks* it, requiring every manifest row's `(scan_id, source_scan_path)` pair to be
+      described by that file. A caller who points at the wrong `scans.csv` now gets an error naming
+      the scan rather than an empty copy, which is the failure (a) was chosen to prevent.
+      **Why not (a), concretely.** The base is an absolute path on the producing machine, so writing
+      it into an artifact that ships publicly (i) records a path that is wrong the moment the package
+      moves or the download dir is renamed — the caller must override it anyway, which is (b)'s
+      failure mode with an extra column — and (ii) puts local filesystem structure inside a published
+      artifact, against Decision 3's "no dependency on the machine that produced it". The manifest
+      contract stays as Decision 3 enumerates it; 2.8, the spec, and #10's consumer do not move.
+      **Consequence for 8.4:** the CLI's copy step takes `--scans-csv`, not an experiment directory.
 
 ## 8. Package validation, CLI, and the workflow doc
 
