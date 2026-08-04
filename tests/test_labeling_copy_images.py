@@ -1,11 +1,11 @@
-"""Characterization tests for the image-copy step, before it is made fail-loud.
+"""Characterization + deviation tests for the image-copy step.
 
-Sequenced per design.md Decision 1: these pin the behavior the port inherited from the
-vault's ``copy_selected_images.py``, including the two defects design.md records — the
-warn-and-continue that reports success on an empty copy (F5), and the base-directory
-mismatch that triggers it against correct, complete data (F8). Task 3.4 changes both, in
-its own commit; until then this file is the record of what the eight published
-collections were produced by.
+Sequenced per design.md Decision 1. The ``characterization`` tests pin what the port
+inherited unchanged from the vault's ``copy_selected_images.py``; the ``deviation`` tests
+pin what tasks 3.4, 3.5, and 3.5a change on purpose. Each deviation test names the legacy
+behavior it replaced, so the two failures design.md records — the warn-and-continue that
+reports success on an empty copy (F5) and the base-directory mismatch that triggers it
+against correct data (F8) — stay readable after the fix lands.
 """
 
 from __future__ import annotations
@@ -18,20 +18,26 @@ import pytest
 from sleap_roots_training.labeling import select_samples as ss
 from sleap_roots_training.labeling.copy_images import copy_selected_images
 
-#: One scan, three selected views. `scan_path` is in `bloomctl` form — relative to the
-#: directory holding `scans.csv`, with no `images_downloader_output/` segment
-#: (design.md F8, verified from `bloomctl`'s `cyl/download.py:47-51`).
+#: One scan's `scan_path` in `bloomctl` form — relative to the directory holding
+#: `scans.csv`, with no `images_downloader_output/` segment (design.md F8, verified from
+#: `bloomctl`'s `cyl/download.py:47-51` and its own test).
 BLOOMCTL_SCAN_PATH = "images/Wave1/Day3_20250101/9DK8KJJEZR"
 
 #: The same scan in the legacy CLI's form, as `copy_selected_images.py:31` documents it:
 #: one segment longer, relative to the *experiment* dir, with a `./` prefix. Inferred
-#: from that comment — the legacy Node CLI has been removed and cannot be read.
+#: from that comment — the legacy Node CLI has been removed and cannot be read — which is
+#: also why its `scans.csv` is placed at the experiment root here.
 LEGACY_SCAN_PATH = "./images_downloader_output/images/Wave1/Day3_20250101/9DK8KJJEZR"
 
+#: Views the fixture manifest selects, out of a full 72-view rotation.
 VIEWS = (1, 25, 49)
 
+SCAN_ID = 1
 
-def write_manifest(path: Path, scan_path: str, views=VIEWS, scan_id: int = 1) -> Path:
+
+def write_manifest(
+    path: Path, scan_path: str, views=VIEWS, scan_id: int = SCAN_ID
+) -> Path:
     """Write a full-column ``sample_manifest.csv`` for one scan's selected views."""
     with path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS))
@@ -55,20 +61,33 @@ def write_manifest(path: Path, scan_path: str, views=VIEWS, scan_id: int = 1) ->
     return path
 
 
-def build_download(tmp_path: Path, views=VIEWS) -> tuple[Path, Path]:
-    """Materialize a Bloom download tree and return ``(experiment_dir, download_dir)``.
+def write_scans_csv(path: Path, scan_path: str, scan_id: int = SCAN_ID) -> Path:
+    """Write the ``scans.csv`` a manifest's paths are relative to."""
+    with path.open("w", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["scan_id", "plant_qr_code", "scan_path"])
+        writer.writerow([scan_id, "9DK8KJJEZR", scan_path])
+    return path
+
+
+def build_download(tmp_path: Path, view_names=range(1, 73)) -> tuple[Path, Path]:
+    """Materialize a Bloom download tree, with each producer's ``scans.csv`` in place.
 
     The images sit at the one location both conventions ultimately name; only the
-    manifest's ``scan_path`` and the base it is resolved against differ between them.
+    ``scan_path`` written and the ``scans.csv`` it sits beside differ. Returns the
+    ``bloomctl`` and legacy ``scans.csv`` paths, since the step is handed one of those
+    rather than a directory.
     """
     experiment_dir = tmp_path / "WEEP_soybean"
     download_dir = experiment_dir / "images_downloader_output"
     scan_dir = download_dir / "images/Wave1/Day3_20250101/9DK8KJJEZR"
     scan_dir.mkdir(parents=True)
-    for view_index in views:
-        (scan_dir / f"{view_index}.jpg").write_bytes(b"jpeg-%d" % view_index)
-    (download_dir / "scans.csv").write_text("scan_id,scan_path\n")
-    return experiment_dir, download_dir
+    for view_name in view_names:
+        (scan_dir / f"{view_name}.jpg").write_bytes(f"jpeg-{view_name}".encode())
+    return (
+        write_scans_csv(download_dir / "scans.csv", BLOOMCTL_SCAN_PATH),
+        write_scans_csv(experiment_dir / "scans.csv", LEGACY_SCAN_PATH),
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -77,61 +96,190 @@ def build_download(tmp_path: Path, views=VIEWS) -> tuple[Path, Path]:
 
 
 def test_copies_each_row_under_its_curated_name(tmp_path):
-    experiment_dir, _ = build_download(tmp_path)
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", LEGACY_SCAN_PATH)
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
     images_dir = tmp_path / "package/images"
 
-    copied, missing = copy_selected_images(manifest, experiment_dir, images_dir)
-
-    assert (copied, missing) == (3, 0)
+    assert copy_selected_images(manifest, bloomctl_scans, images_dir) == 3
     assert sorted(p.name for p in images_dir.iterdir()) == [
         "A3244_9DK8KJJEZR_age3_0.jpg",
         "A3244_9DK8KJJEZR_age3_1.jpg",
         "A3244_9DK8KJJEZR_age3_2.jpg",
     ]
     # The curated name is a rename, not a copy of the source name: view 25 becomes
-    # frame 1. The builder reads `images/` by curated name, so this mapping is the
-    # only thing that keeps a frame pointing at its own image.
+    # frame 1. The builder reads `images/` by curated name, so this mapping is the only
+    # thing keeping a frame pointed at its own image.
     assert (images_dir / "A3244_9DK8KJJEZR_age3_1.jpg").read_bytes() == b"jpeg-25"
 
 
 def test_creates_the_destination_directory(tmp_path):
-    experiment_dir, _ = build_download(tmp_path)
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", LEGACY_SCAN_PATH)
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
     images_dir = tmp_path / "package/nested/images"
     assert not images_dir.exists()
 
-    copy_selected_images(manifest, experiment_dir, images_dir)
+    copy_selected_images(manifest, bloomctl_scans, images_dir)
 
     assert images_dir.is_dir()
 
 
-def test_an_existing_destination_file_is_overwritten_silently(tmp_path):
-    """`shutil.copy2` does not complain, which is what makes an F6 collision invisible."""
-    experiment_dir, _ = build_download(tmp_path)
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", LEGACY_SCAN_PATH)
+def test_a_repeated_run_overwrites_rather_than_duplicating(tmp_path):
+    """`shutil.copy2` still overwrites, which keeps re-running the step idempotent.
+
+    Only the *silent* part of the vault behavior was a defect, and 3.5 removes it at its
+    source — two rows can no longer claim one name. Overwriting an earlier run's output
+    is the useful half and is preserved.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
     images_dir = tmp_path / "package/images"
     images_dir.mkdir(parents=True)
-    stale = images_dir / "A3244_9DK8KJJEZR_age3_0.jpg"
-    stale.write_bytes(b"stale")
+    (images_dir / "A3244_9DK8KJJEZR_age3_0.jpg").write_bytes(b"stale")
 
-    copied, missing = copy_selected_images(manifest, experiment_dir, images_dir)
-
-    assert (copied, missing) == (3, 0)
-    assert stale.read_bytes() == b"jpeg-1"
+    assert copy_selected_images(manifest, bloomctl_scans, images_dir) == 3
+    assert (images_dir / "A3244_9DK8KJJEZR_age3_0.jpg").read_bytes() == b"jpeg-1"
+    assert len(list(images_dir.iterdir())) == 3
 
 
-def test_the_copied_count_counts_calls_not_resulting_files(tmp_path):
-    """Two rows sharing an ``output_filename`` collapse into one file, still counted twice.
+# --------------------------------------------------------------------------------------
+# Deviation (task 3.4) — explicit resolution, and no silent partial copy
+# --------------------------------------------------------------------------------------
 
-    This is design.md F6 reaching the filesystem: `copied` reports the manifest row
-    count, so every downstream check that trusts it reads correct while the package
-    holds fewer images than it claims. Task 2.9 catches the duplicate at selection
-    time; 3.5 adds the second line of defence here, for a hand-edited manifest.
+
+@pytest.mark.parametrize("producer", ["bloomctl", "legacy"])
+def test_each_producers_manifest_resolves_against_its_own_scans_csv(tmp_path, producer):
+    """F8 closed, without detecting which producer wrote the manifest.
+
+    The vault script joined `source_image` to `experiment_dir`, which resolved the
+    legacy convention and missed *every* row of a `bloomctl` export by exactly one path
+    segment — an empty `images/` and a zero exit, with correct and present data.
+    Resolving against the directory holding the manifest's own `scans.csv` is true of
+    both producers by construction, so neither needs to be recognized.
     """
-    experiment_dir, _ = build_download(tmp_path)
-    manifest_path = tmp_path / "sample_manifest.csv"
-    write_manifest(manifest_path, LEGACY_SCAN_PATH)
+    bloomctl_scans, legacy_scans = build_download(tmp_path)
+    scans_csv, scan_path = (
+        (bloomctl_scans, BLOOMCTL_SCAN_PATH)
+        if producer == "bloomctl"
+        else (legacy_scans, LEGACY_SCAN_PATH)
+    )
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", scan_path)
+    images_dir = tmp_path / "package/images"
+
+    assert copy_selected_images(manifest, scans_csv, images_dir) == 3
+    assert len(list(images_dir.iterdir())) == 3
+
+
+def test_a_missing_source_image_fails_the_step_and_writes_nothing(tmp_path):
+    """Replaces the F5 warn-and-continue: a partial copy is no longer a completed step.
+
+    The scan holds a full 72 images but under an off-by-one naming (`0.jpg`..`71.jpg`),
+    so the view-count check passes and the row for view 72 is the one that cannot
+    resolve — the case where the per-row check is the only thing standing between a
+    hand-edited or oddly-named scan and a package missing a frame.
+    """
+    bloomctl_scans, _ = build_download(tmp_path, view_names=range(0, 72))
+    manifest = write_manifest(
+        tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH, views=(1, 25, 72)
+    )
+    images_dir = tmp_path / "package/images"
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        copy_selected_images(manifest, bloomctl_scans, images_dir)
+
+    assert "1 of 3" in str(excinfo.value)
+    assert "72.jpg" in str(excinfo.value)
+    assert "A3244_9DK8KJJEZR_age3_2.jpg" in str(excinfo.value)
+    # Nothing is written, so no later stage can mistake a failed copy for a done one.
+    assert not images_dir.exists()
+
+
+def test_the_wrong_scans_csv_is_named_rather_than_yielding_an_empty_copy(tmp_path):
+    """The F8 failure re-opened one layer up, and closed there too.
+
+    Deriving the base from `scans.csv` would still let a caller point at the wrong one.
+    Checking that every manifest row's `(scan_id, source_scan_path)` is described by
+    that file turns a silent empty copy into an error naming the scan — which is what
+    task 7.2 relies on in choosing this over carrying the base as a manifest column.
+    """
+    _, legacy_scans = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+
+    with pytest.raises(ValueError) as excinfo:
+        copy_selected_images(manifest, legacy_scans, tmp_path / "package/images")
+
+    assert "not described by" in str(excinfo.value)
+    assert BLOOMCTL_SCAN_PATH in str(excinfo.value)
+    assert "scan_id 1" in str(excinfo.value)
+
+
+def test_a_file_that_is_not_a_scans_csv_is_rejected_by_name(tmp_path):
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    not_scans = tmp_path / "not_scans.csv"
+    not_scans.write_text("scan_id,something_else\n1,x\n")
+
+    with pytest.raises(ValueError, match="scan_path"):
+        copy_selected_images(manifest, not_scans, tmp_path / "package/images")
+
+
+def test_an_absolute_source_path_is_rejected_rather_than_mangled(tmp_path):
+    """Replaces the `lstrip("./")` character-strip.
+
+    Task 0.9 established Bloom never emits an absolute path, so there is no shipped
+    behavior to preserve — but the strip ate a leading separator rather than failing,
+    which would have reported every row missing with nothing actually absent.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(
+        tmp_path / "sample_manifest.csv", "/mnt/hpi_dev/images/Wave1/Day3/QR"
+    )
+
+    with pytest.raises(ValueError, match="absolute"):
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+
+
+def test_a_missing_scan_directory_names_the_path(tmp_path):
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(
+        tmp_path / "sample_manifest.csv", "images/Wave1/Day3_20250101/NOSUCHQR"
+    )
+    # Describe the absent scan in scans.csv, so this is the directory check firing and
+    # not the manifest/scans cross-check.
+    write_scans_csv(bloomctl_scans, "images/Wave1/Day3_20250101/NOSUCHQR")
+
+    with pytest.raises(FileNotFoundError, match="NOSUCHQR"):
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+
+
+def test_a_missing_required_column_is_named(tmp_path):
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest_path = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    rows = list(csv.DictReader(manifest_path.open()))
+    columns = [c for c in ss.MANIFEST_COLUMNS if c != "source_scan_path"]
+    with manifest_path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match="source_scan_path"):
+        copy_selected_images(manifest_path, bloomctl_scans, tmp_path / "package/images")
+
+
+# --------------------------------------------------------------------------------------
+# Deviation (task 3.5) — a duplicate curated name is the second line of defence
+# --------------------------------------------------------------------------------------
+
+
+def test_a_duplicate_output_filename_is_rejected_before_anything_is_copied(tmp_path):
+    """Pairs with task 2.9, which catches this at selection time.
+
+    A hand-edited manifest reaches this step directly, and the vault behavior absorbed
+    it completely: `shutil.copy2` overwrote, and `copied` counted calls rather than
+    resulting files, so N rows collapsed into fewer images while every count still read
+    correct. Both callers now enforce the one rule that lives with the manifest writer.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest_path = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
     rows = list(csv.DictReader(manifest_path.open()))
     rows[1]["output_filename"] = rows[0]["output_filename"]
     with manifest_path.open("w", newline="") as fh:
@@ -140,99 +288,74 @@ def test_the_copied_count_counts_calls_not_resulting_files(tmp_path):
         writer.writerows(rows)
     images_dir = tmp_path / "package/images"
 
-    copied, missing = copy_selected_images(manifest_path, experiment_dir, images_dir)
+    with pytest.raises(ValueError) as excinfo:
+        copy_selected_images(manifest_path, bloomctl_scans, images_dir)
+
+    assert "A3244_9DK8KJJEZR_age3_0.jpg" in str(excinfo.value)
+    assert not images_dir.exists()
+
+
+# --------------------------------------------------------------------------------------
+# Deviation (task 3.5a) — the obligation task 2.5 left here
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("present", [36, 96])
+def test_a_scan_whose_view_count_contradicts_the_assumption_names_it(tmp_path, present):
+    """One wrong parameter reports as one wrong parameter, not as N missing files.
+
+    Selection reads only CSVs (design.md F2), so it cannot check `total_views` against
+    what a scan actually holds; this is the first stage that sees the images. Both
+    directions fail: too few and the manifest names files that do not exist, too many
+    and the selected indices are the wrong angles.
+    """
+    bloomctl_scans, _ = build_download(tmp_path, view_names=range(1, present + 1))
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    images_dir = tmp_path / "package/images"
+
+    with pytest.raises(ValueError) as excinfo:
+        copy_selected_images(manifest, bloomctl_scans, images_dir)
+
+    message = str(excinfo.value)
+    assert f"holds {present} rotational view" in message
+    assert "total_views=72" in message
+    assert f"total_views={present}" in message
+    assert not images_dir.exists()
+
+
+def test_the_view_count_check_uses_the_selection_parameter_it_was_given(tmp_path):
+    """A non-72 experiment is buildable — the check pins agreement, not the number 72."""
+    bloomctl_scans, _ = build_download(tmp_path, view_names=range(1, 37))
+    manifest = write_manifest(
+        tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH, views=(1, 13, 25)
+    )
+
+    copied = copy_selected_images(
+        manifest, bloomctl_scans, tmp_path / "package/images", total_views=36
+    )
 
     assert copied == 3
-    assert missing == 0
-    assert len(list(images_dir.iterdir())) == 2
 
 
-def test_a_missing_source_warns_and_the_step_still_returns(tmp_path, caplog):
-    """The F5 warn-and-continue: a partial copy is reported as a completed step."""
-    experiment_dir, download_dir = build_download(tmp_path, views=(1, 25))
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", LEGACY_SCAN_PATH)
-    images_dir = tmp_path / "package/images"
-
-    with caplog.at_level("WARNING"):
-        copied, missing = copy_selected_images(manifest, experiment_dir, images_dir)
-
-    assert (copied, missing) == (2, 1)
-    assert "49.jpg" in caplog.text
-    assert len(list(images_dir.iterdir())) == 2
-    assert download_dir.exists()
-
-
-# --------------------------------------------------------------------------------------
-# Characterization — the F8 base-directory mismatch
-# --------------------------------------------------------------------------------------
-
-
-def test_the_legacy_scan_path_convention_resolves(tmp_path):
-    """The convention the vault script was written against, with its documented base."""
-    experiment_dir, _ = build_download(tmp_path)
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", LEGACY_SCAN_PATH)
-
-    copied, missing = copy_selected_images(
-        manifest, experiment_dir, tmp_path / "package/images"
-    )
-
-    assert (copied, missing) == (3, 0)
-
-
-def test_a_bloomctl_scan_path_misses_every_row_by_one_segment(tmp_path, caplog):
-    """Correct, complete, present data — and the step reports success with nothing copied.
-
-    This is design.md F8: `bloomctl` writes `scan_path` relative to the download dir,
-    the step resolves it against the *experiment* dir, and the two differ by exactly
-    `images_downloader_output/`. Every row warns, the directory is created empty, and
-    nothing in the return value distinguishes this from a scan with no images.
-    """
-    experiment_dir, _ = build_download(tmp_path)
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
-    images_dir = tmp_path / "package/images"
-
-    with caplog.at_level("WARNING"):
-        copied, missing = copy_selected_images(manifest, experiment_dir, images_dir)
-
-    assert (copied, missing) == (0, 3)
-    assert list(images_dir.iterdir()) == []
-    # The path it looked at is the experiment dir's, one segment short of the images.
-    assert str(experiment_dir / "images/Wave1") in caplog.text
-
-
-def test_a_bloomctl_scan_path_resolves_against_the_download_dir(tmp_path):
-    """The same manifest resolves when handed the base its paths are actually relative to.
-
-    Pins that F8 is a base-directory mismatch and nothing else — the data is fine, the
-    manifest is fine, and only the argument is wrong. That is what makes it a design
-    defect rather than a bad input: the caller is told to pass `experiment_dir`.
-    """
-    _, download_dir = build_download(tmp_path)
+def test_the_default_view_count_is_the_one_selection_defaults_to(tmp_path):
+    """The two stages must not drift: a default of 72 here and 72 there is the contract."""
+    bloomctl_scans, _ = build_download(tmp_path)
     manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
 
-    copied, missing = copy_selected_images(
-        manifest, download_dir, tmp_path / "package/images"
+    assert ss.TOTAL_VIEWS == 72
+    assert (
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images") == 3
     )
 
-    assert (copied, missing) == (3, 0)
 
+def test_non_view_files_in_the_scan_directory_do_not_count_as_views(tmp_path):
+    """QC and download leave sidecars; only `<int>.jpg` is a rotational view."""
+    bloomctl_scans, _ = build_download(tmp_path)
+    scan_dir = bloomctl_scans.parent / "images/Wave1/Day3_20250101/9DK8KJJEZR"
+    (scan_dir / "thumbnail.jpg").write_bytes(b"not-a-view")
+    (scan_dir / "metadata.json").write_text("{}")
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
 
-@pytest.mark.parametrize(
-    "scan_path, base",
-    [(LEGACY_SCAN_PATH, "experiment"), (BLOOMCTL_SCAN_PATH, "download")],
-)
-def test_no_convention_resolves_against_both_bases(tmp_path, scan_path, base):
-    """Neither form works against the other's base, so guessing is not an option.
-
-    Task 3.4 must resolve this by being told the base explicitly rather than by
-    detecting which producer wrote the manifest.
-    """
-    experiment_dir, download_dir = build_download(tmp_path)
-    wrong_base = download_dir if base == "experiment" else experiment_dir
-    manifest = write_manifest(tmp_path / "sample_manifest.csv", scan_path)
-
-    copied, missing = copy_selected_images(
-        manifest, wrong_base, tmp_path / "package/images"
+    assert (
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images") == 3
     )
-
-    assert (copied, missing) == (0, 3)

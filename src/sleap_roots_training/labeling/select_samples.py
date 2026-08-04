@@ -306,14 +306,19 @@ def select_samples(
             )
 
     manifest = pd.DataFrame(rows, columns=list(MANIFEST_COLUMNS))
-    _assert_unique_output_filenames(manifest)
+    assert_unique_output_filenames(manifest)
     manifest.to_csv(output_csv, index=False)
     logger.info("Wrote %d rows to %s", len(manifest), output_csv)
     return manifest
 
 
-def _assert_unique_output_filenames(manifest: pd.DataFrame) -> None:
+def assert_unique_output_filenames(manifest: pd.DataFrame) -> None:
     r"""Fail if two frames were assigned the same curated filename.
+
+    Public because the copy step calls it too (task 3.5): a hand-edited manifest can
+    reach that step without passing through selection, and the collision is invisible
+    once ``shutil.copy2`` has absorbed it. The check belongs with the manifest writer,
+    so both callers enforce one rule rather than two that can drift.
 
     ``output_filename`` is built from ``(accession_name, plant_qr_code, plant_age_days,
     frame_index)`` while the frame counter is keyed by ``scan_id``, so uniqueness holds
