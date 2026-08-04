@@ -81,8 +81,17 @@ def seed_registry_command(
     scopes every mode to the named collection(s) for canary seeding.
     """
     cfg = config.resolve_registry_config()
-    matrix = chooser.load_selection_matrix(selection_matrix)
-    all_cards = cards.expand_rows_to_cards(matrix.rows)
+    # The loader's messages are carefully row-numbered ("row 0: unknown mode 'teacup'
+    # (expected one of [...])") and the spec promises them to operators — but raw they
+    # reach the terminal as an unhandled traceback with the message buried in it. Wrap
+    # into a ClickException the way the resolve step below already does. Newly
+    # load-bearing: a future upstream narrowing of `Mode` hands exactly this error to
+    # every operator running `seed-registry`.
+    try:
+        matrix = chooser.load_selection_matrix(selection_matrix)
+        all_cards = cards.expand_rows_to_cards(matrix.rows)
+    except (FileNotFoundError, ValueError) as error:
+        raise click.ClickException(str(error))
 
     # --only scopes ALL modes (dry-run, --verify, --execute); validate up front so an
     # unknown id fails fast with a clean message and the confirm/plan reflect the scope.

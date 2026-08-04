@@ -40,7 +40,7 @@ this package, as the contract models no species vocabulary.
 
 #### Scenario: Every committed matrix mode is contract-valid
 
-- **WHEN** the committed selection matrix is loaded
+- **WHEN** the committed selection matrix file is read
 - **THEN** every row's `mode` is a member of the contract-owned `Mode` vocabulary
 - **AND** a contract change that narrowed `Mode` past a committed row would fail this check at bump
   time rather than at consumer-match time
@@ -78,3 +78,31 @@ exactly and normalizes neither case nor whitespace.
 - **WHEN** a card is produced for a legacy (non-`sleap-nn`) model
 - **THEN** the metadata mapping does not include a `sleap_nn_version` key
 - **AND** the resulting `ModelCard.sleap_nn_version` is `None`
+
+### Requirement: Registry Seeding CLI with Confirmed Execution
+
+The CLI SHALL provide a `seed-registry` subcommand that reads the selection matrix, expands cards,
+resolves model directories, and — by default — runs a **dry run** that prints the planned
+collections and per-card metadata and resolves every model directory on the filesystem (reporting
+any missing model) **without** contacting wandb. Actually publishing SHALL require an explicit
+`--execute`, which SHALL check for a resolvable wandb credential (`WANDB_API_KEY` or a netrc entry
+for `api.wandb.ai`) **before** confirming the target entity/registry (interactive, bypassed with
+`--yes`), and SHALL validate that every card **in the invocation's scope** resolves before publishing
+any artifact, so a partial production seed is not left in a shared registry. The CLI SHALL accept a
+repeatable `--only <collection_id>` filter so a single card can be seeded first as a canary (verify
+the consumer can read it across the producer/consumer wandb version skew); with `--only`, both the
+validation set and the publish set narrow to the named card(s) (so a canary needs only its own model
+staged), and an `--only` value naming no known collection SHALL fail fast. A subsequent full
+`--execute` publishes the rest and skips the already-seeded canary. The `--models-root` is required
+for dry-run and `--execute`; `--verify` is a distinct read-only mode that requires only the selection
+matrix + registry config (not `--models-root`) and SHALL check for a resolvable wandb credential.
+A selection-matrix rejection — an unreadable file, an out-of-vocabulary `species` or `mode`, a
+non-contiguous `age` window — SHALL reach the operator as a clean CLI error carrying the loader's
+row-numbered message, not as an unhandled traceback.
+
+#### Scenario: A rejected selection matrix is reported as a CLI error
+
+- **WHEN** `seed-registry` is run against a matrix whose row is out of vocabulary (for example
+  `mode: teacup`)
+- **THEN** the command exits non-zero with the loader's row-numbered message rendered as a CLI error
+- **AND** no traceback is printed and no wandb call is made

@@ -258,3 +258,35 @@ def test_dry_run_resolves_real_zip(monkeypatch, tmp_path):
     assert result.output.count("[ok]") == 2  # both real zips resolved (pinned)
     assert "MISSING" not in result.output.upper()
     assert "UNPINNED" not in result.output  # zip form is snapshot-pinned
+
+
+def test_off_vocabulary_mode_is_a_clean_error_not_a_traceback(
+    monkeypatch, tmp_path, stub_models_root
+):
+    # The loader's row-numbered message is what the spec promises operators, but raw it
+    # arrives as an unhandled ValueError traceback with the message buried in it. This is
+    # the surface a future upstream narrowing of `Mode` would hand to every operator
+    # running `seed-registry`, so it has to read like an error, not like a crash.
+    _no_wandb(monkeypatch)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(
+        "models:\n"
+        "  - species: soybean\n"
+        "    mode: teacup\n"
+        '    age: "2, 3"\n'
+        "    primary_model_id: x/p/1\n"
+        "    lateral_model_id: null\n"
+        "    crown_model_id: null\n"
+        "checksums:\n"
+        "  x/p/1: " + "0" * 64 + "\n"
+    )
+    result = _invoke(
+        ["--selection-matrix", str(bad), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code != 0
+    # click renders a ClickException as "Error: <message>" and exits; an unhandled
+    # ValueError would instead surface here as a non-None exc_info with a traceback.
+    assert "Error:" in result.output
+    assert "teacup" in result.output
+    assert "row 0" in result.output
+    assert not isinstance(result.exception, ValueError)
