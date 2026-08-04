@@ -17,7 +17,10 @@ import re
 from pathlib import Path
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "training.md"
-_FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
+#: Captures the info string (group 1) as well as the body (group 2). The tag matters:
+#: the mode guard below must read *only* YAML blocks, or a `python` fence containing
+#: `mode: str = "cylinder"` and a `bash` fence containing `mode: $MODE` contaminate it.
+_FENCE = re.compile(r"```([^\n]*)\n(.*?)```", re.DOTALL)
 
 #: The exact reserved-baseline marker the follow-up baseline PR replaces with real numbers.
 #: Asserted present so the reservation can't be silently deleted; kept free of TODO/TBD.
@@ -29,7 +32,29 @@ def _read() -> str:
 
 
 def _fenced_blocks(text: str) -> list[str]:
-    return _FENCE.findall(text)
+    return [body for _tag, body in _FENCE.findall(text)]
+
+
+def _yaml_blocks(text: str) -> list[str]:
+    return [
+        body
+        for tag, body in _FENCE.findall(text)
+        if tag.strip().lower() in {"yaml", "yml"}
+    ]
+
+
+def _collect_modes(node) -> list[str]:
+    """Every value under a ``mode`` key, at any depth, in a parsed YAML document."""
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "mode" and not isinstance(value, (dict, list)):
+                found.append(value)
+            found.extend(_collect_modes(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_collect_modes(item))
+    return found
 
 
 def test_guide_exists():
@@ -89,15 +114,28 @@ def test_documented_experiment_modes_stay_contract_valid():
     of ``Mode`` would therefore invalidate configs people have already written by copying
     this guide. The shipped ``examples/`` are covered by ``test_examples_validate``; this
     is the other authoring surface, and nothing else reads it.
+
+    Parsed as YAML rather than split on ``:``. A guard that fires on a *correct* docs edit
+    is a defect in a repo whose rule is "main stays green", and naive splitting has three
+    of them: quoting the value (`mode: "multiplant cylinder"` — and that is the one
+    multi-word mode, so quoting it is exactly what a YAML style guide advises) yields
+    ``'"multiplant cylinder"'``; a nested or flow-mapping form is missed; and a `python`
+    or `bash` fence contributes junk. Worse, the message then blames the contract for a
+    bug in the test. ``yaml.safe_load`` handles quoting, nesting, flow mappings and
+    comments for free (PyYAML is already present — omegaconf requires it).
     """
+    import yaml
+
     from sleap_roots_training.registry.chooser import MODE_VOCAB
 
-    documented = [
-        line.split(":", 1)[1].split("#", 1)[0].strip()
-        for block in _FENCE.findall(_read())
-        for line in block.splitlines()
-        if line.strip().startswith("mode:")
-    ]
+    documented = []
+    for block in _yaml_blocks(_read()):
+        try:
+            parsed = yaml.safe_load(block)
+        except yaml.YAMLError:
+            continue  # a deliberate fragment, not a config a user would copy
+        documented.extend(_collect_modes(parsed))
+
     assert documented, "guide documents no `mode:` value — did the example block move?"
     for mode in documented:
         assert mode in MODE_VOCAB, (

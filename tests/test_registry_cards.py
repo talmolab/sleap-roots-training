@@ -124,7 +124,21 @@ def test_metadata_validates_against_real_modelcard():
     assert model_card.mode == "cylinder"
 
 
-@pytest.mark.parametrize("mode", sorted(chooser.MODE_VOCAB))
+#: The vocabulary spelled out, NOT `sorted(chooser.MODE_VOCAB)`. Parametrizing over the
+#: live set means an upstream *narrowing* silently shrinks the suite instead of failing
+#: it: drop `"plate"` upstream and the `[plate]` case simply stops existing -- the suite
+#: total drops by one and nothing is red. Spelled out, a narrowing is a failure. Keep in
+#: sync with the literal witness in `test_registry_chooser.py` -- editing both is the
+#: correct response to a deliberate vocabulary change.
+_EXPECTED_MODES = ["cylinder", "multiplant cylinder", "plate"]
+
+
+def test_expected_modes_match_the_live_vocabulary():
+    assert set(_EXPECTED_MODES) == chooser.MODE_VOCAB
+    assert len(_EXPECTED_MODES) == len(chooser.MODE_VOCAB)
+
+
+@pytest.mark.parametrize("mode", _EXPECTED_MODES)
 def test_every_accepted_mode_round_trips_through_the_real_modelcard(mode):
     # The loader accepting a mode is a set membership check; ModelCard accepting it is
     # an exact Literal match that normalizes neither case nor whitespace. The two can
@@ -139,6 +153,33 @@ def test_every_accepted_mode_round_trips_through_the_real_modelcard(mode):
         {**meta, "registry_id": "rid", "version": "v1", "weights_checksum": "sha"}
     )
     assert model_card.mode == mode  # raw value survives, unslugged and uncased
+
+
+def test_every_committed_matrix_card_validates_against_the_real_modelcard():
+    # The spec scenario ("published card metadata SHALL validate against ModelCard")
+    # asserted on the real committed data rather than on synthetic cards. It matters that
+    # this is a direct assertion: nothing in `src/` ever constructs a `ModelCard` --
+    # `publish.py` writes `card_to_metadata` straight into `wandb.Artifact` -- so the
+    # contract's validation is *only* ever exercised by tests on this side of the wire.
+    # The consumer is where a bad card would otherwise first be noticed, which is too late.
+    from sleap_roots_contracts import ModelCard
+
+    matrix = chooser.load_selection_matrix()
+    all_cards = cards.expand_rows_to_cards(matrix.rows)
+    assert len(all_cards) == 13, "7 committed rows over 8 model ids -> 13 cards"
+
+    for card in all_cards:
+        meta = cards.card_to_metadata(card)
+        model_card = ModelCard.model_validate(
+            {
+                **meta,
+                "registry_id": cards.collection_id(card),
+                "version": "v0",
+                "weights_checksum": "0" * 64,
+            }
+        )
+        assert model_card.mode == card.mode  # raw value survives, unslugged and uncased
+        assert model_card.species == card.species
 
 
 def test_collection_id_slugs_mode():
