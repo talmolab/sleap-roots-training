@@ -76,6 +76,27 @@ All notable changes to this project are documented here. The format is based on
   `..._os2.yaml` + `..._os2_sigma5.yaml` (the ablation), `scripts/clean_pkg.py` (make the v000
   `.pkg.slp` self-contained for the offline GPU box), and `scripts/dump_val_metrics.py`; write-up in
   `docs/training.md` ("PyTorch baseline").
+- `sleap-roots-training labeling`: the labeling-package generator, ported from a personal vault
+  repo into `sleap_roots_training.labeling` (#26). Four commands — `select`, `copy-images`,
+  `build`, `validate` — replace four `uv run` scripts driven against hardcoded paths on one
+  machine. A **labeling package** is now a named contract: a directory carrying the `.slp` per root
+  type, the curated `images/`, `sample_manifest.csv` with one row per labeled frame,
+  `package_metadata.yaml`, and a generated `README.md`, with no dependency on the machine that
+  produced it. `labeling validate` checks all of it and is the entry point `publish-labels` (#10)
+  calls before upload. See `docs/labeling-packages.md`.
+
+  **For anyone who ran the vault scripts**, the behavior changes that affect you: the built `.slp`
+  **embeds its images**, so a package no longer breaks when its source paths go away (six of the
+  eight published collections carry `repaired_from: "v0"` because that happened); a given seed now
+  **selects different plants**, because the draw is a stable hash ordering rather than
+  `pandas.sample` — which is what makes widening a selection produce a superset instead of a
+  different label set; three views are `[1, 19, 37]` rather than `[1, 25, 49]`; skeletons come from
+  a committed per-crop table and an uncovered crop **fails** instead of getting soybean's node
+  counts; and every silent failure is now a failure — an unresolvable source image, a duplicate
+  curated filename, a scan whose view count contradicts `--total-views`, a scan with no
+  predictions, and an empty selection each stop the run rather than warning and reporting success.
+  Adding frames to a published package is re-derive and republish, not edit in place; the reason is
+  in the guide.
 - `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
   config-driven training-config schema + CLI. A config is `sleap-nn`'s native
   `data_config`/`model_config`/`trainer_config` **plus** a repo-owned `experiment` block

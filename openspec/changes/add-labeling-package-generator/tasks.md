@@ -422,7 +422,7 @@ the scripts do.
 
 ## 7. Port deviations (fill in during sections 2–6)
 
-- [ ] 7.1 Record each deviation from the vault scripts: what changed, why it could not be preserved,
+- [x] 7.1 Record each deviation from the vault scripts: what changed, why it could not be preserved,
       and whether it is visible to a caller. An empty section here means the port was faithful; it
       should not be empty by omission.
       **Known before starting:** (a) monotone widening (2.7, F3); (b) fail-loud on an empty
@@ -533,6 +533,49 @@ the scripts do.
       3. **An age-straddling package fails** — the table splits rice at 5/6 DAG, so a selection
          spanning it has no single skeleton (6.4/6.6). New behavior with no vault analogue: the
          script had one crop and one hand-edited skeleton, so the question could not arise.
+
+      **Recorded from section 8 (`generate_readme.py`, plus new code; 2026-08-05).** The README is
+      the only *port* here; the metadata file, the validator, the assembler and the CLI are new
+      design, since the vault workflow had no equivalent of any of them.
+
+      *From the `generate_readme.py` port, all caller-visible:*
+      1. **Everything crop-specific renders from `PackageRecord`** — crop, experiment, Bloom id,
+         accession names, project filenames, skeleton node counts. The vault script stated all of it
+         as hardcoded text edited by hand per package (F7), which is a second, hand-synced copy of
+         what `build_slp_project.py` and the metadata already knew. A rice package now renders
+         without editing the renderer, which is the case the script could not do at all.
+      2. **Counts come from the manifest, and a disagreement raises** (8.3b, F7). The glob over
+         `images/*.jpg` published what happened to be in the directory while the manifest was the
+         record of what should be there, so a dropped image became a smaller number in the
+         documentation and appeared nowhere else. `_assert_counts_agree` became public
+         `assert_counts_agree` so the renderer runs the validator's rule, not a copy of it.
+      3. **Unequal views per plant render as a range**, replacing `len(rows) // plant_count`, which
+         reported a number no plant had whenever plants contributed unequally (8.3b).
+      4. **An unmapped accession id is an error**, replacing `accession_map.get(a, a)`. The names are
+         a human Bloom lookup (F2), so falling back to the numeric id documented a package's
+         genotypes as digits and reported success.
+      5. **The "images load automatically from the `images/` folder" instruction is gone** — section
+         5's embed change made it false. The README now says they are embedded.
+      6. **New content: the selection parameters.** Nothing in the vault package recorded them
+         anywhere, in prose or otherwise, so Decision 6's re-derive path had no seed to re-run with.
+      7. **Not caller-visible:** PEP-723 header and `argparse`/`__main__` block dropped (the CLI is
+         8.4); `print` to `logging`. Same adaptations as sections 2–4.
+
+      *New design with no vault analogue, recorded here so the section is not empty by omission:*
+      8. **`package_metadata.yaml`** (8.3) — the parseable record `#10`'s `LabelCard` reads.
+      9. **`validate_package`** (8.1) — the layout, columns, counts, skeletons and embed guarantee as
+         one callable. Notably it checks the curated images against the manifest **by name in both
+         directions**; a count check alone passes when one image is dropped and another added.
+      10. **All-or-nothing assembly** (8.4, `labeling/package.py`) — the destination does not exist
+          until a validated package is ready to move into it. 4.7's rule raised a level: "the run
+          died between the copy step and the build" produces the same F1 artifact as "the build
+          ignored an empty selection", and a later step cannot tell them apart.
+      11. **The build refuses selection parameters that cannot have produced the manifest.** They are
+          supplied again at build time and can be supplied wrongly; a recorded seed that did not
+          produce the package invites a re-derivation that silently yields a different label set,
+          which is the failure Decision 5 exists to prevent.
+      12. **The `labeling` CLI group** (8.4) and the two ported docs (8.6/8.7), with a structural test
+          holding the docs to the CLI's actual commands and options.
 - [x] 7.2 ~~**Open, decide during section 3:**~~ **Decided 2026-08-04 — neither (a) nor (b): the copy
       step takes the `scans.csv` itself.** 3.4 resolves `source_image` against the directory holding
       the `scans.csv` it came from. That base has to reach the copy step somehow, and the two options
@@ -559,11 +602,23 @@ the scripts do.
 
 ## 8. Package validation, CLI, and the workflow doc
 
-- [ ] 8.1 Implement `labeling/validate.py` (or equivalent): the layout, manifest-column, frame-count,
+- [x] 8.1 Implement `labeling/validate.py` (or equivalent): the layout, manifest-column, frame-count,
       and self-containment checks as one callable that fails before any network call — this is what
       #10's `publish-labels` will call
-- [ ] 8.2 (RED) Tests for each rejection path, each asserting the error names the offending piece
-- [ ] 8.3 Define and write the package metadata file — **new design, not ported** (F4): nothing in
+      **Done.** `validate_package(package_dir) -> PackageRecord` in `labeling/validate.py`. Reads
+      the metadata first, since it declares the root types and therefore which project files must
+      exist. Two checks beyond the list above: the curated images correspond to the manifest rows
+      **by name in both directions** (a count check alone passes when one image is dropped and
+      another added), and the recorded skeletons must match the ones actually in the `.slp` — which
+      is what closes 8.3c at the seam rather than by comparing two texts.
+      Reads nothing outside the package directory, with a test for it. Resolving `source_image` back
+      to the source filesystem would make a valid package pass only where it was built, inverting
+      Decision 3's "no dependency on the machine that produced it".
+- [x] 8.2 (RED) Tests for each rejection path, each asserting the error names the offending piece
+      **Done.** `tests/test_labeling_validate.py`. The packages under test are **hand-assembled**
+      rather than produced by the builder, for the reason 5.3 gives: a validator that only ever sees
+      its own builder's output tests agreement, not correctness.
+- [x] 8.3 Define and write the package metadata file — **new design, not ported** (F4): nothing in
       the vault scripts emits capture mode, skeleton name, or `bloom_experiment_id` in a parseable
       form. Source its *values* from where they live today (F7): `bloom_experiment_id` from
       `generate_readme.py:66`, the accession map from `:85-89`, the skeleton from `skeletons.yaml`
@@ -572,23 +627,68 @@ the scripts do.
       `views_per_plant`, and `total_views`. They determine which frames the package holds, and the
       manifest's enumerated columns carry none of them, so without this the selection is not
       reproducible from the artifact alone (Decision 5) even though it is deterministic
-- [ ] 8.3a Port `generate_readme.py` as `labeling/render_readme.py`, rendering the README **from the
+      **Done.** `PackageRecord` + `package_metadata.yaml`, written and read in `labeling/metadata.py`.
+      Kept as a separate class from `PackageMetadata` rather than folded into it: the builder must
+      fail on an unstated species long before a package is assembled (4.6), and making that check
+      depend on a frame count the builder has not computed yet would invert the ordering.
+      A missing key on read is a `ValueError` naming it, not a `KeyError` — a hand-edited or
+      older-tool package is a thing this has to diagnose.
+- [x] 8.3a Port `generate_readme.py` as `labeling/render_readme.py`, rendering the README **from the
       8.3 metadata file and the manifest** rather than from hardcoded prose. The labeler-facing
       content (SLEAP install, Notion guide, `v000`/`v001` versioning convention) stays as-is — it is
       good documentation and is not crop-specific
-- [ ] 8.3b (RED) Test that the rendered README's counts agree with `sample_manifest.csv` (F7).
+      **Done, in two commits per Decision 1.** The port is verified byte-identical to the vault
+      script's template and body; the deviation replaces where the content comes from, not what it
+      says. A rice package now renders without editing the renderer — the case the vault script
+      could not do at all, and the test that states it.
+      Two smaller deviations recorded with it: an accession id the record does not map is an error
+      rather than rendering as a bare number (F2 — an unmapped id means the Bloom lookup was not
+      done), and "the images should load automatically from the `images/` folder" became false with
+      section 5's embed change.
+- [x] 8.3b (RED) Test that the rendered README's counts agree with `sample_manifest.csv` (F7).
       `generate_readme.py:91` globs `images/*.jpg` while the manifest is the record of what should
       be there, so today the README silently reports the post-F5/F6 reduced number. Assert a
       mismatch is an error, not prose. Include `:96`'s `len(rows) // plant_count` integer division,
       which misreports whenever views per plant are unequal
-- [ ] 8.3c (RED) Test that the README's skeleton description matches the skeleton actually written
+      **Done.** Every count comes from the manifest, and a disagreement raises before any number is
+      written down. `_assert_counts_agree` became public `assert_counts_agree` so the renderer runs
+      the rule `validate_package` runs rather than a second copy — the sharing 3.5 established for
+      `assert_unique_output_filenames`. Unequal views now render as a range (`2-3`), not as an
+      integer-division figure no plant has.
+- [x] 8.3c (RED) Test that the README's skeleton description matches the skeleton actually written
       into the `.slp` — the node counts at `generate_readme.py:58-60` are prose duplicating
       `build_slp_project.py:43-58`, and this is the test that stops them drifting again
-- [ ] 8.4 Wire the build + validate commands into `cli.py` as a `labeling` group, mirroring how
+      **Done, and closed at the seam rather than by comparing two texts.** The README renders from
+      the record, and `validate_package` requires the record to match the skeleton actually written
+      into the `.slp`, so the description a labeler reads and the file they open cannot disagree
+      without failing validation. Asserted end to end against the built `.slp`.
+      Note for the assembler: the record's skeletons are derived from the committed table, **not**
+      read back out of the `.slp` the builder just wrote — reading them back would make that check
+      compare a thing with itself.
+- [x] 8.4 Wire the build + validate commands into `cli.py` as a `labeling` group, mirroring how
       `seed_registry_command` is exposed
-- [ ] 8.5 (RED) CLI tests mirroring `tests/test_registry_cli.py`: a successful build reports the
+      **Done, as four commands rather than two.** `select`, `copy-images`, `build`, `validate`.
+      `build` runs every stage itself and is the normal path; the two stage commands exist because
+      8.6's doc drives them separately when one needs re-running in isolation. Every stage wraps
+      `ValueError`/`OSError` into a `ClickException`, since each reports by raising with a message
+      written for the person who ran the command.
+      **New module, not in the original plan:** `labeling/package.py`. The four stages each fail
+      loudly on their own, but "the run died between the copy step and the build" produces exactly
+      the F1 artifact — a directory that looks like a package and is not. The package is assembled
+      in a staging directory beside the destination, validated there, and renamed into place only
+      once complete; staging is removed on any failure, including `KeyboardInterrupt`. Task 4.7's
+      rule raised a level.
+      The selection parameters are **required** options on `build`, not defaulted: they are recorded
+      in the package so it can be widened later, and a default that silently disagreed with the run
+      that produced the manifest would make the package's own instructions wrong. The manifest
+      cannot confirm a seed — that is what determinism is for — but it can contradict
+      `views_per_plant`, and `build_labeling_package` checks that it does not.
+- [x] 8.5 (RED) CLI tests mirroring `tests/test_registry_cli.py`: a successful build reports the
       package path; a validation failure exits non-zero with the error and writes nothing
-- [ ] 8.6 Port `/build-labeling-package` into `.claude/commands/build-labeling-package.md`, updated
+      **Done.** `tests/test_labeling_cli.py`. Also covers `--accessions @path`, which exists because
+      the map is the output of a hand-run Bloom query (F2) and pasting JSON into a shell is how a
+      quote goes missing.
+- [x] 8.6 Port `/build-labeling-package` into `.claude/commands/build-labeling-package.md`, updated
       to drive the in-repo CLI rather than vault script paths, and to record the Bloom
       accession-name lookup as a manual prerequisite (F2) rather than an in-repo step.
       **Obligation from F9:** drop Phase 1 step 4's manual `pd.concat` of the per-age-group QC files
@@ -596,14 +696,45 @@ the scripts do.
       not resolve a wildcard directory; the port fixes that, so the CLI now takes
       `<qc_out>/*/10_final_data.csv` directly. Leaving the step in would keep a workaround for a bug
       that no longer exists
-- [ ] 8.7 Document continue-labeling as **re-derive + republish** in the workflow doc: re-fetch via
+      **Done, and split in two.** `.claude/commands/build-labeling-package.md` is the ported
+      operational checklist; `docs/labeling-packages.md` is the contributor-facing guide (layout,
+      the four stages, what changed from the vault scripts, the re-derive path). A contributor looks
+      in `docs/`, and a checklist stays a checklist only if the reasoning lives somewhere findable.
+      Phase 2's four script invocations collapse to two commands, and the separate README step is
+      gone entirely — the README is generated from the package metadata.
+      **`tests/test_labeling_docs.py` guards both.** Every documented `labeling` command and
+      `--option` is checked against click's own parameter declarations, and every required option
+      must appear in at least one doc. A workflow doc that has drifted from the CLI is worse than
+      none: it fails in front of the person following it, after they have staged a download.
+      Verified by fault injection — a renamed option and a renamed command each go red. The F9
+      guard is scoped to code fences, so the prose explaining the removal does not trip it.
+- [x] 8.7 Document continue-labeling as **re-derive + republish** in the workflow doc: re-fetch via
       `bloomctl download --experiment-id <id>`, re-select wider, publish a new version — with the
       `save_slp` truncation reason stated, not just the instruction
+      **Done, in both docs** — a reader may reach for either — and pinned by
+      `test_continued_labeling_is_documented_as_re_derive_and_republish`. The guide carries the full
+      reason: `save_slp` restores the original video only *if it is still available*, so a package
+      whose sources have gone unreachable is capped at its embedded frames permanently, which is
+      what the six `repaired_from: "v0"` collections are.
 
 ## 9. Validation and handoff
 
-- [ ] 9.1 `uv run openspec validate add-labeling-package-generator --strict`
-- [ ] 9.2 `uv run pytest`, `uv run black --check src tests`, `uv run ruff check src tests`
+- [x] 9.1 `uv run openspec validate add-labeling-package-generator --strict` — **valid.**
+- [x] 9.2 `uv run pytest`, `uv run black --check src tests`, `uv run ruff check src tests`
+      **Green: 414 passed, 2 skipped**; `black --check` and `ruff check` clean over 51 files;
+      `uv lock --check` clean.
+- [x] 9.2a **Checked the validator against the real published package**, not only fixtures
+      (`~/data/weep`, the 1 GB WEEP package section 5.4 used). Three things confirmed on real data:
+      * `labeling validate` **rejects it**, naming `package_metadata.yaml` — correct, and the reason
+        is the point: nothing before this change wrote one, so the eight published collections are
+        not packages by Decision 3's definition. That is the gap `#10` inherits, stated precisely
+        rather than asserted.
+      * `soybean_weep_primary_labels.v000.slp` and `..._lateral_...v000.slp` — what the vault
+        builder actually wrote — **carry external references**. The F1/Decision 2 failure, observed
+        rather than reasoned about.
+      * `labels_weep_primary.v001.pkg.slp` and its lateral twin — the hand-repaired files — are
+        **self-contained**. This is the repair the design describes, and the reason section 5 moves
+        embedding into the builder: the repair works, but it is one-way and caps the label set.
 - [ ] 9.3 Confirm CI passes on 3.11 and 3.12 — `sleap-io` is a new dependency and this is the first
       code in the repo that touches `.slp` files
 - [ ] 9.4 Comment on #10 that the package layout is now real, naming the validate entry point
