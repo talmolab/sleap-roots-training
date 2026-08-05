@@ -43,18 +43,60 @@ def _yaml_blocks(text: str) -> list[str]:
     ]
 
 
-def _collect_modes(node) -> list[str]:
-    """Every value under a ``mode`` key, at any depth, in a parsed YAML document."""
+def _experiment_modes(node) -> list[str]:
+    """Every ``experiment.mode`` value in a parsed YAML document.
+
+    Scoped to the ``experiment:`` block, not an unbounded walk for any ``mode`` key at
+    any depth. A config is the repo-owned ``experiment`` block **plus** `sleap-nn`'s own
+    ``data_config`` / ``model_config`` / ``trainer_config`` consumed as-is, and those
+    carry unrelated ``mode`` keys — ``ReduceLROnPlateau(mode='min'|'max')`` is a
+    completely standard Lightning field. Checking those against ``MODE_VOCAB`` turns the
+    guide's own guard red the moment someone documents a scheduler correctly, and blames
+    the contract for it. Only ``experiment.mode`` is the surface this guards.
+    """
     found = []
     if isinstance(node, dict):
         for key, value in node.items():
-            if key == "mode" and not isinstance(value, (dict, list)):
-                found.append(value)
-            found.extend(_collect_modes(value))
+            if key == "experiment" and isinstance(value, dict):
+                mode = value.get("mode")
+                if mode is not None and not isinstance(mode, (dict, list)):
+                    found.append(mode)
+            found.extend(_experiment_modes(value))
     elif isinstance(node, list):
         for item in node:
-            found.extend(_collect_modes(item))
+            found.extend(_experiment_modes(item))
     return found
+
+
+def test_mode_guard_reads_only_the_experiment_block():
+    """A `sleap-nn` ``mode:`` is not an ``experiment.mode`` and must not be guarded.
+
+    The guide documents that a config carries `sleap-nn`'s own ``data_config`` /
+    ``model_config`` / ``trainer_config`` "consumed as-is", and those have unrelated
+    ``mode`` keys of their own — ``ReduceLROnPlateau(mode='min'|'max')`` is a completely
+    standard Lightning field. An any-depth walk for ``mode`` collects those too and
+    checks them against ``MODE_VOCAB``, so documenting a scheduler accurately turns the
+    guide's own guard red and blames the contract for it. Same defect the YAML-aware
+    rewrite was meant to fix, one layer down.
+    """
+    import yaml
+
+    doc = yaml.safe_load(
+        "experiment:\n"
+        "  species: arabidopsis\n"
+        "  mode: cylinder\n"
+        "  root_type: primary\n"
+        "trainer_config:\n"
+        "  lr_scheduler:\n"
+        "    reduce_lr_on_plateau:\n"
+        "      mode: min\n"
+        "      factor: 0.5\n"
+        "model_config:\n"
+        "  head_configs:\n"
+        "    - name: centered_instance\n"
+        "      mode: max\n"
+    )
+    assert _experiment_modes(doc) == ["cylinder"]
 
 
 def test_guide_exists():
@@ -122,7 +164,8 @@ def test_documented_experiment_modes_stay_contract_valid():
     ``'"multiplant cylinder"'``; a nested or flow-mapping form is missed; and a `python`
     or `bash` fence contributes junk. Worse, the message then blames the contract for a
     bug in the test. ``yaml.safe_load`` handles quoting, nesting, flow mappings and
-    comments for free (PyYAML is already present — omegaconf requires it).
+    comments for free (PyYAML is already present — omegaconf requires it). Collection is
+    scoped to the ``experiment:`` block for the same reason — see ``_experiment_modes``.
     """
     import yaml
 
@@ -134,11 +177,13 @@ def test_documented_experiment_modes_stay_contract_valid():
             parsed = yaml.safe_load(block)
         except yaml.YAMLError:
             continue  # a deliberate fragment, not a config a user would copy
-        documented.extend(_collect_modes(parsed))
+        documented.extend(_experiment_modes(parsed))
 
-    assert documented, "guide documents no `mode:` value — did the example block move?"
+    assert (
+        documented
+    ), "guide documents no `experiment.mode:` value — did the example block move?"
     for mode in documented:
         assert mode in MODE_VOCAB, (
-            f"docs/training.md tells users to write mode: {mode!r}, which the contract "
-            f"vocabulary no longer accepts (allowed: {sorted(MODE_VOCAB)})"
+            f"docs/training.md tells users to write experiment.mode: {mode!r}, which "
+            f"the contract vocabulary no longer accepts (allowed: {sorted(MODE_VOCAB)})"
         )
