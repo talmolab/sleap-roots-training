@@ -735,9 +735,16 @@ the scripts do.
       * `labels_weep_primary.v001.pkg.slp` and its lateral twin — the hand-repaired files — are
         **self-contained**. This is the repair the design describes, and the reason section 5 moves
         embedding into the builder: the repair works, but it is one-way and caps the label set.
-- [ ] 9.3 Confirm CI passes on 3.11 and 3.12 — `sleap-io` is a new dependency and this is the first
+- [x] 9.3 Confirm CI passes on 3.11 and 3.12 — `sleap-io` is a new dependency and this is the first
       code in the repo that touches `.slp` files
-- [ ] 9.4 Comment on #10 that the package layout is now real, naming the validate entry point
+      **Green on all 7 jobs** (PR #40): lint plus 3.11/3.12 on ubuntu, macOS and Windows. The
+      Windows legs matter here beyond the usual: the copy step's path handling is
+      `PurePosixPath`-based on purpose, so a manifest written on the vault's Windows machine
+      resolves, and the builder writes and re-reads `.slp` files on all three.
+- [ ] 9.4 **Held until the PR has been reviewed** — the layout and the entry point are what #10 would
+      be built against, so handing them over before review invites building on something a reviewer
+      may still move. Comment on #10 that the package layout is now real, naming the validate entry point
       `publish-labels` should call, so `add-label-registry` can be built against it rather than
       against a description
-- [ ] 9.5 Close #26 referencing the ported modules, the embed commit, and the deviations in section 7
+- [ ] 9.5 **Held until review feedback.** Close #26 referencing the ported modules, the embed commit,
+      and the deviations in section 7
