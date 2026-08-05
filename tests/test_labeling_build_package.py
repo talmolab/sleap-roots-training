@@ -1,11 +1,11 @@
-"""Characterization tests for the package builder, before it is made fail-loud.
+"""Characterization + deviation tests for the package builder.
 
-Sequenced per design.md Decision 1: these pin the behavior the port inherited from the
-vault's ``build_slp_project.py``, including the silent-empty failure design.md records as
-F1 — an unpopulated ``images/`` warns per scan, writes both ``.slp`` files, and returns
-normally. Task 4.4 changes that and section 5 changes ``embed=False``, each in its own
-commit; until then this file is the record of how the eight published collections were
-produced.
+Sequenced per design.md Decision 1. The ``characterization`` tests pin what the port
+inherited unchanged from the vault's ``build_slp_project.py``; the ``deviation`` tests pin
+what tasks 4.4–4.7 change on purpose, each naming the legacy behavior it replaced — above
+all F1's silent-empty build, where an unpopulated ``images/`` warned per scan, wrote both
+``.slp`` files, and returned normally. ``embed=False`` is still characterized here; section
+5 is the commit that changes it.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import sleap_io as sio
 from conftest import write_jpeg
 from sleap_roots_training.labeling import select_samples as ss
 from sleap_roots_training.labeling.build_package import build_slp_project
+from sleap_roots_training.labeling.metadata import PackageMetadata
 
 #: Two scans, three selected views each. The view indices are the vault script's own
 #: three-view spread, so the frame/view correspondence under test is the shipped one.
@@ -28,6 +29,11 @@ SCANS = (
     (2, "8XQ2LMNPQR", 3, 12742740, "WEEP-1-4"),
 )
 VIEWS = (1, 25, 49)
+
+#: The soybean WEEP package the vault script was hand-edited to build.
+METADATA = PackageMetadata(
+    species="soybean", mode="cylinder", root_types=("primary", "lateral")
+)
 
 
 def manifest_rows(scans=SCANS, views=VIEWS, frame_indices=None):
@@ -141,7 +147,7 @@ def build(tmp_path: Path, **kwargs) -> Path:
     manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(
         tmp_path, **kwargs
     )
-    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
+    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir, METADATA)
     return output_dir
 
 
@@ -165,7 +171,9 @@ def test_writes_both_root_type_projects_under_versioned_names(tmp_path):
 def test_the_version_string_is_part_of_the_filename(tmp_path):
     manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
 
-    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir, "v003")
+    build_slp_project(
+        manifest_csv, images_dir, predictions_dir, output_dir, METADATA, "v003"
+    )
 
     assert (output_dir / "soybean_weep_primary_labels.v003.slp").is_file()
 
@@ -238,22 +246,12 @@ def test_the_hardcoded_soybean_skeletons_are_what_gets_written(tmp_path):
     assert len(lateral_labels.skeletons[0].nodes) == 4
 
 
-def test_a_scan_without_predictions_contributes_no_video(tmp_path):
-    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
-    for path in predictions_dir.glob("scan_2.*"):
-        path.unlink()
-
-    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
-
-    assert len(primary(output_dir).videos) == 1
-
-
 def test_a_scan_predicted_for_one_root_type_only_appears_in_that_project(tmp_path):
     manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
     for path in predictions_dir.glob("scan_2.*.root_lateral.slp"):
         path.unlink()
 
-    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
+    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir, METADATA)
 
     lateral = sio.load_slp(str(output_dir / "soybean_weep_lateral_labels.v000.slp"))
     assert len(primary(output_dir).videos) == 2
@@ -265,7 +263,9 @@ def test_multiple_prediction_files_for_a_scan_warn_and_use_the_first(tmp_path, c
     write_predictions(predictions_dir, 1, "primary", model="model_b")
 
     with caplog.at_level("WARNING"):
-        build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )
 
     assert "Multiple primary predictions for scan 1" in caplog.text
 
@@ -286,26 +286,124 @@ def test_the_saved_project_references_external_images(tmp_path):
     assert referenced.is_file()
 
 
-def test_an_unpopulated_images_dir_warns_and_still_reports_a_finished_build(
-    tmp_path, caplog
-):
-    """design.md F1: the second link in the silent-empty chain, pinned before 4.4 breaks it.
+# --------------------------------------------------------------------------------------
+# Deviation (tasks 4.4-4.7) — nothing is written until everything checks out
+# --------------------------------------------------------------------------------------
 
-    Every scan warns, both ``.slp`` files are written, and the function returns
-    normally — an empty labeling package that looks like a completed build.
+
+def test_an_unpopulated_images_dir_fails_the_build_and_writes_nothing(tmp_path):
+    """Replaces design.md F1, the second link in the silent-empty chain.
+
+    The vault script warned per scan, wrote both ``.slp`` files, and returned normally —
+    an empty labeling package that looked like a completed build, and the one the copy
+    step used to hand it. All the missing images are reported together, since the useful
+    fact is "the copy step never ran", not "scan 1 failed".
     """
     manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(
         tmp_path, populate_images=False
     )
 
-    with caplog.at_level("WARNING"):
-        build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
+    with pytest.raises(FileNotFoundError) as excinfo:
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )
 
-    assert "Missing images for scan 1" in caplog.text
-    assert "Missing images for scan 2" in caplog.text
-    labels = primary(output_dir)
-    assert labels.labeled_frames == []
-    assert labels.videos == []
+    assert "6 of 6" in str(excinfo.value)
+    assert "A3244_9DK8KJJEZR_age3_0.jpg" in str(excinfo.value)
+    assert list(output_dir.glob("*.slp")) == []
+
+
+def test_a_single_missing_curated_image_fails_the_build(tmp_path):
+    """A partial ``images/`` is no more buildable than an empty one."""
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
+    (images_dir / "A3244_9DK8KJJEZR_age3_1.jpg").unlink()
+
+    with pytest.raises(FileNotFoundError, match="A3244_9DK8KJJEZR_age3_1.jpg"):
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )
+
+
+def test_a_failed_build_leaves_no_output_directory_behind(tmp_path):
+    """Task 4.5: no partial package a later step could mistake for a complete one."""
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
+    output_dir = tmp_path / "fresh_package"
+    (images_dir / "A3244_9DK8KJJEZR_age3_1.jpg").unlink()
+
+    with pytest.raises(FileNotFoundError):
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )
+
+    assert not output_dir.exists()
+
+
+def test_a_scan_with_no_predictions_at_all_fails_the_build(tmp_path):
+    """The vault script skipped it, so the package silently omitted a selected scan.
+
+    Distinct from a scan predicted for only one root type, which stays legitimate — a
+    model finding no laterals is a result, whereas a scan absent from every prediction
+    file means the selection cannot be honored.
+    """
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
+    for path in predictions_dir.glob("scan_2.*"):
+        path.unlink()
+
+    with pytest.raises(ValueError, match="no predictions"):
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )
+
+
+def test_a_requested_root_type_with_no_frames_fails_the_build(tmp_path):
+    """Task 4.4: an empty selection is never a successful build.
+
+    Declaring a root type the package has no labels for is exactly the empty ``.slp``
+    the vault script wrote without complaint.
+    """
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
+    for path in predictions_dir.glob("*.root_lateral.slp"):
+        path.unlink()
+
+    with pytest.raises(ValueError, match="lateral"):
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )
+
+
+def test_a_package_may_declare_a_single_root_type(tmp_path):
+    """The way to build a primary-only package is to say so, not to ship an empty file."""
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(tmp_path)
+    for path in predictions_dir.glob("*.root_lateral.slp"):
+        path.unlink()
+    metadata = PackageMetadata(
+        species="soybean", mode="cylinder", root_types=("primary",)
+    )
+
+    written = build_slp_project(
+        manifest_csv, images_dir, predictions_dir, output_dir, metadata
+    )
+
+    assert set(written) == {"primary"}
+    assert not (output_dir / "soybean_weep_lateral_labels.v000.slp").exists()
+
+
+def test_a_species_without_a_skeleton_fails_before_reading_anything(tmp_path):
+    """Metadata is checked first, so a wrong species is not reported as a data problem.
+
+    The builder still carries the vault script's hardcoded soybean pair; giving another
+    species soybean's node counts would produce a package that looks fine and cannot be
+    combined with anything. Section 6's committed table is what lifts this.
+    """
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(
+        tmp_path, populate_images=False
+    )
+    metadata = PackageMetadata(species="rice", mode="cylinder", root_types=("primary",))
+
+    with pytest.raises(NotImplementedError, match="rice"):
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, metadata
+        )
 
 
 # --------------------------------------------------------------------------------------
@@ -328,7 +426,7 @@ def test_frame_position_comes_from_the_manifest_not_from_sorting_view_index(tmp_
         tmp_path, rows=rows
     )
 
-    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
+    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir, METADATA)
 
     labels = primary(output_dir)
     by_position = {}
@@ -350,4 +448,6 @@ def test_a_non_contiguous_frame_index_fails_rather_than_mis_indexing(tmp_path):
     )
 
     with pytest.raises(ValueError, match="frame_index"):
-        build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir)
+        build_slp_project(
+            manifest_csv, images_dir, predictions_dir, output_dir, METADATA
+        )

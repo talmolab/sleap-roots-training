@@ -9,10 +9,16 @@ points.
 One ``Video`` per scan, matching sleap-roots' "one video per cylinder scan" convention; each
 scan's video holds only the selected rotational views, in manifest ``frame_index`` order.
 
-This is the faithful port, so it still saves with ``embed=False`` — the change that stops a
-package depending on paths that outlive it is section 5, as its own commit (design.md
-Decision 2). The skeletons are still the hardcoded soybean pair and the output names still
-say ``soybean_weep``; section 6 parameterizes both off a committed table (Decision 7).
+The build is **all-or-nothing** (tasks 4.4–4.7): metadata, curated images, and predictions
+are all checked before ``output_dir`` is created, so a failed build leaves nothing behind
+and an empty selection is never reported as a success. The vault script warned past each of
+those and wrote both files anyway (design.md F1); its faithful behavior is in this file's
+first commit.
+
+It still saves with ``embed=False`` — the change that stops a package depending on paths
+that outlive it is section 5, as its own commit (design.md Decision 2). The skeletons are
+still the hardcoded soybean pair and the output names still say ``soybean_weep``; section 6
+parameterizes both off a committed table (Decision 7).
 """
 
 from __future__ import annotations
@@ -23,6 +29,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import sleap_io as sio
+
+from sleap_roots_training.labeling.metadata import PackageMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -132,21 +140,69 @@ def _scan_frame_order(scan_rows: pd.DataFrame, scan_id: object) -> pd.DataFrame:
     return ordered
 
 
+def skeleton_for(species: str, root_type: str) -> sio.Skeleton:
+    """Return the skeleton a package of this species and root type is labeled with.
+
+    Still the vault script's hardcoded soybean pair. Section 6 replaces this with a
+    committed, provenance-stamped table keyed by ``(species, root_type)`` (Decision 7);
+    until then any other combination raises rather than silently receiving soybean's node
+    counts, which would produce a package that looks fine and cannot be combined with
+    anything.
+
+    Args:
+        species: Crop, already validated against ``SPECIES_VOCAB``.
+        root_type: Root type, already validated against ``ROOT_TYPE_VOCAB``.
+
+    Returns:
+        The skeleton to label with.
+
+    Raises:
+        NotImplementedError: For any pair the hardcoded skeletons do not describe.
+    """
+    builders = {
+        ("soybean", "primary"): make_primary_skeleton,
+        ("soybean", "lateral"): make_lateral_skeleton,
+    }
+    try:
+        return builders[(species, root_type)]()
+    except KeyError:
+        raise NotImplementedError(
+            f"No skeleton is defined for ({species!r}, {root_type!r}). The builder still "
+            "carries the vault script's hardcoded soybean primary/lateral pair; the "
+            "committed per-crop skeleton table (design.md Decision 7) is what adds the "
+            "rest."
+        ) from None
+
+
+def _resolve_scan_images(
+    scan_rows: pd.DataFrame, images_dir: Path
+) -> tuple[list[str], list[str]]:
+    """Return one scan's curated image paths in frame order, and any that are absent."""
+    paths = [
+        str(images_dir / row["output_filename"]) for _, row in scan_rows.iterrows()
+    ]
+    return paths, [p for p in paths if not Path(p).exists()]
+
+
 def build_slp_project(
     manifest_csv: Path,
     images_dir: Path,
     predictions_dir: Path,
     output_dir: Path,
+    metadata: PackageMetadata,
     version: str = "v000",
-) -> None:
-    """Build the primary and lateral ``.slp`` project files.
+) -> dict[str, Path]:
+    """Build one ``.slp`` project per requested root type, or fail without writing.
 
-    Warns and skips past a scan whose curated images are missing, then writes both
-    ``.slp`` files and returns normally (design.md F1). Run against an unpopulated
-    ``images_dir``, it reports success and produces empty label files — the second link
-    in the silent-empty chain whose first link the copy step used to hold. Task 4.4
-    changes this; it is preserved here so the characterization tests have the original
-    behavior to pin.
+    Deviation (tasks 4.4–4.7). The vault script warned past a scan whose curated images
+    were missing, warned past a scan with no predictions, and then wrote both ``.slp``
+    files and returned normally — so an unpopulated ``images_dir`` produced an empty
+    labeling package that reported success (design.md F1). Everything is now validated
+    before anything is written: a missing curated image fails the build, a scan that
+    contributes no labels at all fails the build, and a requested root type with no
+    frames fails the build. ``output_dir`` is created only once both projects are
+    assembled, so a failed build leaves no directory a later stage could mistake for a
+    complete package.
 
     Args:
         manifest_csv: Path to ``sample_manifest.csv``.
@@ -154,115 +210,132 @@ def build_slp_project(
         predictions_dir: The pipeline's ``sleap_roots_traits_input/`` directory, holding
             one prediction file per scan and root type.
         output_dir: Directory to write the ``.slp`` files into.
+        metadata: The package's identity. Validated on construction, so a build cannot
+            proceed with a missing or out-of-vocabulary field (task 4.6).
         version: Version string embedded in the output filenames.
+
+    Returns:
+        The path written for each root type, keyed by root type.
+
+    Raises:
+        FileNotFoundError: If any curated image named by the manifest is absent.
+        ValueError: If ``frame_index`` is not a contiguous rank within a scan, if a scan
+            has no predictions for any requested root type, or if a requested root type
+            ends up with no labeled frames.
+        NotImplementedError: If no skeleton is defined for the metadata's species and a
+            requested root type.
     """
     manifest = pd.read_csv(manifest_csv)
     logger.info("Loaded manifest with %d rows", len(manifest))
 
-    primary_skeleton = make_primary_skeleton()
-    lateral_skeleton = make_lateral_skeleton()
+    # Metadata and skeletons first: they depend on no input file, so a wrong species or
+    # an unknown root type fails before anything on disk is read or judged.
+    skeletons = {rt: skeleton_for(metadata.species, rt) for rt in metadata.root_types}
+    frames: dict[str, list[sio.LabeledFrame]] = {rt: [] for rt in metadata.root_types}
+    videos: dict[str, list[sio.Video]] = {rt: [] for rt in metadata.root_types}
 
-    primary_frames: list[sio.LabeledFrame] = []
-    lateral_frames: list[sio.LabeledFrame] = []
-    primary_videos: list[sio.Video] = []
-    lateral_videos: list[sio.Video] = []
-    scans_processed = 0
-    scans_missing_pred = 0
+    scan_groups = [
+        (scan_id, _scan_frame_order(rows, scan_id))
+        for scan_id, rows in manifest.groupby("scan_id")
+    ]
 
-    for scan_id, scan_rows in manifest.groupby("scan_id"):
-        scans_processed += 1
-        scan_rows = _scan_frame_order(scan_rows, scan_id)
+    # Every curated image, across every scan, before a single video is opened — so the
+    # report is "these N images are missing", not the first scan that happened to fail.
+    absent: list[str] = []
+    for _, scan_rows in scan_groups:
+        absent.extend(_resolve_scan_images(scan_rows, images_dir)[1])
+    if absent:
+        listed = "\n  ".join(absent[:10])
+        more = f"\n  ... and {len(absent) - 10} more" if len(absent) > 10 else ""
+        raise FileNotFoundError(
+            f"{len(absent)} of {len(manifest)} curated image(s) named by the manifest "
+            f"are missing from {images_dir}:\n  {listed}{more}\nRun the copy step first; "
+            "an empty or partial images directory is not a buildable package."
+        )
 
-        scan_image_paths = [
-            str(images_dir / row["output_filename"]) for _, row in scan_rows.iterrows()
-        ]
-        missing = [p for p in scan_image_paths if not Path(p).exists()]
-        if missing:
-            logger.warning("Missing images for scan %s: %s", scan_id, missing)
-            continue
-
+    unpredicted: list[object] = []
+    for scan_id, scan_rows in scan_groups:
+        scan_image_paths, _ = _resolve_scan_images(scan_rows, images_dir)
         # One Video per scan, matching sleap-roots' "1 video per scan" convention.
         scan_video = sio.Video.from_filename(scan_image_paths)
 
-        primary_pred_frames = load_predictions_for_scan(
-            scan_id, predictions_dir, "primary"
-        )
-        lateral_pred_frames = load_predictions_for_scan(
-            scan_id, predictions_dir, "lateral"
-        )
-        if not primary_pred_frames and not lateral_pred_frames:
-            scans_missing_pred += 1
+        predictions = {
+            rt: load_predictions_for_scan(scan_id, predictions_dir, rt)
+            for rt in metadata.root_types
+        }
+        if not any(predictions.values()):
+            unpredicted.append(scan_id)
             continue
 
-        scan_has_primary = False
-        scan_has_lateral = False
-
+        contributed: set[str] = set()
         for _, row in scan_rows.iterrows():
             target_idx = int(row["frame_index"])
             # Prediction files are 0-indexed over the full rotation; view_index is 1-based.
             pred_frame_idx = row["view_index"] - 1
-
-            for pred_lf in primary_pred_frames:
-                if pred_lf.frame_idx == pred_frame_idx:
+            for root_type, pred_frames in predictions.items():
+                for pred_lf in pred_frames:
+                    if pred_lf.frame_idx != pred_frame_idx:
+                        continue
                     instances = [
-                        rebuild_instance(inst, primary_skeleton)
+                        rebuild_instance(inst, skeletons[root_type])
                         for inst in pred_lf.instances
                     ]
                     if instances:
-                        primary_frames.append(
+                        frames[root_type].append(
                             sio.LabeledFrame(
                                 video=scan_video,
                                 frame_idx=target_idx,
                                 instances=instances,
                             )
                         )
-                        scan_has_primary = True
+                        contributed.add(root_type)
                     break
 
-            for pred_lf in lateral_pred_frames:
-                if pred_lf.frame_idx == pred_frame_idx:
-                    instances = [
-                        rebuild_instance(inst, lateral_skeleton)
-                        for inst in pred_lf.instances
-                    ]
-                    if instances:
-                        lateral_frames.append(
-                            sio.LabeledFrame(
-                                video=scan_video,
-                                frame_idx=target_idx,
-                                instances=instances,
-                            )
-                        )
-                        scan_has_lateral = True
-                    break
+        for root_type in contributed:
+            videos[root_type].append(scan_video)
+        missing_types = sorted(set(metadata.root_types) - contributed)
+        if missing_types:
+            logger.warning(
+                "Scan %s contributes no %s labels", scan_id, ", ".join(missing_types)
+            )
 
-        if scan_has_primary:
-            primary_videos.append(scan_video)
-        if scan_has_lateral:
-            lateral_videos.append(scan_video)
+    if unpredicted:
+        raise ValueError(
+            f"{len(unpredicted)} scan(s) in the manifest have no predictions for any "
+            f"requested root type ({', '.join(metadata.root_types)}): {unpredicted}. "
+            "A scan that contributes nothing is a selection the package cannot honor."
+        )
 
-    logger.info(
-        "Processed %d scans (%d missing predictions)",
-        scans_processed,
-        scans_missing_pred,
-    )
-    logger.info(
-        "Primary: %d frames across %d scan videos",
-        len(primary_frames),
-        len(primary_videos),
-    )
-    logger.info(
-        "Lateral: %d frames across %d scan videos",
-        len(lateral_frames),
-        len(lateral_videos),
-    )
+    empty = [rt for rt in metadata.root_types if not frames[rt]]
+    if empty:
+        raise ValueError(
+            f"No labeled frames were produced for root type(s) {empty}, so the build "
+            "would write empty label files. Either the predictions do not cover the "
+            "selected views, or the package should not declare these root types."
+        )
 
-    for root_type, frames, videos, skeleton in (
-        ("primary", primary_frames, primary_videos, primary_skeleton),
-        ("lateral", lateral_frames, lateral_videos, lateral_skeleton),
-    ):
-        labels = sio.Labels(labeled_frames=frames, videos=videos, skeletons=[skeleton])
+    projects = {}
+    for root_type in metadata.root_types:
+        labels = sio.Labels(
+            labeled_frames=frames[root_type],
+            videos=videos[root_type],
+            skeletons=[skeletons[root_type]],
+        )
         labels.update()
+        projects[root_type] = labels
+        logger.info(
+            "%s: %d frames across %d scan videos",
+            root_type,
+            len(frames[root_type]),
+            len(videos[root_type]),
+        )
+
+    # Nothing on disk until every project is assembled.
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for root_type, labels in projects.items():
         path = output_dir / f"soybean_weep_{root_type}_labels.{version}.slp"
         sio.save_slp(labels, str(path), embed=False)
         logger.info("Saved %s labels: %s", root_type, path)
+        written[root_type] = path
+    return written
