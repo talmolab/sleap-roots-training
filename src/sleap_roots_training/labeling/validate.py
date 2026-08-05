@@ -171,7 +171,7 @@ def _assert_manifest_columns(manifest: pd.DataFrame) -> None:
         )
 
 
-def _assert_counts_agree(
+def assert_counts_agree(
     package_dir: Path, manifest: pd.DataFrame, record: PackageRecord
 ) -> None:
     """Fail if the declared count, the manifest, and the curated images disagree.
@@ -179,6 +179,11 @@ def _assert_counts_agree(
     Three numbers that must be one number. The README used to report a fourth, globbed
     from ``images/`` (design.md F7), so a dropped image surfaced as smaller prose in the
     documentation and nowhere a machine could see it.
+
+    Public because :mod:`sleap_roots_training.labeling.render_readme` runs the same rule
+    before it publishes any of these numbers to a human. One rule with two callers, the
+    way ``assert_unique_output_filenames`` is shared between selection and the copy step
+    (task 3.5) — two rules that agree today are two rules that can drift.
 
     Args:
         package_dir: The package directory.
@@ -293,7 +298,7 @@ def validate_package(package_dir: Path) -> PackageRecord:
     manifest = pd.read_csv(package_dir / MANIFEST_FILENAME)
     _assert_manifest_columns(manifest)
     assert_unique_output_filenames(manifest)
-    _assert_counts_agree(package_dir, manifest, record)
+    assert_counts_agree(package_dir, manifest, record)
 
     for root_type, path in projects.items():
         _assert_skeleton_matches_record(path, root_type, record.skeletons[root_type])
