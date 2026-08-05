@@ -230,18 +230,19 @@ changed**, [`..._os2_sigma5.yaml`](../examples/baseline_bottomup_v000_os2_sigma5
 
 Runs (W&B, seeds 42 / 43 / 44): σ=2.5 [dzqfyllx](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/dzqfyllx) / [0lx0mtlj](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/0lx0mtlj) / [gm03okhs](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/gm03okhs); σ=5.0 [35bxsc7a](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/35bxsc7a) / [8zjnjpnz](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/8zjnjpnz) / [nabcm8o4](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/nabcm8o4).
 
-With σ=5.0 (sleap-nn's default) `output_stride 2` trains on **every** seed and detects ~all
-instances; with σ=2.5 two of three seeds collapse. **The cause is sleap-nn's short default training
-schedule (step count), not the loss**, confirmed by a schedule-matched control. At the settings that
-collapse (full resolution, `output_stride 2`, `sigma 2.5`, TF architecture), all 3 seeds collapse
-under sleap-nn's default `min_train_steps_per_epoch` (~25 steps/epoch); with TF's schedule
-(`min_train_steps_per_epoch: 200` and matching patience,
-[`examples/tf_parity_v000_os2_schedmatched.yaml`](../examples/tf_parity_v000_os2_schedmatched.yaml))
-all 3 seeds train instead (train `dist_avg` 6.3–9.7 px, `dist_p50` 2.6–4.2 px; val `dist_p50`
-5.7–7.8 px, at low recall 0.38–0.63). Both sleap-nn and legacy TF use the same unweighted
-`nn.MSELoss()` (confirmed by Divya), and TF trained `sigma 2.5` at these settings to ~1–2 px, so the
-loss formula is not the differentiator; TF simply ran ~8× more gradient steps, escaping the "predict
-background" minimum before early stopping. `sigma 5.0` is thus one escape route (coarser targets give
+With σ=5.0 (sleap-nn's default sigma) `output_stride 2` trains on **every** seed and detects ~all
+instances; with σ=2.5 two of three seeds collapse. **The cause is too few gradient steps per epoch,
+not the loss**, confirmed by a schedule-matched control. Our configs set `min_train_steps_per_epoch:
+25` (one pass over the 99-frame train set), which is **8× below sleap-nn's own default of 200**
+(`sleap_nn/config/trainer_config.py`; `train_steps_per_epoch` then resolves to the max of that and
+the data size). At the settings that collapse (full resolution, `output_stride 2`, `sigma 2.5`, TF
+architecture), all 3 seeds collapse at 25 steps/epoch; raising to 200 (sleap-nn's default, and TF's
+`batches_per_epoch`, [`examples/tf_parity_v000_os2_schedmatched.yaml`](../examples/tf_parity_v000_os2_schedmatched.yaml))
+trains all 3 instead (train `dist_avg` 6.3–9.7 px, `dist_p50` 2.6–4.2 px; val `dist_p50` 5.7–7.8 px,
+at low recall 0.38–0.63). Both sleap-nn and legacy TF use the same unweighted `nn.MSELoss()`
+(confirmed by Divya), so the loss formula is not the differentiator; the collapse was our config
+under-setting the step count below sleap-nn's default of 200, which the default (or converting the TF
+config, which carries `batches_per_epoch` into `min_train_steps_per_epoch`) would have avoided. `sigma 5.0` is thus one escape route (coarser targets give
 a stronger gradient toward peaks) and more steps is another. **`val/confmaps_loss` is not a reliable
 collapse signal:** the healthy schedule-matched runs sit at ~6e-5, at or below the collapsed runs,
 because on sparse targets both an all-background and a sharp-peak prediction have tiny MSE; the
