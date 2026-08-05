@@ -227,5 +227,340 @@ def emit_command(config_path: Path, output: Optional[Path]) -> None:
     click.echo(f"wrote sleap-nn config to {output}")
 
 
+@main.group(name="labeling")
+def labeling_group() -> None:
+    """Build the labeling packages that seed the label registry.
+
+    The four stages of the ``/build-labeling-package`` workflow, in order: ``select`` a
+    stratified sample from QC-cleaned scans, ``copy-images`` to gather them under curated
+    names, ``build`` the package, and ``validate`` one you have been handed. ``build``
+    runs every stage itself and is the normal path; the two stage commands exist because
+    the workflow doc drives them separately when a step needs to be re-run in isolation.
+    """
+
+
+def _labeling_error(error: Exception) -> click.ClickException:
+    """Wrap a labeling-stage failure as a CLI error.
+
+    Every stage in :mod:`sleap_roots_training.labeling` reports by raising ``ValueError``
+    or ``OSError`` with a message written for the person who ran the command — naming the
+    row, the path, or the parameter. Unwrapped they arrive as a traceback with that
+    message buried in it.
+
+    Args:
+        error: The stage's exception.
+
+    Returns:
+        The click exception to raise.
+    """
+    return click.ClickException(str(error))
+
+
+def _parse_accessions(value: str) -> dict:
+    """Parse the ``--accessions`` mapping, from JSON or from ``@path``.
+
+    The map is the output of a hand-run Bloom query (design.md F2), so it arrives as
+    something a person pasted. ``@path`` exists because pasting JSON into a shell is how a
+    quote goes missing.
+
+    Args:
+        value: A JSON object, or ``@`` followed by a path to one.
+
+    Returns:
+        The mapping of accession id to name, with string keys.
+
+    Raises:
+        click.ClickException: If it is unreadable or is not an object of scalars.
+    """
+    import json
+
+    text = value
+    if value.startswith("@"):
+        try:
+            text = Path(value[1:]).read_text(encoding="utf-8")
+        except OSError as error:
+            raise click.ClickException(f"--accessions: could not read file: {error}")
+    try:
+        parsed = json.loads(text)
+    except ValueError as error:
+        raise click.ClickException(
+            f"--accessions is not valid JSON: {error}. Expected a mapping of accession "
+            'id to name, e.g. \'{"12742739": "A3244"}\', or @path to a file holding one.'
+        )
+    if not isinstance(parsed, dict):
+        raise click.ClickException(
+            f"--accessions is a {type(parsed).__name__}, expected a JSON object mapping "
+            "accession id to name."
+        )
+    return {str(key): str(name) for key, name in parsed.items()}
+
+
+@labeling_group.command(name="select")
+@click.option(
+    "--cleaned-csv",
+    required=True,
+    help="QC-cleaned `10_final_data.csv`; may be a glob over per-age-group files.",
+)
+@click.option(
+    "--scans-csv",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="`scans.csv` from the Bloom download.",
+)
+@click.option(
+    "--output-csv",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Where to write `sample_manifest.csv`.",
+)
+@click.option("--plants-per-group", type=int, default=5, show_default=True)
+@click.option("--views-per-plant", type=int, default=3, show_default=True)
+@click.option("--seed", type=int, default=42, show_default=True)
+@click.option(
+    "--total-views",
+    type=int,
+    default=None,
+    help="Rotational views per scan (default: the packaged assumption).",
+)
+@click.option(
+    "--accession-names",
+    default=None,
+    help="JSON map of accession id to name, or @path to a file holding one.",
+)
+def labeling_select_command(
+    cleaned_csv: str,
+    scans_csv: Path,
+    output_csv: Path,
+    plants_per_group: int,
+    views_per_plant: int,
+    seed: int,
+    total_views: Optional[int],
+    accession_names: Optional[str],
+) -> None:
+    """Select a stratified sample of frames and write the manifest.
+
+    Deterministic and monotone: the same inputs and parameters select the same frames, and
+    widening either count yields a superset of the narrower selection. Record the
+    parameters — ``build`` writes them into the package so it can be widened later.
+    """
+    from sleap_roots_training.labeling import select_samples
+
+    names = _parse_accessions(accession_names) if accession_names else None
+    try:
+        manifest = select_samples.select_samples(
+            Path(cleaned_csv),
+            scans_csv,
+            output_csv,
+            accession_names={int(k): v for k, v in names.items()} if names else None,
+            plants_per_group=plants_per_group,
+            views_per_plant=views_per_plant,
+            seed=seed,
+            total_views=(
+                select_samples.TOTAL_VIEWS if total_views is None else total_views
+            ),
+        )
+    except (OSError, ValueError) as error:
+        raise _labeling_error(error)
+    click.echo(
+        f"selected {len(manifest)} frame(s) across "
+        f"{manifest['plant_qr_code'].nunique()} plant(s) -> {output_csv}"
+    )
+
+
+@labeling_group.command(name="copy-images")
+@click.option(
+    "--manifest",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="`sample_manifest.csv` from `labeling select`.",
+)
+@click.option(
+    "--scans-csv",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="The `scans.csv` the manifest was selected from; its directory is the base "
+    "every `source_image` resolves against.",
+)
+@click.option(
+    "--output-dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Destination `images/` directory.",
+)
+@click.option("--total-views", type=int, default=None, help="Views the scans hold.")
+def labeling_copy_images_command(
+    manifest: Path, scans_csv: Path, output_dir: Path, total_views: Optional[int]
+) -> None:
+    """Gather every manifest row's source image under its curated name.
+
+    All-or-nothing: every row resolves before anything is written, so a partial ``images/``
+    is never left behind to be mistaken for a complete one.
+    """
+    from sleap_roots_training.labeling import copy_images, select_samples
+
+    try:
+        copied = copy_images.copy_selected_images(
+            manifest,
+            scans_csv,
+            output_dir,
+            total_views=(
+                select_samples.TOTAL_VIEWS if total_views is None else total_views
+            ),
+        )
+    except (OSError, ValueError) as error:
+        raise _labeling_error(error)
+    click.echo(f"copied {copied} image(s) -> {output_dir}")
+
+
+@labeling_group.command(name="build")
+@click.option(
+    "--manifest",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="`sample_manifest.csv` from `labeling select`.",
+)
+@click.option(
+    "--scans-csv",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="The `scans.csv` the manifest was selected from.",
+)
+@click.option(
+    "--predictions-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="The pipeline's `sleap_roots_traits_input/` directory.",
+)
+@click.option(
+    "--output-dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Where to write the package. Must not already exist.",
+)
+@click.option("--species", required=True, help="Crop (e.g. soybean).")
+@click.option("--mode", required=True, help="Capture mode (e.g. cylinder).")
+@click.option("--experiment", required=True, help="Experiment slug (e.g. weep).")
+@click.option(
+    "--root-type",
+    "root_types",
+    multiple=True,
+    required=True,
+    help="Root type to build a project for; repeat for several.",
+)
+@click.option(
+    "--bloom-experiment-id",
+    required=True,
+    type=int,
+    help="The Bloom experiment the scans came from.",
+)
+@click.option(
+    "--accessions",
+    required=True,
+    help="JSON map of accession id to name, or @path to a file holding one.",
+)
+@click.option("--seed", type=int, required=True, help="The seed selection ran with.")
+@click.option("--plants-per-group", type=int, required=True)
+@click.option("--views-per-plant", type=int, required=True)
+@click.option("--total-views", type=int, required=True)
+@click.option("--version", default="v000", show_default=True)
+def labeling_build_command(
+    manifest: Path,
+    scans_csv: Path,
+    predictions_dir: Path,
+    output_dir: Path,
+    species: str,
+    mode: str,
+    experiment: str,
+    root_types: tuple,
+    bloom_experiment_id: int,
+    accessions: str,
+    seed: int,
+    plants_per_group: int,
+    views_per_plant: int,
+    total_views: int,
+    version: str,
+) -> None:
+    """Build a complete, validated labeling package.
+
+    Runs the copy, build, metadata, README, and validation steps and moves the result into
+    ``--output-dir`` only once all of them pass — a failed build writes nothing.
+
+    The selection parameters are required, not defaulted: they are recorded in the package
+    so it can be re-derived and widened later, and a default that silently disagreed with
+    the run that produced the manifest would make those instructions wrong.
+    """
+    from sleap_roots_training.labeling.metadata import (
+        PackageMetadata,
+        SelectionParameters,
+    )
+    from sleap_roots_training.labeling.package import build_labeling_package
+
+    accession_map = _parse_accessions(accessions)
+    try:
+        metadata = PackageMetadata(
+            species=species,
+            mode=mode,
+            experiment=experiment,
+            root_types=tuple(root_types),
+        )
+        selection = SelectionParameters(
+            seed=seed,
+            plants_per_group=plants_per_group,
+            views_per_plant=views_per_plant,
+            total_views=total_views,
+        )
+        package_dir = build_labeling_package(
+            manifest,
+            scans_csv,
+            predictions_dir,
+            output_dir,
+            metadata,
+            bloom_experiment_id=bloom_experiment_id,
+            accessions=accession_map,
+            selection=selection,
+            version=version,
+        )
+    except (OSError, ValueError) as error:
+        raise _labeling_error(error)
+
+    from sleap_roots_training.labeling.metadata import read_package_metadata
+    from sleap_roots_training.labeling.validate import project_filename
+
+    record = read_package_metadata(package_dir)
+    click.echo(f"built labeling package: {package_dir}")
+    click.echo(f"  {record.frame_count} frames, {len(record.accessions)} accession(s)")
+    for root_type in record.metadata.root_types:
+        click.echo(
+            f"  {project_filename(record, root_type)} "
+            f"({len(record.skeletons[root_type])} nodes)"
+        )
+
+
+@labeling_group.command(name="validate")
+@click.argument(
+    "package_dir", type=click.Path(exists=True, file_okay=False, path_type=Path)
+)
+def labeling_validate_command(package_dir: Path) -> None:
+    """Check PACKAGE_DIR is a publishable labeling package.
+
+    The layout, the manifest's columns, the counts, the recorded skeletons, and the embed
+    guarantee. Reads nothing outside the directory, so a delivered package validates where
+    it lands rather than only where it was built — this is the check ``publish-labels``
+    runs before any upload.
+    """
+    from sleap_roots_training.labeling.validate import validate_package
+
+    try:
+        record = validate_package(package_dir)
+    except (OSError, ValueError) as error:
+        raise _labeling_error(error)
+    click.echo(
+        f"OK: {package_dir} is a valid labeling package "
+        f"({record.metadata.species} / {record.metadata.experiment}, "
+        f"{record.frame_count} frames, "
+        f"{', '.join(record.metadata.root_types)})"
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover
     main()
