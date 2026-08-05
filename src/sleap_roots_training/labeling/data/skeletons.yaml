@@ -1,0 +1,95 @@
+# Per-crop labeling skeletons: what a labeler must label with so a new package matches
+# the existing corpus.
+#
+# Source of truth: the `/build-labeling-package` command doc's skeleton table
+#   (`build-labeling-package.md:45-51`), Box snapshot 2026-07-29 of
+#   `Phenotyping_team_GH/sleap-roots-training/onboarding/`. Upstream is the vault at
+#   `c:\vaults\sleap-roots\labeling-packages\`, whose history does not survive the copy.
+#
+# ---------------------------------------------------------------------------------------
+# THIS TABLE IS ADVISORY AND PARTLY UNVERIFIED. Its own source says so: "Query the Bloom
+# database or check existing test data ... to confirm node counts for the crop."
+#
+#   - soybean primary (6) and lateral (4) are VERIFIED (2026-08-04) against the real WEEP
+#     artifacts that became the published collection: `soybean_weep_*_labels.v000.slp` and
+#     the repaired `labels_weep_*.v001.pkg.slp` all carry `soybean_primary` r1-r6 and
+#     `soybean_lateral` r1-r4.
+#   - canola, arabidopsis, and rice are TRANSCRIBED, NOT VERIFIED. Canola's lateral count
+#     (3) is the one asymmetry in the table — soybean and arabidopsis are both 4 — and
+#     nothing here confirms it.
+#   - pennycress has NO ROW ON PURPOSE. The source table omits it, although pennycress is
+#     in SPECIES_VOCAB and has two `model_selection.yaml` rows. The loader fails loudly on
+#     a missing pair rather than defaulting: a wrong node count produces a labeling package
+#     that looks fine and cannot be combined with anything.
+#
+# The verification test against the eight published collections in
+# `wandb-registry-sleap-roots-labels` is what converts the rest from hypothesis to record.
+# ---------------------------------------------------------------------------------------
+#
+# THESE ARE **NATIVE** SKELETONS, NOT THE UNIFIED ONE. This table is *descriptive*: what a
+# labeler must label with so a new package extends the corpus that already exists.
+# `docs/roadmap.md:422` sets "the common skeleton / node count per root type for
+# unification" as an open question at Tier 2.7 — a *prescriptive* choice, to be validated
+# by a node-count sweep and not yet made. Folding this table into that decision would make
+# new labeling packages silently stop matching the corpus they exist to extend.
+#
+# `age` is the native chooser comma-list, matching `registry/data/model_selection.yaml`;
+# `null` means the row applies at every age. Only rice splits by age, and its split is
+# cross-checked against `model_selection.yaml` by a test rather than only transcribed.
+#
+# Node names are always `r1`, `r2`, ... `rN` — r1 is the base, the last node is the tip,
+# evenly spaced along the root (`build-labeling-package.md:53`). The convention is fixed,
+# so a row states only its count and the loader derives the names and the edge chain.
+
+skeletons:
+  - species: soybean
+    root_type: primary
+    age: null
+    node_count: 6
+
+  - species: soybean
+    root_type: lateral
+    age: null
+    node_count: 4
+
+  - species: canola
+    root_type: primary
+    age: null
+    node_count: 6
+
+  # UNVERIFIED, and the table's one asymmetry: soybean and arabidopsis laterals are 4.
+  - species: canola
+    root_type: lateral
+    age: null
+    node_count: 3
+
+  - species: arabidopsis
+    root_type: primary
+    age: null
+    node_count: 6
+
+  - species: arabidopsis
+    root_type: lateral
+    age: null
+    node_count: 4
+
+  # Rice young (2-5 DAG): primary + crown. Matches the `model_selection.yaml` rice row
+  # with age "2, 3, 4, 5" (primary + crown models, no lateral).
+  - species: rice
+    root_type: primary
+    age: "2, 3, 4, 5"
+    node_count: 6
+
+  - species: rice
+    root_type: crown
+    age: "2, 3, 4, 5"
+    node_count: 6
+
+  # Rice old (6-10 DAG): crown only. Matches the `model_selection.yaml` rice row with age
+  # "6, 7, 8, 9, 10" (crown model only).
+  - species: rice
+    root_type: crown
+    age: "6, 7, 8, 9, 10"
+    node_count: 6
+
+  # pennycress: intentionally absent — see the header.

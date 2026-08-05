@@ -18,6 +18,7 @@ def metadata(**overrides) -> PackageMetadata:
     fields = {
         "species": "soybean",
         "mode": "cylinder",
+        "experiment": "weep",
         "root_types": ("primary", "lateral"),
     }
     fields.update(overrides)
@@ -34,7 +35,7 @@ def test_valid_metadata_round_trips():
     )
 
 
-@pytest.mark.parametrize("field", ["species", "mode", "root_types"])
+@pytest.mark.parametrize("field", ["species", "mode", "experiment", "root_types"])
 def test_an_empty_required_field_is_named(field):
     empty = () if field == "root_types" else ""
 

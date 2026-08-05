@@ -15,22 +15,24 @@ and an empty selection is never reported as a success. The vault script warned p
 those and wrote both files anyway (design.md F1); its faithful behavior is in this file's
 first commit.
 
-It still saves with ``embed=False`` — the change that stops a package depending on paths
-that outlive it is section 5, as its own commit (design.md Decision 2). The skeletons are
-still the hardcoded soybean pair and the output names still say ``soybean_weep``; section 6
-parameterizes both off a committed table (Decision 7).
+Two further deviations, each landed in its own commit. The ``.slp`` **embeds its images**
+(section 5, Decision 2), so the package does not depend on paths that outlive it. And the
+skeletons and output names come from the committed per-crop table rather than being
+hardcoded to soybean and hand-edited per crop (section 6, Decision 7).
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
 import sleap_io as sio
 
 from sleap_roots_training.labeling.metadata import PackageMetadata
+from sleap_roots_training.labeling.skeletons import lookup_skeleton
 
 logger = logging.getLogger(__name__)
 
@@ -60,24 +62,6 @@ def rebuild_instance(
         skeleton=skeleton,
         point_scores=scores,
         score=float(pred_inst.score),
-    )
-
-
-def make_primary_skeleton() -> sio.Skeleton:
-    """Return the soybean primary-root skeleton: 6 nodes, ``r1`` (base) to ``r6`` (tip)."""
-    return sio.Skeleton(
-        nodes=["r1", "r2", "r3", "r4", "r5", "r6"],
-        edges=[("r1", "r2"), ("r2", "r3"), ("r3", "r4"), ("r4", "r5"), ("r5", "r6")],
-        name="soybean_primary",
-    )
-
-
-def make_lateral_skeleton() -> sio.Skeleton:
-    """Return the soybean lateral-root skeleton: 4 nodes, ``r1`` (base) to ``r4`` (tip)."""
-    return sio.Skeleton(
-        nodes=["r1", "r2", "r3", "r4"],
-        edges=[("r1", "r2"), ("r2", "r3"), ("r3", "r4")],
-        name="soybean_lateral",
     )
 
 
@@ -140,38 +124,40 @@ def _scan_frame_order(scan_rows: pd.DataFrame, scan_id: object) -> pd.DataFrame:
     return ordered
 
 
-def skeleton_for(species: str, root_type: str) -> sio.Skeleton:
-    """Return the skeleton a package of this species and root type is labeled with.
+def skeleton_for(species: str, root_type: str, ages: Sequence[int]) -> sio.Skeleton:
+    """Return the skeleton a package of this species, root type, and age span uses.
 
-    Still the vault script's hardcoded soybean pair. Section 6 replaces this with a
-    committed, provenance-stamped table keyed by ``(species, root_type)`` (Decision 7);
-    until then any other combination raises rather than silently receiving soybean's node
-    counts, which would produce a package that looks fine and cannot be combined with
-    anything.
+    Deviation (task 6.6). The vault script hardcoded a 6-node ``soybean_primary`` and a
+    4-node ``soybean_lateral`` and was edited by hand per crop; this reads the committed
+    table instead (design.md Decision 7). There was no parameterized original to port.
+
+    A package spans several plant ages, and the table splits rice by age — young 2-5 DAG
+    carries primary and crown, old 6-10 DAG carries crown only. A selection spanning that
+    boundary therefore has no single answer, so it fails here rather than silently
+    labeling half the package against the wrong skeleton.
 
     Args:
         species: Crop, already validated against ``SPECIES_VOCAB``.
         root_type: Root type, already validated against ``ROOT_TYPE_VOCAB``.
+        ages: The distinct plant ages the manifest covers, in days.
 
     Returns:
         The skeleton to label with.
 
     Raises:
-        NotImplementedError: For any pair the hardcoded skeletons do not describe.
+        ValueError: If the table has no row for the pair, if an age falls outside every
+            window, or if the package's ages straddle an age split.
     """
-    builders = {
-        ("soybean", "primary"): make_primary_skeleton,
-        ("soybean", "lateral"): make_lateral_skeleton,
-    }
-    try:
-        return builders[(species, root_type)]()
-    except KeyError:
-        raise NotImplementedError(
-            f"No skeleton is defined for ({species!r}, {root_type!r}). The builder still "
-            "carries the vault script's hardcoded soybean primary/lateral pair; the "
-            "committed per-crop skeleton table (design.md Decision 7) is what adds the "
-            "rest."
-        ) from None
+    rows = {lookup_skeleton(species, root_type, int(age)) for age in ages}
+    if len(rows) > 1:
+        windows = sorted(str(row.age) for row in rows)
+        raise ValueError(
+            f"({species!r}, {root_type!r}) resolves to more than one skeleton across the "
+            f"ages this package covers ({sorted(int(a) for a in ages)} DAG): the table "
+            f"splits it at {windows}. Build one package per age window rather than one "
+            "package labeled against two skeletons."
+        )
+    return rows.pop().to_skeleton()
 
 
 def _resolve_scan_images(
@@ -228,9 +214,12 @@ def build_slp_project(
     manifest = pd.read_csv(manifest_csv)
     logger.info("Loaded manifest with %d rows", len(manifest))
 
-    # Metadata and skeletons first: they depend on no input file, so a wrong species or
-    # an unknown root type fails before anything on disk is read or judged.
-    skeletons = {rt: skeleton_for(metadata.species, rt) for rt in metadata.root_types}
+    # Skeletons first: they depend only on the manifest's age column and the committed
+    # table, so a species the table does not cover fails before any image is judged.
+    ages = sorted({int(age) for age in manifest["plant_age_days"]})
+    skeletons = {
+        rt: skeleton_for(metadata.species, rt, ages) for rt in metadata.root_types
+    }
     frames: dict[str, list[sio.LabeledFrame]] = {rt: [] for rt in metadata.root_types}
     videos: dict[str, list[sio.Video]] = {rt: [] for rt in metadata.root_types}
 
@@ -334,7 +323,12 @@ def build_slp_project(
     output_dir.mkdir(parents=True, exist_ok=True)
     written = {}
     for root_type, labels in projects.items():
-        path = output_dir / f"soybean_weep_{root_type}_labels.{version}.slp"
+        # Deviation (task 6.6): the vault script hardcoded `soybean_weep_*`. The command
+        # doc's own naming is `<crop>_<experiment>_<root_type>_labels.<version>.slp`.
+        path = (
+            output_dir / f"{metadata.species}_{metadata.experiment}_{root_type}"
+            f"_labels.{version}.slp"
+        )
         # Deviation (task 5.2), and the change issue #26 exists for. The vault script
         # saved `embed=False`, and six of the eight collections in
         # `wandb-registry-sleap-roots-labels` carry `repaired_from: "v0"` /
