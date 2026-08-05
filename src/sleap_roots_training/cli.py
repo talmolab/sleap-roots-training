@@ -42,7 +42,10 @@ def _require_api_key() -> None:
 )
 @click.option(
     "--selection-matrix",
-    type=click.Path(exists=True, path_type=Path),
+    # dir_okay=False: `exists=True` alone accepts a directory, which then reaches
+    # `OmegaConf.load` and fails as an I/O error deep in the loader. Rejecting it here
+    # names the actual mistake ("is a directory") at the argument that made it.
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="Selection matrix YAML (defaults to the packaged matrix).",
 )
@@ -87,10 +90,16 @@ def seed_registry_command(
     # into a ClickException the way the resolve step below already does. Newly
     # load-bearing: a future upstream narrowing of `Mode` hands exactly this error to
     # every operator running `seed-registry`.
+    #
+    # ValueError alone is the whole set on purpose: the loader normalizes every way the
+    # file can be unusable (unreadable, not YAML, not a mapping) into ValueError naming
+    # the path, so the wrapping is complete without listing I/O and parse types here --
+    # a list that was both incomplete (three reachable types escaped it) and dead in its
+    # one named member, since click intercepts a nonexistent path before this runs.
     try:
         matrix = chooser.load_selection_matrix(selection_matrix)
         all_cards = cards.expand_rows_to_cards(matrix.rows)
-    except (FileNotFoundError, ValueError) as error:
+    except ValueError as error:
         raise click.ClickException(str(error))
 
     # --only scopes ALL modes (dry-run, --verify, --execute); validate up front so an

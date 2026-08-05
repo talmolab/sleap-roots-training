@@ -290,3 +290,40 @@ def test_off_vocabulary_mode_is_a_clean_error_not_a_traceback(
     assert "teacup" in result.output
     assert "row 0" in result.output
     assert not isinstance(result.exception, ValueError)
+
+
+def test_unreadable_matrix_is_a_clean_error_not_a_traceback(
+    monkeypatch, tmp_path, stub_models_root
+):
+    """The CHANGELOG promises a clean error for an *unreadable* matrix, not just a
+    rejected one -- and that half was the untested half.
+
+    Only ``mode: teacup`` (a ``ValueError``) was covered above. These three are the ways
+    the file itself fails, and each raised a different uncaught type straight through
+    the CLI: a directory (click's ``exists=True`` has no ``dir_okay=False``, so it gets
+    as far as ``OmegaConf.load``), malformed YAML (``yaml.ParserError``), and a top-level
+    sequence (``AttributeError`` from ``data.get``).
+    """
+    _no_wandb(monkeypatch)
+
+    a_directory = tmp_path / "matrix_dir"
+    a_directory.mkdir()
+    malformed = tmp_path / "malformed.yaml"
+    malformed.write_text("models: [\n  - species: soybean\n")
+    a_list = tmp_path / "list.yaml"
+    a_list.write_text("- species: soybean\n")
+
+    for path in (a_directory, malformed, a_list):
+        result = _invoke(
+            ["--selection-matrix", str(path), "--models-root", str(stub_models_root)]
+        )
+        assert result.exit_code != 0, f"{path.name}: expected a failure"
+        assert "Error" in result.output, f"{path.name}: {result.output!r}"
+        # The name of the thing the operator passed has to be in the message, or the
+        # error is unactionable when a script passes the path.
+        assert path.name in result.output, f"{path.name}: {result.output!r}"
+        # Anything other than a click exception is an unhandled crash: click's test
+        # runner stores the raised exception here and would have printed a traceback.
+        assert result.exception is None or isinstance(
+            result.exception, SystemExit
+        ), f"{path.name}: unhandled {type(result.exception).__name__}"

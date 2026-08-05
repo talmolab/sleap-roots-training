@@ -127,8 +127,10 @@ def load_selection_matrix(path: Optional[Path] = None) -> SelectionMatrix:
         The parsed :class:`SelectionMatrix`.
 
     Raises:
-        ValueError: If a row's ``species`` or ``mode`` is not in the canonical
-            vocabulary.
+        ValueError: If the file cannot be read, is not valid YAML, does not parse to a
+            mapping, or a row's ``species`` or ``mode`` is not in the canonical
+            vocabulary. Read and parse failures are normalized to ``ValueError`` (from
+            ``OSError`` / a YAML parse error) so a caller has one type to handle.
     """
     if path is not None:
         return _parse_matrix(Path(path))
@@ -156,9 +158,38 @@ def matrix_sha256(path: Optional[Path] = None) -> str:
 
 def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
     """Parse and validate a selection matrix YAML at ``matrix_path``."""
+    # Every way the *file* can be unusable is normalized to ValueError naming the path,
+    # so a caller has one exception type to wrap. `seed-registry` promises operators a
+    # clean CLI error rather than a traceback for a rejected matrix, and it can only
+    # deliver that against a single type -- raw, these arrive as three unrelated ones
+    # that no reasonable `except` names together: IsADirectoryError/PermissionError
+    # (a directory reaches here; click's `exists=True` only checks existence),
+    # yaml.ParserError (a hand-edited matrix -- the likeliest of the three), and
+    # AttributeError from `data.get` below when the top level parses to a sequence.
+    #
     # resolve=False: the matrix has no interpolations, and a model id that happened
     # to contain a ``${...}`` sequence must not be treated as one.
-    data = OmegaConf.to_container(OmegaConf.load(str(matrix_path)), resolve=False)
+    try:
+        loaded = OmegaConf.load(str(matrix_path))
+    except OSError as error:
+        raise ValueError(
+            f"{matrix_path}: cannot read the selection matrix: {error}"
+        ) from error
+    except Exception as error:
+        # Deliberately broad, and deliberately scoped to this one call. Parsing YAML
+        # fails in types this package does not depend on: PyYAML's ParserError and
+        # ScannerError arrive *through* omegaconf, which neither wraps them nor makes
+        # pyyaml a dependency declared here. Naming them would mean either importing an
+        # undeclared package or guessing at the set, and a guess that misses re-opens
+        # exactly the traceback this normalization exists to close.
+        raise ValueError(f"{matrix_path}: not valid YAML: {error}") from error
+
+    data = OmegaConf.to_container(loaded, resolve=False)
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{matrix_path}: top level is a {type(data).__name__}, "
+            "expected a mapping with a `models:` key"
+        )
 
     models = data.get("models") or []
     if not models:

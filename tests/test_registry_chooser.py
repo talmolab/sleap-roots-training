@@ -94,6 +94,40 @@ def test_unknown_mode_raises(tmp_path):
         chooser.load_selection_matrix(bad)
 
 
+def test_unreadable_matrix_is_a_valueerror_naming_the_path(tmp_path):
+    # A directory reaches here: click's `--selection-matrix` type only checks existence.
+    # `OmegaConf.load` then raises IsADirectoryError -- an OSError, not a ValueError --
+    # which the `seed-registry` CLI does not catch, so the operator gets a traceback for
+    # a plain "you pointed me at the wrong thing". Every way the file itself can be
+    # unusable is normalized here, so callers have one exception type to wrap.
+    with pytest.raises(ValueError, match="(?i)cannot read"):
+        chooser.load_selection_matrix(tmp_path)
+
+
+def test_missing_matrix_is_a_valueerror_naming_the_path(tmp_path):
+    missing = tmp_path / "nope.yaml"
+    with pytest.raises(ValueError, match="(?i)cannot read"):
+        chooser.load_selection_matrix(missing)
+
+
+def test_malformed_yaml_is_a_valueerror(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("models: [\n  - species: soybean\n")  # unterminated flow sequence
+    # PyYAML raises ParserError (a yaml.YAMLError), which is neither ValueError nor
+    # OSError -- the shape a hand-edited matrix fails in most often.
+    with pytest.raises(ValueError, match="(?i)not valid yaml"):
+        chooser.load_selection_matrix(bad)
+
+
+def test_non_mapping_matrix_is_a_valueerror(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("- species: soybean\n- species: canola\n")  # top level is a list
+    # Without the type check this is `AttributeError: 'list' object has no attribute
+    # 'get'` from inside the parse -- an implementation detail, not an operator message.
+    with pytest.raises(ValueError, match="(?i)expected a mapping"):
+        chooser.load_selection_matrix(bad)
+
+
 def test_mode_vocab_is_the_contract_vocabulary_unforked():
     # The mode vocabulary has exactly one owner: sleap-roots-contracts. This fails if
     # it is ever re-forked locally (say, `frozenset(get_args(Mode)) | {"cyl"}` added to
