@@ -138,7 +138,7 @@ reproduce-or-beat.
 **Data provenance.** The three v000 files were made self-contained for the offline GPU box with
 [`scripts/clean_pkg.py`](../scripts/clean_pkg.py) (drops the `source_video` share pointer and a
 frame-less stray video, re-embeds frames); the labeled-frame set is unchanged (99 train / 21 val,
-`r1..r6`). Dataset content is identified by path, not yet a verified hash (deferred to #10/#11).
+`r1..r6`). `clean_pkg.py` writes a `.sha256` sidecar next to each cleaned file (a content fingerprint captured at clean time); wiring that hash into an automated reproducibility check is still deferred to #10/#11.
 
 **Metrics.** Read from each run's `metrics.val.0.npz` with
 [`scripts/dump_val_metrics.py`](../scripts/dump_val_metrics.py): `distance_metrics.avg` →
@@ -205,13 +205,15 @@ validation philosophy" — exact backend parity is the wrong bar):
 | 16 | 0.989 – 1.710 | 0.47 – 0.63 |
 | 32 | 1.383 – 2.078 | 0.83 |
 
-**Read the two columns together — the comparison is recall-confounded.** The PyTorch baseline's
-`dist_avg` is ~20–40× the TF `dist_avg`, but its `vis_recall` (0.85–0.91) is **higher than every TF
-run** (0.47–0.83): the PyTorch model detects *more* keypoints and localizes them *looser*, whereas
-TF localized a smaller, higher-confidence subset very tightly. Because each backend's `dist_*` is
-measured over a different population, the raw `dist` ratio overstates the gap — report both
-directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinct** from the
-`output_stride` of the PyTorch configs; `tf-reference.md` warns against conflating them.) TF remains
+**Read the two columns together, the comparison is recall-confounded.** The PyTorch baseline's
+`dist_avg` is ~20–40× the TF `dist_avg`, but its `vis_recall` (0.85–0.91) sits **above the TF
+stride-16 and stride-32 runs** (0.47–0.83). (The one stride-64 run reached `vis_recall` 0.884, above
+the PyTorch low end, but it has no replicate pair, so it is excluded from the ranged comparison
+above; see `tf-reference.md`.) The PyTorch model detects *more* keypoints and localizes them
+*looser*, whereas TF localized a smaller, higher-confidence subset very tightly. Because each
+backend's `dist_*` is measured over a different population, the raw `dist` ratio overstates the gap,
+so report both directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinct** from
+the `output_stride` of the PyTorch configs, so the two should not be conflated.) TF remains
 context only, not a gate.
 
 ### Finding: the `output_stride 2` collapse is a training-schedule (step-count) artifact, not the loss
@@ -225,6 +227,8 @@ changed**, [`..._os2_sigma5.yaml`](../examples/baseline_bottomup_v000_os2_sigma5
 |------------|---------|---------|---------|:-------:|---------------------|
 | **σ = 2.5** | partial: 25 / 44, recall 0.58 | **collapsed** (0, NaN) | **collapsed** (0, NaN) | ✗ | ~0.0015 (near-zero) |
 | **σ = 5.0** | 43 / 44, recall 0.87 | 44 / 44, recall 0.88 | 43 / 44, recall 0.80 | ✓ | ~0.0047 (healthy) |
+
+Runs (W&B, seeds 42 / 43 / 44): σ=2.5 [dzqfyllx](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/dzqfyllx) / [0lx0mtlj](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/0lx0mtlj) / [gm03okhs](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/gm03okhs); σ=5.0 [35bxsc7a](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/35bxsc7a) / [8zjnjpnz](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/8zjnjpnz) / [nabcm8o4](https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-tier1-baseline/runs/nabcm8o4).
 
 With σ=5.0 (sleap-nn's default) `output_stride 2` trains on **every** seed and detects ~all
 instances; with σ=2.5 two of three seeds collapse. **The cause is sleap-nn's short default training

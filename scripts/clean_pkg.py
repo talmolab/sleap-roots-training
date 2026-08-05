@@ -25,6 +25,10 @@ from __future__ import annotations
 import hashlib
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sleap_io import Video
 
 #: SMB-share markers a cleaned file's ``source_video`` must never still point at.
 _SHARE_MARKERS = ("multilab-na", "hpi_dev")
@@ -39,12 +43,14 @@ def _sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def _select_videos(labels: object) -> tuple[list, set[int]]:
+def _select_videos(labels: object) -> tuple[list[Video], set[int]]:
     """Return ``(keep, used_ids)``: videos referenced by >=1 labeled frame, matched by identity.
 
-    sleap-io's ``Video`` is unhashable (attrs ``eq=True``), so we key on ``id()``. After
+    We key on ``id()`` rather than putting ``Video`` objects in a set. sleap-io's ``Video`` is
+    ``@attrs.define(eq=False)`` (pinned v0.7.1), so it keeps identity-based equality and would in
+    fact be hashable by identity; keying on ``id()`` makes that identity match explicit. After
     ``load_slp`` every ``LabeledFrame.video`` is the same object instance as an entry in
-    ``labels.videos``, so identity matching is exact — not merely empirical.
+    ``labels.videos``, so the match is exact, not merely empirical.
     """
     used_ids: set[int] = set()
     for lf in labels:
@@ -109,6 +115,8 @@ def clean(inp: str, out: str) -> None:
     if any(id(lf.video) not in kept_ids for lf in labels):
         raise ValueError("a labeled frame references a dropped video")
 
+    if not labels.skeletons:
+        raise ValueError(f"{inp}: file has no skeleton")
     nodes = [n.name for n in labels.skeletons[0].nodes]
     sio.save_slp(
         labels, out, embed=True
@@ -123,11 +131,18 @@ def clean(inp: str, out: str) -> None:
             raise ValueError(f"{out} still points at the share via source_video: {fn}")
 
     shapes = [v.shape for v in labels.videos]
+    sha_in, sha_out = _sha256(inp), _sha256(out)
+    # Persist the fingerprints next to the cleaned file so they outlive the console session.
+    sidecar = Path(str(out) + ".sha256")
+    sidecar.write_text(
+        f"{sha_out}  {Path(out).name}\n{sha_in}  {Path(inp).name}\n", encoding="utf-8"
+    )
     print(
         f"{out}: {len(labels)} frames, {len(keep)} video(s) kept ({dropped} frame-less dropped), "
         f"nodes={nodes}, shapes={shapes}\n"
-        f"  sha256(in={Path(inp).name})={_sha256(inp)}\n"
-        f"  sha256(out={Path(out).name})={_sha256(out)}"
+        f"  sha256(in={Path(inp).name})={sha_in}\n"
+        f"  sha256(out={Path(out).name})={sha_out}\n"
+        f"  wrote {sidecar.name}"
     )
 
 
