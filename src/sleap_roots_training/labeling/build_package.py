@@ -335,7 +335,16 @@ def build_slp_project(
     written = {}
     for root_type, labels in projects.items():
         path = output_dir / f"soybean_weep_{root_type}_labels.{version}.slp"
-        sio.save_slp(labels, str(path), embed=False)
+        # Deviation (task 5.2), and the change issue #26 exists for. The vault script
+        # saved `embed=False`, and six of the eight collections in
+        # `wandb-registry-sleap-roots-labels` carry `repaired_from: "v0"` /
+        # `embedded-images-repair` as a result: the external reference broke and the file
+        # was hand-patched into a package afterwards. That repair is one-way —
+        # `save_slp` restores the original video only "if available", so a package
+        # repaired after its sources went unreachable is capped at whatever frames were
+        # embedded at repair time, permanently. Embedding here means no
+        # external-reference `.slp` is ever produced to be repaired later.
+        sio.save_slp(labels, str(path), embed=True, verbose=False)
         logger.info("Saved %s labels: %s", root_type, path)
         written[root_type] = path
     return written

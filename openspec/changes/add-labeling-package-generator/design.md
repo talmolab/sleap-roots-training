@@ -255,6 +255,45 @@ produces a different label set — the same failure F3 describes, reached withou
 parameter at all. The 2.7 fix closes both, since ordering by a content-derived key does not depend
 on row order.
 
+## Section 5 finding (embed verified against real data 2026-08-04)
+
+### F11 — The shipped WEEP package was produced by an *earlier* script than the one we ported
+
+Task 5.4 ran the builder over the real WEEP soybean package (`~/data/weep`: 255 curated JPEGs,
+349 MB, plus the shipped `sample_manifest.csv` and the v000–v013 label files). Two things fell
+out that reading the scripts could not have shown.
+
+**The shipped manifest does not match the ported script's output.** It carries nine columns,
+not eleven — no `accession_name`, no `frame_index` — and its `output_filename` is
+`{plant_qr_code}_age{N}_view{NN}.jpg`, not the ported script's
+`{accession_name}_{plant_qr_code}_age{N}_{frame_index}.jpg`. Its `source_scan_path` and
+`source_image` use **backslashes**, which is F5's portability problem observed rather than
+predicted.
+
+So `select_samples.py` as copied from Box is a *later* revision than the one that produced the
+eight published collections. That qualifies a claim this change has been leaning on: task 0.8
+and F6 justify keeping `scan_id` out of `output_filename` partly to "keep comparability with the
+eight published collections", and the naming scheme has **already** changed at least once since
+they were built. The reasoning still holds — a collision is an upstream-record artifact and
+should fail rather than be renamed around — but "comparability" is a weaker argument than it
+read, and #10's `LabelCard` should not assume a single historical filename convention. It also
+means the manifest columns Decision 3 enumerates are a *forward* contract; the published
+collections do not satisfy it, which is #11's territory.
+
+**The `Z:` drive failure is visible in the artifact.** `soybean_weep_primary_labels.v000.slp`
+points its 83 videos at `Z:/users/eberrigan/soybean-weep-labeling/images/...`, and the directory
+holds a `repackage.py` that repoints those paths to a local copy by *basename* and re-saves with
+`embed="user"`. That is the `embedded-images-repair` in the flesh, and it is why the repair is
+one-way: matching by basename only works while a local copy of exactly those images survives.
+
+**Embed verification (task 5.4).** Driving the real builder over 71 scans / 213 frames of those
+images produced a genuine `.pkg.slp`: 185.6 MB, `HDF5Video`-backed, self-contained by the
+section-5 check, pixels readable (1080x2048) after the source directory was removed, with
+`source_video` retaining the original filenames as provenance. That is **1195x** the shipped
+external-reference `.slp` (155 kB) and **0.61x** the source JPEG bytes — sleap-io's re-encode is
+smaller than the originals — and it lands inside the 170 MB - 1.2 GB band the eight published
+collections occupy, which is the corroboration the task asked for.
+
 ### The monotonicity guarantee starts here, not retroactively
 
 Worth stating plainly because Decision 6 reads as though it applies to what already exists: 2.7
