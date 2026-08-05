@@ -184,7 +184,7 @@ def test_one_video_per_scan_holding_only_the_selected_views(tmp_path):
 
     assert len(labels.videos) == 2
     for video in labels.videos:
-        assert len(video.filename) == 3
+        assert video.shape[0] == 3
 
 
 def test_frames_land_at_their_within_scan_position_carrying_the_predictions(tmp_path):
@@ -270,20 +270,18 @@ def test_multiple_prediction_files_for_a_scan_warn_and_use_the_first(tmp_path, c
     assert "Multiple primary predictions for scan 1" in caplog.text
 
 
-def test_the_saved_project_references_external_images(tmp_path):
-    """Pins ``embed=False`` — the behavior section 5 changes on purpose.
+def test_embedding_keeps_the_source_image_paths_as_provenance(tmp_path):
+    """Task 5.2 replaced ``embed=False``; the paths it used to depend on are still recorded.
 
-    This is the state design.md indicts: six of the eight published collections carry
-    ``repaired_from: "v0"`` because a reference like this broke and was hand-patched into
-    a package afterwards, permanently capping the label set. Task 5.1's test is the one
-    that must fail against this commit.
+    ``source_video`` is provenance, not a dependency — nothing opens it — so a consumer
+    can still see which curated images a frame came from without the package needing them
+    to exist. The self-containment guarantee itself is in ``test_labeling_embed.py``.
     """
     output_dir = build(tmp_path)
     labels = primary(output_dir)
 
-    referenced = Path(labels.videos[0].filename[0])
+    referenced = Path(labels.videos[0].source_video.filename[0])
     assert referenced.parent == (output_dir / "images")
-    assert referenced.is_file()
 
 
 # --------------------------------------------------------------------------------------
@@ -437,7 +435,7 @@ def test_frame_position_comes_from_the_manifest_not_from_sorting_view_index(tmp_
     assert by_position == {0: {49.0}, 1: {25.0}, 2: {1.0}}
     # ...and the video's frames are in that same order, so frame 0 really is view 49's
     # image. A position that indexed a differently-ordered video would be a wrong package.
-    assert Path(labels.videos[0].filename[0]).name.endswith("_age3_0.jpg")
+    assert Path(labels.videos[0].source_video.filename[0]).name.endswith("_age3_0.jpg")
 
 
 def test_a_non_contiguous_frame_index_fails_rather_than_mis_indexing(tmp_path):

@@ -245,9 +245,16 @@ the scripts do.
       what the scan holds, what selection assumed, and the value to re-run with. Only `<int>.jpg`
       counts as a view, so download sidecars do not perturb it. A test pins that this stage's default
       is the same 72 selection defaults to, since drift between them would re-open the gap
-- [ ] 3.6 Decide whether the copy step remains a separate stage or folds into the builder once
+- [x] 3.6 Decide whether the copy step remains a separate stage or folds into the builder once
       `embed=True` lands (5.5). Keep them separate through section 5 so the characterization tests
       stay meaningful; revisit after
+      **Revisited 2026-08-04 after section 5 — they stay separate.** 5.5 keeps `images/` in the
+      package, so the copy step produces a *shipped artifact* rather than a temporary staging
+      directory, which settles most of it. The rest is coupling: the copy step is the only stage
+      that knows about Bloom's download layout — `scans.csv`, the base-directory rule, the view-count
+      assumption — and the builder knows nothing beyond the manifest and a directory of curated
+      names. Folding them would drag that layout into the builder and make the copy step's five
+      distinct failure modes report as build failures
 
 ## 4. Port `build_slp_project.py` faithfully
 
@@ -311,21 +318,54 @@ the scripts do.
 
 ## 5. The embed change — deliberate, isolated, tested
 
-- [ ] 5.1 (RED) Test that a built package's `.slp` is self-contained: opened with the source scan
+- [x] 5.1 (RED) Test that a built package's `.slp` is self-contained: opened with the source scan
       paths made unreachable, it still yields its labeled frames. This test MUST fail against the
       section-4 port (which saves `embed=False`) — that failure is the point of the commit boundary
-- [ ] 5.2 (GREEN) Change the builder to `save_slp(..., embed=True)` as an explicit step, with a
+      **Done 2026-08-04 — RED against the section-4 port exactly as required**, in
+      `tests/test_labeling_embed.py`. The assertions reach the **pixels**, not the frame count: a
+      broken reference still lists its frames, so a count-only test passes against a package a
+      labeler cannot open. Three tests were red (self-containment, the validator's verdict, a moved
+      package); the three that exercise the *rejection* path were green from the start
+- [x] 5.2 (GREEN) Change the builder to `save_slp(..., embed=True)` as an explicit step, with a
       comment recording *why*: six of the eight published collections carry
       `repaired_from: "v0"` / `embedded-images-repair` because the external reference broke, and the
       repair permanently caps the label set
-- [ ] 5.3 (RED) Test that package validation rejects a package whose `.slp` references external
+      **Done 2026-08-04.** The comment is at the call site, stating the one-way-repair reason.
+      Three section-4 tests moved with it: they asserted through `video.filename`, which an embedded
+      video sets to the `.slp` itself. They now assert through `video.source_video`, which retains
+      the original paths as *provenance* — nothing opens it — so the port's frame-ordering and
+      one-video-per-scan guarantees stay pinned
+- [x] 5.3 (RED) Test that package validation rejects a package whose `.slp` references external
       images, so the guarantee holds for a package built by an older tool or by hand
-- [ ] 5.4 Verify the embedded output against a real scan, not only a fixture — confirm the resulting
+      **Done 2026-08-04 — new `labeling/validate.py`.** `slp_is_self_contained` /
+      `assert_slp_is_self_contained` read the file with `open_videos=False`, so an already-broken
+      package is diagnosable rather than raising on the very dependency being checked. This is the
+      entry point Decision 2 hands to #10's `publish-labels`; 8.1 composes the layout, column, and
+      count checks around it
+- [x] 5.4 Verify the embedded output against a real scan, not only a fixture — confirm the resulting
       file is a genuine `.pkg.slp` and note the size multiple observed (the eight existing
       collections run 170 MB – 1.2 GB, ~10x)
-- [ ] 5.5 Decide whether `images/` still ships in the package once the `.slp` embeds them, or becomes
+      **Done 2026-08-04 against the real WEEP package** (`~/data/weep`: 255 curated JPEGs, 349 MB,
+      the shipped manifest, and v000–v013). Drove the real builder over 71 scans / 213 frames:
+      **185.6 MB**, `HDF5Video`-backed, self-contained by 5.3's check, pixels readable (1080x2048)
+      after the source directory was deleted, `source_video` provenance intact. That is **1195x**
+      the shipped external-reference `.slp` (155 kB) and **0.61x** the source JPEG bytes, and it
+      lands inside the 170 MB – 1.2 GB band of the eight published collections. **Surfaced F11** —
+      the shipped manifest has nine columns and a different filename scheme, so the Box copy of
+      `select_samples.py` is a *later* revision than the one that built the published collections.
+      See design.md; it weakens (but does not overturn) the comparability argument in 0.8
+- [x] 5.5 Decide whether `images/` still ships in the package once the `.slp` embeds them, or becomes
       redundant. It is what the labeler browses today; dropping it is a delivery change, not a
       correctness one
+      **Decided 2026-08-04 — `images/` stays, and the cost is now measured rather than assumed.**
+      Dropping it would cut the package to ~38% of its size (185.6 MB embedded vs 304.5 MB of
+      source JPEGs alongside it, on the 5.4 sample). Three reasons it stays: the spec's
+      curated-images requirement includes a validation scenario comparing the image count against
+      the manifest row count, so dropping the directory would delete a specified check; the manifest's
+      `output_filename` column becomes unresolvable against anything; and a reviewer can inspect what
+      was labeled without installing SLEAP. **Not decided here:** whether the *published* artifact
+      should carry it. That is a W&B storage question with a real number attached now, and it belongs
+      to #10's publish path rather than inside a port — recorded for 9.4 to hand over
 
 ## 6. Per-crop skeletons (Decision 7 — new code, not a port)
 
@@ -417,6 +457,37 @@ the scripts do.
       8. **Preserved deliberately:** `shutil.copy2` still overwrites, which keeps re-running the
          step idempotent. Only the *silent* half of that behavior was a defect, and 3.5 removes it
          at its source rather than by refusing to overwrite.
+
+      **Recorded from sections 4–5 (`build_slp_project.py`, 2026-08-04).** All caller-visible:
+      1. **`embed=True`** — the change #26 exists for (5.2). The vault script wrote an
+         external-reference `.slp`; six of the eight published collections were hand-repaired into
+         packages afterwards, which caps their label set permanently. Per Decision 2 this happens in
+         the *builder*, not in #10's `publish-labels`, so the on-disk package is already complete.
+         **Consequence:** an embedded video's `filename` is the `.slp` itself, and the source image
+         paths survive as `source_video` provenance rather than as a dependency.
+      2. **`frame_index` is the only frame-position derivation** (4.1, the 2.10 obligation, F6). The
+         scan's video is ordered by it too, since a position indexing a differently-ordered video
+         would be a wrong package. Forces one new check: `frame_index` must be a contiguous rank
+         from zero within a scan.
+      3. **Required package metadata** — the builder takes a validated `PackageMetadata` (species,
+         capture mode, root types) and fails naming the field (4.6, F4). New design, not a port:
+         nothing in the vault emitted structured metadata. `root_types` is *declared*, not inferred,
+         which is what makes "no frames for a requested root type" a failure rather than an empty
+         file.
+      4. **Fail-loud, all-or-nothing build** — a missing curated image, a scan with no predictions
+         at all, or a requested root type with no frames each fail the build, and `output_dir` is
+         created only after both projects are assembled (4.4, 4.5, 4.7, F1). Replaces warn-per-scan-
+         and-write-anyway. **Preserved deliberately:** a scan predicted for only *some* requested
+         root types still contributes and warns — a model finding no laterals is a result.
+      5. **Skeleton lookup fails for unported crops** — `skeleton_for(species, root_type)` raises
+         outside the hardcoded soybean pair rather than handing another species soybean's node
+         counts (4.6). Section 6.6 replaces it with the committed table.
+      6. **Return value** — the builder returned `None`; it now returns the path written per root
+         type, which is what 8.4's CLI reports and 8.1's validation checks.
+      7. **`load_predictions_for_scan` sorts its glob** — the vault script took `list(glob)[0]` when
+         several prediction files matched, making "the first" depend on filesystem iteration order.
+         Sorting makes the warning's "using first" mean something. Not caller-visible in the
+         single-match case, which is every documented case.
 - [x] 7.2 ~~**Open, decide during section 3:**~~ **Decided 2026-08-04 — neither (a) nor (b): the copy
       step takes the `scans.csv` itself.** 3.4 resolves `source_image` against the directory holding
       the `scans.csv` it came from. That base has to reach the copy step somehow, and the two options
