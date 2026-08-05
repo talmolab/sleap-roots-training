@@ -275,14 +275,39 @@ the scripts do.
       the multiple-prediction-file warning, and **`embed=False`** — the last is what 5.1 must break.
       A shared 447-byte `TINY_JPEG` constant lives in `conftest.py` rather than generating images
       with `imageio`, which is importable here only transitively via sleap-io (the 2.1 trap)
-- [ ] 4.4 (RED) **Characterize the silent-empty-package failure before fixing it** (F1): with an
+- [x] 4.4 (RED) **Characterize the silent-empty-package failure before fixing it** (F1): with an
       unpopulated `images_dir`, the port warns per scan, writes both `.slp` files, and exits 0. Pin
       that, then make it fail loudly — an empty selection is never a successful build
-- [ ] 4.5 (RED) Test that an unreadable/missing source scan fails the build **before** any package
+      **Done 2026-08-04, characterized then broken in the following commit.** Two ways an empty
+      selection can arise, both now fatal: no curated images (the copy step never ran), and a
+      requested root type that ends up with no frames. The second is why `root_types` is *declared*
+      rather than inferred — a primary-only package now says so instead of shipping an empty lateral
+      `.slp`. A scan absent from every prediction file also fails, since the selection cannot be
+      honored; a scan predicted for only *some* requested root types stays legitimate and warns,
+      because a model finding no laterals is a result rather than a defect
+- [x] 4.5 (RED) Test that an unreadable/missing source scan fails the build **before** any package
       output is written — no partial directory left behind
-- [ ] 4.6 (RED) Test that missing required package metadata (capture mode, skeleton name) fails the
+      **Done 2026-08-04.** Every curated image across every scan is checked before a single video is
+      opened, so the report is "6 of 6 images missing" rather than the first scan that failed.
+      `output_dir` is created only after both projects are fully assembled, and a test asserts a
+      failed build leaves no directory at all
+- [x] 4.6 (RED) Test that missing required package metadata (capture mode, skeleton name) fails the
       build with an error naming the field, before writing
-- [ ] 4.7 (GREEN) Implement fail-fast ordering if the ported code writes before validating
+      **Done 2026-08-04 — new `labeling/metadata.py`.** `PackageMetadata` carries the fields the
+      *builder* requires — `species`, `mode`, `root_types` — validated on construction against the
+      repo's existing `SPECIES_VOCAB`/`MODE_VOCAB` and the contract's `RootType` literal rather than
+      a new vocabulary. **Scope boundary:** this is the required-at-build subset, so the check can
+      exist before the on-disk format is settled; 8.3 extends the same type with
+      `bloom_experiment_id`, the accession map, and the selection parameters, and defines the file.
+      The skeleton comes from `skeleton_for(species, root_type)`, which still holds only the vault
+      script's hardcoded soybean pair and **raises** for anything else — giving another species
+      soybean's node counts would produce a package that looks fine and cannot be combined with
+      anything. Section 6.6 replaces that lookup with the committed table
+- [x] 4.7 (GREEN) Implement fail-fast ordering if the ported code writes before validating
+      **Done 2026-08-04.** Order is: metadata and skeletons (no file access, so a wrong species is
+      not reported as a data problem) -> manifest `frame_index` ranks -> every curated image ->
+      predictions -> non-empty root types -> `mkdir` -> write. Nothing touches the output path until
+      the last two steps
 
 ## 5. The embed change — deliberate, isolated, tested
 
