@@ -326,3 +326,86 @@ def test_root_type_vocab_mirrors_cards_slots():
     from sleap_roots_training.registry import cards
 
     assert config.ROOT_TYPE_VOCAB == frozenset(cards._ROOT_SLOTS)
+
+
+@pytest.mark.parametrize(
+    "mode", ["Cylinder", "CYLINDER", " cylinder", "cylinder ", "multiplant-cylinder"]
+)
+def test_experiment_mode_is_matched_exactly(write_config, mode):
+    # Deliberate, not incidental: modes match exactly at every surface -- hand-written
+    # config, published card metadata, and consumer selection -- with no case or
+    # whitespace normalization anywhere. sleap-roots-contracts' ModelCard.mode does not
+    # normalize either, so accepting a cased or slugged mode here without canonicalizing
+    # it would merely move the failure to publish time, where it costs far more. Locked
+    # so a later "helpful" .lower() has to argue with a test first.
+    path = write_config(overrides={"experiment": {"mode": mode}})
+    with pytest.raises(config.ConfigError, match="mode"):
+        config.validate_config(config.load_config(path))
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("Cylinder", "cylinder"),
+        ("CYLINDER", "cylinder"),
+        ("cyl", "cylinder"),
+        ("cylnder", "cylinder"),
+        ("multiplant-cylinder", "multiplant cylinder"),
+        ("plaet", "plate"),
+    ],
+)
+def test_near_miss_mode_gets_a_did_you_mean_hint(write_config, mode, expected):
+    # The counterpart to the test above, and the reason exact matching is defensible:
+    # rejection is only the right call if it *tells* you what to write. One of the two
+    # user-visible behavior changes in this PR (the other being how `seed-registry`
+    # packages a rejected matrix), so it gets its own assertion -- deleting the hint
+    # block previously left the whole suite green.
+    #
+    # `cyl` is the load-bearing case: it scores 0.545, so it is precisely what the named
+    # `_HINT_CUTOFF` exists for, and it is the shorthand this vocabulary collapse closes.
+    path = write_config(overrides={"experiment": {"mode": mode}})
+    with pytest.raises(config.ConfigError, match=f"did you mean '{expected}'"):
+        config.validate_config(config.load_config(path))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("species", "soybena", "soybean"),
+        ("species", "Arabidopsis", "arabidopsis"),
+        ("root_type", "Primary", "primary"),
+        ("root_type", "laterl", "lateral"),
+    ],
+)
+def test_the_hint_covers_species_and_root_type_too(
+    write_config, field, value, expected
+):
+    # `_check_vocab` is shared by all three `experiment` vocabulary fields, so the hint
+    # added for `mode` changed the error text for species and root_type as well. That is
+    # wider than this change's stated subject; asserted here so the scope is a tested
+    # fact rather than an undisclosed side effect. See design.md's scope note.
+    path = write_config(overrides={"experiment": {field: value}})
+    with pytest.raises(config.ConfigError, match=f"did you mean '{expected}'"):
+        config.validate_config(config.load_config(path))
+
+
+def test_a_far_miss_mode_gets_no_hint(write_config):
+    # The negative control: a hint on anything at all would be noise, and would make the
+    # test above pass for the wrong reason.
+    path = write_config(overrides={"experiment": {"mode": "teacup"}})
+    with pytest.raises(config.ConfigError) as excinfo:
+        config.validate_config(config.load_config(path))
+    assert "did you mean" not in str(excinfo.value)
+    assert "teacup" in str(excinfo.value)
+
+
+def test_homoglyph_mode_is_rendered_unambiguously(write_config):
+    # A Cyrillic `с` in place of ASCII `c`: `repr` leaves printable non-ASCII alone, so
+    # without the `ascii()` fallback the error reads "invalid experiment.mode: 'сylinder'
+    # ... did you mean 'cylinder'?" -- two visually identical strings, and an unfixable
+    # bug from the reader's chair. The escape must appear in the *value*, not the hint.
+    path = write_config(overrides={"experiment": {"mode": "сylinder"}})
+    with pytest.raises(config.ConfigError) as excinfo:
+        config.validate_config(config.load_config(path))
+    assert "\\u0441ylinder" in str(excinfo.value)
+    assert "did you mean 'cylinder'" in str(excinfo.value)

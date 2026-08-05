@@ -17,7 +17,10 @@ import re
 from pathlib import Path
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "training.md"
-_FENCE = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
+#: Captures the info string (group 1) as well as the body (group 2). The tag matters:
+#: the mode guard below must read *only* YAML blocks, or a `python` fence containing
+#: `mode: str = "cylinder"` and a `bash` fence containing `mode: $MODE` contaminate it.
+_FENCE = re.compile(r"```([^\n]*)\n(.*?)```", re.DOTALL)
 
 #: The exact reserved-baseline marker the follow-up baseline PR replaces with real numbers.
 #: Asserted present so the reservation can't be silently deleted; kept free of TODO/TBD.
@@ -29,7 +32,71 @@ def _read() -> str:
 
 
 def _fenced_blocks(text: str) -> list[str]:
-    return _FENCE.findall(text)
+    return [body for _tag, body in _FENCE.findall(text)]
+
+
+def _yaml_blocks(text: str) -> list[str]:
+    return [
+        body
+        for tag, body in _FENCE.findall(text)
+        if tag.strip().lower() in {"yaml", "yml"}
+    ]
+
+
+def _experiment_modes(node) -> list[str]:
+    """Every ``experiment.mode`` value in a parsed YAML document.
+
+    Scoped to the ``experiment:`` block, not an unbounded walk for any ``mode`` key at
+    any depth. A config is the repo-owned ``experiment`` block **plus** `sleap-nn`'s own
+    ``data_config`` / ``model_config`` / ``trainer_config`` consumed as-is, and those
+    carry unrelated ``mode`` keys — ``ReduceLROnPlateau(mode='min'|'max')`` is a
+    completely standard Lightning field. Checking those against ``MODE_VOCAB`` turns the
+    guide's own guard red the moment someone documents a scheduler correctly, and blames
+    the contract for it. Only ``experiment.mode`` is the surface this guards.
+    """
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "experiment" and isinstance(value, dict):
+                mode = value.get("mode")
+                if mode is not None and not isinstance(mode, (dict, list)):
+                    found.append(mode)
+            found.extend(_experiment_modes(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_experiment_modes(item))
+    return found
+
+
+def test_mode_guard_reads_only_the_experiment_block():
+    """A `sleap-nn` ``mode:`` is not an ``experiment.mode`` and must not be guarded.
+
+    The guide documents that a config carries `sleap-nn`'s own ``data_config`` /
+    ``model_config`` / ``trainer_config`` "consumed as-is", and those have unrelated
+    ``mode`` keys of their own — ``ReduceLROnPlateau(mode='min'|'max')`` is a completely
+    standard Lightning field. An any-depth walk for ``mode`` collects those too and
+    checks them against ``MODE_VOCAB``, so documenting a scheduler accurately turns the
+    guide's own guard red and blames the contract for it. Same defect the YAML-aware
+    rewrite was meant to fix, one layer down.
+    """
+    import yaml
+
+    doc = yaml.safe_load(
+        "experiment:\n"
+        "  species: arabidopsis\n"
+        "  mode: cylinder\n"
+        "  root_type: primary\n"
+        "trainer_config:\n"
+        "  lr_scheduler:\n"
+        "    reduce_lr_on_plateau:\n"
+        "      mode: min\n"
+        "      factor: 0.5\n"
+        "model_config:\n"
+        "  head_configs:\n"
+        "    - name: centered_instance\n"
+        "      mode: max\n"
+    )
+    assert _experiment_modes(doc) == ["cylinder"]
 
 
 def test_guide_exists():
@@ -79,3 +146,44 @@ def test_guide_has_no_placeholders():
     text = _read()
     for placeholder in ("TODO", "TBD"):
         assert placeholder not in text, f"guide still has a {placeholder} placeholder"
+
+
+def test_documented_experiment_modes_stay_contract_valid():
+    """Every ``mode:`` the guide tells a user to write must still be accepted.
+
+    ``MODE_VOCAB`` now comes from ``sleap_roots_contracts.Mode``, so the contract governs
+    a **user-authoring** surface, not only published card metadata. An upstream narrowing
+    of ``Mode`` would therefore invalidate configs people have already written by copying
+    this guide. The shipped ``examples/`` are covered by ``test_examples_validate``; this
+    is the other authoring surface, and nothing else reads it.
+
+    Parsed as YAML rather than split on ``:``. A guard that fires on a *correct* docs edit
+    is a defect in a repo whose rule is "main stays green", and naive splitting has three
+    of them: quoting the value (`mode: "multiplant cylinder"` — and that is the one
+    multi-word mode, so quoting it is exactly what a YAML style guide advises) yields
+    ``'"multiplant cylinder"'``; a nested or flow-mapping form is missed; and a `python`
+    or `bash` fence contributes junk. Worse, the message then blames the contract for a
+    bug in the test. ``yaml.safe_load`` handles quoting, nesting, flow mappings and
+    comments for free (PyYAML is already present — omegaconf requires it). Collection is
+    scoped to the ``experiment:`` block for the same reason — see ``_experiment_modes``.
+    """
+    import yaml
+
+    from sleap_roots_training.registry.chooser import MODE_VOCAB
+
+    documented = []
+    for block in _yaml_blocks(_read()):
+        try:
+            parsed = yaml.safe_load(block)
+        except yaml.YAMLError:
+            continue  # a deliberate fragment, not a config a user would copy
+        documented.extend(_experiment_modes(parsed))
+
+    assert (
+        documented
+    ), "guide documents no `experiment.mode:` value — did the example block move?"
+    for mode in documented:
+        assert mode in MODE_VOCAB, (
+            f"docs/training.md tells users to write experiment.mode: {mode!r}, which "
+            f"the contract vocabulary no longer accepts (allowed: {sorted(MODE_VOCAB)})"
+        )

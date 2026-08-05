@@ -13,14 +13,46 @@ import hashlib
 from dataclasses import dataclass
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Optional
+from typing import Optional, get_args
 
 from omegaconf import OmegaConf
+from sleap_roots_contracts import Mode
 
-#: Canonical ``models-downloader`` species vocabulary the consumer selects on.
-SPECIES_VOCAB = frozenset({"soybean", "canola", "pennycress", "arabidopsis", "rice"})
-#: Canonical ``models-downloader`` mode vocabulary the consumer selects on.
-MODE_VOCAB = frozenset({"cylinder", "multiplant cylinder", "plate"})
+#: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned
+#: here, not by the contract: ``ModelCard.species`` is a free ``str``, so there is no
+#: contract-side vocabulary to defer to.
+SPECIES_VOCAB: frozenset[str] = frozenset(
+    {"soybean", "canola", "pennycress", "arabidopsis", "rice"}
+)
+#: Canonical mode vocabulary the consumer selects on, derived from the contract-owned
+#: ``sleap_roots_contracts.Mode`` rather than restated here. ``ModelCard.mode`` matches
+#: this vocabulary exactly (no case or whitespace normalization), so a mode this loader
+#: accepts is a mode the consumer can match — by construction, not by reconciliation.
+MODE_VOCAB: frozenset[str] = frozenset(get_args(Mode))
+
+if not MODE_VOCAB or not all(isinstance(mode, str) for mode in MODE_VOCAB):
+    # `typing.get_args()` does not raise on a shape it cannot destructure; it degrades,
+    # in two different directions, and neither one is an error until much later:
+    #
+    #   Mode = Enum / plain str alias  -> ()                       -> empty vocabulary
+    #   Annotated[Literal[...], Field] -> (Literal[...], FieldInfo) -> typing objects
+    #   Optional[Literal[...]]         -> (Literal[...], NoneType)  -> typing objects
+    #   Union[Literal[...], Literal[]] -> (Literal[...], Literal[]) -> typing objects
+    #
+    # Only the first is empty, so an emptiness check alone misses the other three — and
+    # `Annotated[..., Field(...)]` is idiomatic for a pydantic-first contracts package.
+    # In all four, no real mode is in `MODE_VOCAB` and the `frozenset[str]` annotation
+    # above becomes a runtime falsehood. Left to surface on its own it does so inside
+    # the *error-reporting* path (`sorted()` over mixed types) and at pytest collection
+    # time, far from the cause. So fail here, at the seam, naming what changed.
+    #
+    # Deliberately no `sorted()` on the members below: they are exactly the values whose
+    # type is in question, and sorting them is what crashes while reporting.
+    raise RuntimeError(
+        "sleap_roots_contracts.Mode did not yield a vocabulary of strings via "
+        "typing.get_args(); MODE_VOCAB cannot be derived from it. Mode is probably no "
+        f"longer a plain Literal. Got: {Mode!r} -> {[repr(a) for a in get_args(Mode)]}"
+    )
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"
@@ -95,8 +127,10 @@ def load_selection_matrix(path: Optional[Path] = None) -> SelectionMatrix:
         The parsed :class:`SelectionMatrix`.
 
     Raises:
-        ValueError: If a row's ``species`` or ``mode`` is not in the canonical
-            vocabulary.
+        ValueError: If the file cannot be read, is not valid YAML, does not parse to a
+            mapping, or a row's ``species`` or ``mode`` is not in the canonical
+            vocabulary. Read and parse failures are normalized to ``ValueError`` (from
+            ``OSError`` / a YAML parse error) so a caller has one type to handle.
     """
     if path is not None:
         return _parse_matrix(Path(path))
@@ -124,9 +158,38 @@ def matrix_sha256(path: Optional[Path] = None) -> str:
 
 def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
     """Parse and validate a selection matrix YAML at ``matrix_path``."""
+    # Every way the *file* can be unusable is normalized to ValueError naming the path,
+    # so a caller has one exception type to wrap. `seed-registry` promises operators a
+    # clean CLI error rather than a traceback for a rejected matrix, and it can only
+    # deliver that against a single type -- raw, these arrive as three unrelated ones
+    # that no reasonable `except` names together: IsADirectoryError/PermissionError
+    # (a directory reaches here; click's `exists=True` only checks existence),
+    # yaml.ParserError (a hand-edited matrix -- the likeliest of the three), and
+    # AttributeError from `data.get` below when the top level parses to a sequence.
+    #
     # resolve=False: the matrix has no interpolations, and a model id that happened
     # to contain a ``${...}`` sequence must not be treated as one.
-    data = OmegaConf.to_container(OmegaConf.load(str(matrix_path)), resolve=False)
+    try:
+        loaded = OmegaConf.load(str(matrix_path))
+    except OSError as error:
+        raise ValueError(
+            f"{matrix_path}: cannot read the selection matrix: {error}"
+        ) from error
+    except Exception as error:
+        # Deliberately broad, and deliberately scoped to this one call. Parsing YAML
+        # fails in types this package does not depend on: PyYAML's ParserError and
+        # ScannerError arrive *through* omegaconf, which neither wraps them nor makes
+        # pyyaml a dependency declared here. Naming them would mean either importing an
+        # undeclared package or guessing at the set, and a guess that misses re-opens
+        # exactly the traceback this normalization exists to close.
+        raise ValueError(f"{matrix_path}: not valid YAML: {error}") from error
+
+    data = OmegaConf.to_container(loaded, resolve=False)
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{matrix_path}: top level is a {type(data).__name__}, "
+            "expected a mapping with a `models:` key"
+        )
 
     models = data.get("models") or []
     if not models:
