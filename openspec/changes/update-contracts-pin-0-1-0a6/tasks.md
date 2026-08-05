@@ -43,14 +43,14 @@
       and `experiment.root_type` too, not only `experiment.mode` — wider than this change's stated
       subject. Recorded as a decision with its rationale in `design.md`, and pinned by
       `test_the_hint_covers_species_and_root_type_too`.
-- [x] 2.6 `cli.py`: `seed-registry` wraps `ValueError`/`FileNotFoundError` from **both** the matrix
-      loader and `cards.expand_rows_to_cards` into a `click.ClickException`, matching what the
-      `resolve_all` step in the same function already did. The loader's row-numbered message is
-      what the spec promises operators, but unwrapped it reached them as a raw traceback — newly
-      load-bearing, since a future upstream narrowing of `Mode` hands exactly that error to every
-      operator running `seed-registry`. The second user-visible behavior change here, and the
-      reason the spec delta carries a third MODIFIED requirement (**Registry Seeding CLI with
-      Confirmed Execution**) rather than only the two vocabulary ones.
+- [x] 2.6 `cli.py`: `seed-registry` wraps `ValueError` from **both** the matrix loader and
+      `cards.expand_rows_to_cards` into a `click.ClickException`, matching what the `resolve_all`
+      step in the same function already did. The loader's row-numbered message is what the spec
+      promises operators, but unwrapped it reached them as a raw traceback — newly load-bearing,
+      since a future upstream narrowing of `Mode` hands exactly that error to every operator
+      running `seed-registry`. The second user-visible behavior change here, and the reason the
+      spec delta carries a third MODIFIED requirement (**Registry Seeding CLI with Confirmed
+      Execution**) rather than only the two vocabulary ones.
 - [x] 2.7 The import-time guard in `chooser.py` is a **new failure mode**, not covered by 2.1's
       "derive via `get_args`" wording: `chooser` now raises `RuntimeError` at import if the derived
       vocabulary is empty *or contains a non-string*. Both halves are needed — an emptiness-only
@@ -59,6 +59,28 @@
       pydantic-first contracts package. Rationale and the full shape table are in `design.md`;
       discrimination is tested by 3.6. Not user-visible today — it can only fire on a future
       upstream reshape — which is why it is absent from `docs/CHANGELOG.md` on purpose.
+
+- [x] 2.8 **The wrapping in 2.6 covered only the rejection it was written for.** `except
+      (FileNotFoundError, ValueError)` closed the `mode: teacup` path and left the "unreadable
+      file" half — which 2.6, the spec text and `docs/CHANGELOG.md` all named as fixed — still
+      arriving as a traceback, through three reachable types the tuple does not list: a directory
+      (`IsADirectoryError`; click's `exists=True` has no `dir_okay=False`, so it passes through to
+      `OmegaConf.load`), malformed YAML (`yaml.ParserError`, the likeliest failure of a hand-edited
+      matrix), and a top-level sequence (`AttributeError` from `data.get`). `FileNotFoundError`,
+      the one type named, is unreachable from the real CLI entry point — click intercepts a
+      nonexistent path before the callback body runs — so the clause was simultaneously dead in
+      its named member and open in three unnamed ones.
+      **Fixed at the loader, not the call site.** `chooser._parse_matrix` normalizes every way the
+      file can be unusable — unreadable (`OSError`), unparseable (any YAML error), or not a mapping
+      — into `ValueError` naming the path, so `load_selection_matrix`'s documented `Raises:` is the
+      whole contract and a caller has one type to wrap. Wrapping at the call site instead would
+      have meant re-deriving the same list in every future caller, which is how this gap arose.
+      The parse arm catches broadly on purpose: PyYAML's error types arrive *through* omegaconf and
+      pyyaml is not a dependency declared here, so naming them means either an undeclared import or
+      a guess, and a guess that misses re-opens the traceback. Rationale in the code comment.
+      `--selection-matrix` also gains `dir_okay=False` so a directory is rejected at the argument
+      that named it rather than as an I/O error inside the loader.
+      Tested by 3.11 (loader) and 3.12 (CLI, all three types end to end).
 
 ## 3. Tests
 
@@ -137,6 +159,27 @@ code as it stood before them, which is the property RED was there to establish.
       mode, so quoting it is what a YAML style guide advises), nesting, or a `python`/`bash` fence
       containing a `mode:`-ish line — and blamed the contract for a bug in the test. Verified: all
       three previously-failing correct edits now pass, and `mode: cyl` still fails.
+- [x] 3.11 **Round 3, RED first.** `tests/test_registry_chooser.py`: four cases asserting the
+      loader normalization in 2.8 — a directory, a nonexistent path, malformed YAML, and a
+      top-level sequence each raise `ValueError` naming the path. All four failed against the code
+      as it stood (with `IsADirectoryError`, `FileNotFoundError`, `yaml.ParserError` and
+      `AttributeError` respectively) before the fix was written.
+- [x] 3.12 **Round 3, RED first.** `tests/test_registry_cli.py`:
+      `test_unreadable_matrix_is_a_clean_error_not_a_traceback` drives all three reachable types
+      through the real `seed-registry` entry point and asserts a clean `Error:` naming the file,
+      with `result.exception` a click exit rather than the raw error. 3.4's `mode: teacup` test was
+      the only coverage the wrapping had, and `teacup` is the one path that already worked — the
+      half the CHANGELOG named as fixed ("unreadable file") was the untested half.
+- [x] 3.13 **Round 3, RED first.** `tests/test_training_docs.py`: 3.10's YAML-aware rewrite fixed
+      the extraction and left the *scope* unfixed — it collected every `mode:` key at any depth, so
+      it also guarded `sleap-nn`'s own config, which the guide documents as consumed as-is and
+      which has unrelated `mode` keys (`ReduceLROnPlateau(mode='min'|'max')` is standard
+      Lightning). Documenting a scheduler accurately therefore turned the guard red and blamed the
+      contract. Third occurrence of the same failure class in this directory. `_collect_modes` is
+      now `_experiment_modes`, scoped to the `experiment:` block, pinned by
+      `test_mode_guard_reads_only_the_experiment_block`. Verified by injecting the review's exact
+      repro into a copy of the guide: the scheduler block now passes, the round-2 quoting cases
+      still pass, and `experiment.mode: cyl` still fails.
 
 ## 4. Spec + docs
 

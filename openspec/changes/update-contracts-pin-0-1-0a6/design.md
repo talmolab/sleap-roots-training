@@ -172,6 +172,25 @@ belongs upstream if it is wanted.
   user-authoring surface. The committed matrix and `examples/` were already guarded; `docs/training.md`
   is the third authoring surface and nothing read it, so a test now asserts every `mode:` the guide
   tells users to write stays contract-valid. Flagged in the CHANGELOG for downstream config authors.
+
+  **The guard is scoped to the `experiment:` block, and that scope is the point.** A config is the
+  repo-owned `experiment` block **plus** `sleap-nn`'s own `data_config` / `model_config` /
+  `trainer_config` consumed as-is — and those carry `mode` keys of their own that this vocabulary
+  has no claim on (`ReduceLROnPlateau(mode='min'|'max')` is a standard Lightning field, and the
+  guide is meant to document it). Two earlier versions of this guard fired on *correct* docs edits:
+  first by splitting on `:` (so quoting the value broke it), then by walking every `mode` key at any
+  depth (so documenting a scheduler broke it). In a repo whose rule is "`main` stays green", a guard
+  that goes red on a correct change is a defect, and a guard is this change's whole value — so the
+  extraction reads `experiment.mode` and nothing else, pinned by
+  `test_mode_guard_reads_only_the_experiment_block`.
+- **A rejected selection matrix reaches the operator as a traceback.**
+  → Wrapped into a `ClickException` in `seed-registry` (`tasks.md` 2.6), then found to cover only
+  the out-of-vocabulary path while the "unreadable file" half the CHANGELOG named as fixed still
+  crashed (`tasks.md` 2.8). Normalization now lives in `chooser._parse_matrix` rather than in the
+  `except` clause: the loader is where the set of possible failures is known, and a call site that
+  re-derives that set is a call site that will miss a member — which is exactly what happened. The
+  documented `Raises: ValueError` on `load_selection_matrix` is therefore the whole contract, and
+  every caller (including future ones) wraps one type.
 - **Eager import cost.** `from sleap_roots_contracts import Mode` at `chooser` module scope is the
   first place this package actually imports the contract (and transitively pydantic) — `lineage.py`
   only read its version via `importlib.metadata`. Since `config.py` imports `chooser` eagerly, this

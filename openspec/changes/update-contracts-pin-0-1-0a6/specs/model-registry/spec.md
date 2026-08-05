@@ -106,3 +106,10 @@ row-numbered message, not as an unhandled traceback.
   `mode: teacup`)
 - **THEN** the command exits non-zero with the loader's row-numbered message rendered as a CLI error
 - **AND** no traceback is printed and no wandb call is made
+
+#### Scenario: An unreadable or unparseable selection matrix is reported as a CLI error
+
+- **WHEN** `--selection-matrix` names a path that cannot be loaded as a matrix — a directory, a
+  file that is not valid YAML, or YAML whose top level is not a mapping
+- **THEN** the command exits non-zero with a message naming the path and what was wrong with it
+- **AND** no traceback is printed and no wandb call is made

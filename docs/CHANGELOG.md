@@ -33,10 +33,13 @@ All notable changes to this project are documented here. The format is based on
   `experiment.root_type`. Rationale and the full `a3 → a6` delta review are in the change's
   `design.md`.
 
-  **For registry operators:** `seed-registry` now reports a rejected selection matrix (unreadable
-  file, out-of-vocabulary `species`/`mode`, non-contiguous `age`) as a clean `Error: ...` carrying
-  the loader's row-numbered message, instead of an unhandled traceback. Same failures, same
-  messages — only the packaging changed.
+  **For registry operators:** `seed-registry` now reports a rejected selection matrix as a clean
+  `Error: ...` instead of an unhandled traceback — out-of-vocabulary `species`/`mode` and a
+  non-contiguous `age` carry the loader's row-numbered message unchanged, and a file that cannot be
+  loaded at all (a directory, invalid YAML, or YAML whose top level is not a mapping) now names the
+  path and what was wrong with it. Same failures, same messages — only the packaging changed.
+  `--selection-matrix` also rejects a directory at the argument itself rather than failing later
+  inside the loader.
 
   **Cold-start cost:** this is the first code path in the package that actually imports
   `sleap_roots_contracts` (and transitively `pydantic`) rather than only reading its version, and
