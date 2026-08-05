@@ -32,7 +32,10 @@ VIEWS = (1, 25, 49)
 
 #: The soybean WEEP package the vault script was hand-edited to build.
 METADATA = PackageMetadata(
-    species="soybean", mode="cylinder", root_types=("primary", "lateral")
+    species="soybean",
+    mode="cylinder",
+    experiment="weep",
+    root_types=("primary", "lateral"),
 )
 
 
@@ -375,7 +378,7 @@ def test_a_package_may_declare_a_single_root_type(tmp_path):
     for path in predictions_dir.glob("*.root_lateral.slp"):
         path.unlink()
     metadata = PackageMetadata(
-        species="soybean", mode="cylinder", root_types=("primary",)
+        species="soybean", mode="cylinder", experiment="weep", root_types=("primary",)
     )
 
     written = build_slp_project(
@@ -386,19 +389,25 @@ def test_a_package_may_declare_a_single_root_type(tmp_path):
     assert not (output_dir / "soybean_weep_lateral_labels.v000.slp").exists()
 
 
-def test_a_species_without_a_skeleton_fails_before_reading_anything(tmp_path):
-    """Metadata is checked first, so a wrong species is not reported as a data problem.
+def test_a_species_the_table_does_not_cover_fails_before_reading_anything(tmp_path):
+    """Skeletons are resolved first, so this is not reported as a data problem.
 
-    The builder still carries the vault script's hardcoded soybean pair; giving another
-    species soybean's node counts would produce a package that looks fine and cannot be
-    combined with anything. Section 6's committed table is what lifts this.
+    Pennycress is in ``SPECIES_VOCAB`` and has two ``model_selection.yaml`` rows, but the
+    skeleton table's source omits it. Defaulting to another crop's node counts would
+    produce a package that looks fine and cannot be combined with anything, so it fails —
+    with an unpopulated ``images/`` here, proving the check runs before the data does.
     """
     manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(
         tmp_path, populate_images=False
     )
-    metadata = PackageMetadata(species="rice", mode="cylinder", root_types=("primary",))
+    metadata = PackageMetadata(
+        species="pennycress",
+        mode="cylinder",
+        experiment="weep",
+        root_types=("primary",),
+    )
 
-    with pytest.raises(NotImplementedError, match="rice"):
+    with pytest.raises(ValueError, match="pennycress"):
         build_slp_project(
             manifest_csv, images_dir, predictions_dir, output_dir, metadata
         )

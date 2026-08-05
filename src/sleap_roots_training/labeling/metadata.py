@@ -14,6 +14,7 @@ here means the check exists before the file format is settled, rather than after
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from sleap_roots_training.registry.chooser import MODE_VOCAB, SPECIES_VOCAB
@@ -21,6 +22,11 @@ from sleap_roots_training.registry.chooser import MODE_VOCAB, SPECIES_VOCAB
 #: Root types a labeling package can be built for. Matches the contract's ``RootType``
 #: literal, which is what ``#10``'s ``LabelCard`` validates against.
 ROOT_TYPE_VOCAB = frozenset({"primary", "lateral", "crown"})
+
+#: What an ``experiment`` slug may contain. It becomes part of a filename, so anything a
+#: shell or a filesystem treats specially is rejected at construction rather than
+#: producing a package nobody can name.
+_SLUG = re.compile(r"[a-z0-9]+(?:[-_][a-z0-9]+)*")
 
 
 @dataclass(frozen=True)
@@ -35,6 +41,10 @@ class PackageMetadata:
     Attributes:
         species: Crop, from the repo's ``SPECIES_VOCAB``.
         mode: Capture mode, from the repo's ``MODE_VOCAB``.
+        experiment: Short slug naming the experiment the package is drawn from (for
+            example ``"weep"``). It goes into the ``.slp`` filenames, per the command
+            doc's ``<crop>_<experiment>_<root_type>_labels.<version>.slp``, so it is
+            restricted to characters that survive a filename unchanged.
         root_types: The root types this package is for, in output order. Each one must
             yield at least one labeled frame or the build fails (task 4.4) — a package
             declaring a root type it has no labels for is an empty selection reported as
@@ -43,6 +53,7 @@ class PackageMetadata:
 
     species: str
     mode: str
+    experiment: str
     root_types: tuple[str, ...]
 
     def __post_init__(self) -> None:
@@ -66,6 +77,14 @@ class PackageMetadata:
             raise ValueError(
                 f"package metadata field 'mode' is {self.mode!r}, expected one of "
                 f"{sorted(MODE_VOCAB)}"
+            )
+        if not self.experiment:
+            raise ValueError("package metadata is missing required field 'experiment'")
+        if not _SLUG.fullmatch(self.experiment):
+            raise ValueError(
+                f"package metadata field 'experiment' is {self.experiment!r}; it names "
+                "the output files, so it must be lowercase alphanumerics separated by "
+                "'-' or '_'"
             )
         if not self.root_types:
             raise ValueError("package metadata is missing required field 'root_types'")

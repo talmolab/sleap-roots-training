@@ -369,23 +369,56 @@ the scripts do.
 
 ## 6. Per-crop skeletons (Decision 7 — new code, not a port)
 
-- [ ] 6.1 Create `labeling/data/skeletons.yaml`, keyed by `(species, root_type)`, mirroring
+- [x] 6.1 Create `labeling/data/skeletons.yaml`, keyed by `(species, root_type)`, mirroring
       `registry/data/model_selection.yaml`'s provenance-stamped shape (source, snapshot date,
       validated on load with row-numbered errors)
-- [ ] 6.2 Transcribe the doc's table (`build-labeling-package.md:45-51`) with a header stating it is
+      **Done 2026-08-04**, with `labeling/skeletons.py` as its loader. Mirrors the chooser
+      throughout: OmegaConf with `resolve=False`, row-numbered errors, a `skeleton_table_sha256`
+      matching `matrix_sha256`, and the same `age` comma-list format — it reuses `parse_age_window`
+      outright, so a gapped window fails identically in both files. Node names are *derived*
+      (`r1..rN`, chain edges) rather than stored: the convention is fixed by the source doc, so a
+      row states only its count
+- [x] 6.2 Transcribe the doc's table (`build-labeling-package.md:45-51`) with a header stating it is
       **advisory and unverified**, and that these are **native** skeletons — explicitly not Tier
       2.7's unified node count (`docs/roadmap.md:422`)
-- [ ] 6.3 (RED) Loader test: a missing `(species, root_type)` fails loudly rather than defaulting.
+      **Done 2026-08-04.** The header carries both warnings and now grades the rows by evidence:
+      **soybean primary (6) and lateral (4) are verified** against the real WEEP artifacts (5.4's
+      data — `soybean_weep_*_labels.v000.slp` and the repaired `.pkg.slp` all carry `soybean_primary`
+      r1–r6 and `soybean_lateral` r1–r4); canola, arabidopsis, and rice are transcribed only, with
+      canola's lateral 3 flagged inline as the table's one asymmetry
+- [x] 6.3 (RED) Loader test: a missing `(species, root_type)` fails loudly rather than defaulting.
       **Pennycress has no row** — the table ships incomplete on purpose
-- [ ] 6.4 (RED) Cross-check test against `model_selection.yaml`: the rice age split (young 2–5
+      **Done 2026-08-04.** The error lists what the table *does* cover, so the gap reads as
+      deliberate rather than as a typo. Three gaps are pinned: pennycress entirely, soybean crown,
+      and rice lateral — the last agreeing with `model_selection.yaml`, which has no rice lateral
+      model either
+- [x] 6.4 (RED) Cross-check test against `model_selection.yaml`: the rice age split (young 2–5
       primary + crown, old 6–10 crown only) must agree between the two tables
-- [ ] 6.5 (RED) **Verification test against the published collections** — read the eight
+      **Done 2026-08-04 — they agree.** The two tables are transcribed from different sources (the
+      command doc vs the `models-downloader` chooser xlsx), so this is evidence rather than
+      tautology. **Consequence for 6.6:** a package spans several ages, so the builder resolves the
+      skeleton across the manifest's whole age span and **fails if it straddles the rice split**,
+      rather than labeling half a package against the wrong skeleton
+- [x] 6.5 (RED) **Verification test against the published collections** — read the eight
       `wandb-registry-sleap-roots-labels` artifacts and fail on any node-count or node-name
       disagreement with the table. This is what converts the table from hypothesis to record; mark
       it `@pytest.mark.integration` if the download makes it unfit for default CI
-- [ ] 6.6 Parameterize `build_package.py` by `(species, root_type)` off the table, replacing the
+      **Done 2026-08-04, and gated twice.** `@pytest.mark.integration` (CI runs `-m "not
+      integration"`) *and* an explicit `SLEAP_ROOTS_LABEL_SKELETON_CHECK=1` opt-in — unlike the
+      repo's other integration tests this one downloads 170 MB – 1.2 GB per collection, eight times,
+      which a local `uv run pytest` must not do by accident. It reuses `resolve_registry_config()`
+      for entity/org resolution rather than hardcoding a path, and reports **every** mismatch with
+      its collection name, since a disagreement is a finding either way.
+      **Not yet run — this is the one task in section 6 whose result is still outstanding.** Until
+      someone runs it, canola/arabidopsis/rice stay hypotheses; soybean is already record via 6.2
+- [x] 6.6 Parameterize `build_package.py` by `(species, root_type)` off the table, replacing the
       hardcoded `make_primary_skeleton` / `make_lateral_skeleton` and the `soybean_weep_*` output
       names. Record in section 7 — the original had no such parameterization to port
+      **Done 2026-08-04.** `make_primary_skeleton`/`make_lateral_skeleton` are gone; `skeleton_for`
+      reads the table across the manifest's age span. Output names follow the command doc's own
+      `<crop>_<experiment>_<root_type>_labels.<version>.slp`, which needed a new required
+      `experiment` slug on `PackageMetadata` — validated as filename-safe at construction, since it
+      names the files
 
 ## 7. Port deviations (fill in during sections 2–6)
 
@@ -488,6 +521,18 @@ the scripts do.
          several prediction files matched, making "the first" depend on filesystem iteration order.
          Sorting makes the warning's "using first" mean something. Not caller-visible in the
          single-match case, which is every documented case.
+
+      **Recorded from section 6 (new code, not a port — Decision 7; 2026-08-04).**
+      1. **Skeletons come from a committed table** — `skeletons.yaml` keyed by
+         `(species, root_type[, age])`, replacing the hardcoded soybean pair the vault script
+         edited by hand per crop (6.1, 6.6). There was no parameterized original to port. A pair
+         the table does not cover **fails**; pennycress has no row on purpose.
+      2. **Output filenames are parameterized** — `<species>_<experiment>_<root_type>_labels.<version>.slp`,
+         the command doc's own convention, replacing hardcoded `soybean_weep_*` (6.6). Adds a
+         required `experiment` slug to `PackageMetadata`, validated as filename-safe.
+      3. **An age-straddling package fails** — the table splits rice at 5/6 DAG, so a selection
+         spanning it has no single skeleton (6.4/6.6). New behavior with no vault analogue: the
+         script had one crop and one hand-edited skeleton, so the question could not arise.
 - [x] 7.2 ~~**Open, decide during section 3:**~~ **Decided 2026-08-04 — neither (a) nor (b): the copy
       step takes the `scans.csv` itself.** 3.4 resolves `source_image` against the directory holding
       the `scans.csv` it came from. That base has to reach the copy step somehow, and the two options
