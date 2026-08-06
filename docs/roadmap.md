@@ -186,8 +186,20 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 - **Oracle:** round-trip a dataset and a model through the registries; lineage reproduces a run;
   **a dry-run sweep (≈5 configs, 1 species) launches and logs with full lineage** — verifying the
   registry is solid **before** the expensive Tier 3 sweeps.
-- **Tracking:** Tier-2 EPIC; #10 (LabelCard contract), #11 (backfill existing collections), #39
-  (registry-duplication decision). *(Good home for a cross-track engineering PR.)*
+- **`LabelCard` stays single-species.** Unlike `ModelCard` (#39 — one physical model shared across
+  species, no way to express that), a `LabelCard` never represents more than one species. A
+  generalist model's multi-species training data is combined from separate single-species
+  `LabelCard`-backed `.slp` files **at training time**, not via a pre-built or pre-registered
+  combined artifact — `sleap-nn`'s `DataConfig.train_labels_path`/`val_labels_path` already accept
+  a list of paths and split each independently. This requires the combined files to share a
+  skeleton (Tier 2.7) and does not reproduce any original combined split exactly, which is an
+  accepted tradeoff in favor of clean per-species versioning/lineage and future per-dataset
+  data-engineering work (per-dataset splits, per-dataset contribution to a generalist model).
+- **Tracking:** Tier-2 EPIC; #10 (LabelCard contract — shipped, `sleap-roots-contracts#24`), #11
+  (backfill existing collections onto `LabelCard`, now unblocked — carries an explicit requirement
+  to verify each collection is actually single-species before backfilling, not just trust its
+  name), #39 (registry-duplication decision, models only). *(Good home for a cross-track
+  engineering PR.)*
 
 ### Tier 2.2 — Per-model training-backend parity (sleap-nn vs. legacy TF, full production fleet)
 - **Deliverable:** for every **physically distinct** production model (dedup on `weights_checksum`,
@@ -230,7 +242,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
     is not confounded with a gap the inference-parity gate already explained and closed
 - **Depends on:** Tier 2 (registry/lineage — need it to enumerate "every production model" against
   tracked, versioned data) and #39 (train once per distinct `weights_checksum`, not once per card,
-  or this retrains the same physical model up to 4×).
+  or this retrains the same physical model up to 4×). **Sequenced, not parallel:** kickoff waits
+  for #11 (backfill) and #39 (dedup decision) to close — retraining "the actual pipeline" against
+  the real dataset registry is the point of this tier, so it can't start against registry loose
+  ends.
 - **Tracking:** Tier-2.2 EPIC (filed at kickoff, JIT); links #21 / #36 (the Tier-1 methodology this
   generalizes), #39 (dedup blocker), `sleap-roots-pipeline#15` + `sleap-roots-predict#33` (the
   inference-side precedent + reusable ground-truth/tolerance-decision methodology).
@@ -655,8 +670,9 @@ now-closed A3-predict inference-parity gate.
 - Related, closed without a roadmap change needed: `sleap-roots-predict#32` (contracts `0.1.0a6`
   pin bump confirmed safe against the live registry; no code change required).
 
-**Roadmap revision (2026-08-06)** — follow-up clarity pass on Tier 2.2, plus a hard-won lesson from
-PR #33's own units bug.
+**Roadmap revision (2026-08-06)** — follow-up clarity pass on Tier 2.2, a hard-won lesson from
+PR #33's own units bug, and coordination decisions from a progress review (sequencing + label
+registry species scope).
 - **IMPORTANT (clarity):** **Tier 1's oracle reworded** — it validates the config-driven pipeline
   and methodology, not the production fleet's reference; that role now belongs to Tier 2.2. The
   prior wording ("...is the reference for later tiers") predated Tier 2.2 and overclaimed Tier 1's
@@ -679,3 +695,16 @@ PR #33's own units bug.
   collapse (0 predicted instances), the same failure mode as the `output_stride 2` sleap-nn
   collapse this tier's methodology addresses. Noted for context; no roadmap structure change from
   this item alone.
+- **IMPORTANT (sequencing):** **Tier 2.2's "Depends on" line now says explicitly that kickoff is
+  sequenced after #11/#39, not run in parallel with them** — Tier 2.2 is meant to retrain against
+  the real dataset registry, so it can't start while Tier 2's own registry loose ends are still
+  open.
+- **IMPORTANT (Tier 2 completeness):** **`LabelCard` will not mirror `ModelCard`'s species-tuple
+  question (#39).** Every `LabelCard` stays single-species; multi-species generalist training data
+  is combined from separate single-species files at training time (`sleap-nn`'s `DataConfig`
+  already accepts a list of `.slp` paths and splits each independently). Posted as a decision on
+  #11, which also now carries an explicit requirement to verify each of the 8 existing collections
+  is actually single-species (a preliminary spot-check found no evidence of mixing, but wasn't
+  exhaustive) before backfilling it onto `LabelCard`.
+- **MINOR:** **#16** (Tier-1 EPIC) and **#10** (label-registry tracking issue) closed — both
+  tracked work that had already shipped (#21/PR #33, and `sleap-roots-contracts#24` respectively).
