@@ -1,7 +1,7 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
-**Last revised:** 2026-08-04 (see the dated revision log at the bottom for what changed and why).
+**Last revised:** 2026-08-06 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
@@ -149,10 +149,13 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   Log per-epoch train/val loss and the stopping epoch.
 - **Oracle:** establish a **PyTorch-native baseline** (2–3 **same-config** runs to get a stable
   range — not a hyperparameter sweep, which is a different axis of variation) on the held-out data;
-  document config, hyperparameters, loss curves, and accuracy. This baseline — not exact parity with
-  the old TF model — is the reference for later tiers; the old TF number is reported alongside **as
-  a range, not a point** (#8), because same-config seed/replicate spread is real (~1.5–1.73×
-  `dist_avg` in the legacy runs; see `docs/tf-reference.md`) and must not be mistaken for
+  document config, hyperparameters, loss curves, and accuracy. This validates the config-driven
+  pipeline and methodology (PR #33 — matching architecture/sigma alone isn't sufficient without the
+  training schedule too, or a faithful config falsely appears to collapse; #718). It is **not**
+  itself the production fleet's reference — v000 isn't a production model — so it does not carry
+  the same weight Tier 2.2 gives the actual production models later. The old TF number is reported
+  alongside **as a range, not a point** (#8), because same-config seed/replicate spread is real
+  (~1.5–1.73× `dist_avg` in the legacy runs; see `docs/tf-reference.md`) and must not be mistaken for
   architecture-driven variation from a sweep. *(W&B versioning is retrofitted in Tier 2.)*
 - **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`.
   **Depends on** Tier 0.5 (#9).
@@ -189,13 +192,24 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 ### Tier 2.2 — Per-model training-backend parity (sleap-nn vs. legacy TF, full production fleet)
 - **Deliverable:** for every **physically distinct** production model (dedup on `weights_checksum`,
   not the 13 `ModelCard` registrations — see Tier 2's registry-duplication decision / #39), retrain
-  via the sleap-nn backend using that model's **exact legacy TF config and dataset**, following the
-  schedule-*and*-architecture-matched translation approach Tier 1 validated the hard way (#21, #36):
-  matching resolution + sigma alone was not sufficient — the training schedule/step-count had to
-  match too, or a faithful config falsely appears to collapse. Compare the resulting model's
-  evaluation metrics directly against that model's own real legacy TF numbers, per model, not
-  pooled — the same discipline `docs/tf-reference.md` already applies to the one Tier 1 dataset,
-  extended to the full fleet.
+  via the sleap-nn backend. **Use that model's exact legacy TF config and dataset — not a
+  modernized config, not a "TF-inspired" one, the literal same split and hyperparameters TF used**,
+  following the schedule-*and*-architecture-matched translation approach Tier 1 validated the hard
+  way (#21, #36): matching resolution + sigma alone was not sufficient — the training
+  schedule/step-count had to match too, or a faithful config falsely appears to collapse. If a
+  production model's exact original dataset cannot be recovered (real risk — see #11's own
+  "expect gaps... do not invent values to satisfy the schema" finding on 6 of the 8 existing label
+  collections), flag and exclude that model from this tier's gate rather than approximating it; a
+  fabricated "close enough" split must never quietly stand in for the real one. Compare the
+  resulting model's evaluation metrics directly against that model's own real legacy TF numbers,
+  per model, not pooled — the same discipline `docs/tf-reference.md` already applies to the one
+  Tier 1 dataset, extended to the full fleet.
+- **Verify the legacy reference's units before trusting it.** PR #33 found its own cited TF
+  `dist_avg` numbers were **millimeters from a lab post-processing CSV, not pixels from SLEAP's own
+  `metrics.val.npz`** — a unit mismatch that made the PyTorch baseline look ~20–40× worse than it
+  actually is; corrected, it's competitive (inside TF's own pixel range, ahead on recall). Read each
+  production model's legacy reference from its own `metrics.val.npz` directly, not from a downstream
+  analysis artifact, before this tier's numbers go into anyone's gate.
 - **Relationship to A3-predict (explicit, so the two aren't conflated):** `sleap-roots-pipeline#15`
   / `sleap-roots-predict#33` proved sleap-nn's **inference engine** reproduces classic-SLEAP's
   predictions on the *same already-trained* legacy weights. This tier proves sleap-nn's **training**
@@ -640,3 +654,28 @@ now-closed A3-predict inference-parity gate.
   (inference) gate isn't mistaken for covering this new (training) gate.
 - Related, closed without a roadmap change needed: `sleap-roots-predict#32` (contracts `0.1.0a6`
   pin bump confirmed safe against the live registry; no code change required).
+
+**Roadmap revision (2026-08-06)** — follow-up clarity pass on Tier 2.2, plus a hard-won lesson from
+PR #33's own units bug.
+- **IMPORTANT (clarity):** **Tier 1's oracle reworded** — it validates the config-driven pipeline
+  and methodology, not the production fleet's reference; that role now belongs to Tier 2.2. The
+  prior wording ("...is the reference for later tiers") predated Tier 2.2 and overclaimed Tier 1's
+  ongoing role.
+- **IMPORTANT (rigor):** **Tier 2.2 gained two additions**, both prompted by PR #33 continuing to
+  surface real problems after the 2026-08-04 entry above:
+  1. The "exact legacy TF config and dataset" requirement is now its own emphasized sentence
+     (previously a clause inside a longer sentence about dedup) plus an explicit gap policy: a
+     production model whose exact original dataset can't be recovered is flagged and excluded from
+     the gate, never approximated — mirroring `#11`'s own "do not invent values" rule.
+  2. **A units-verification requirement**, direct from PR #33 (`668bb83`, 2026-08-06): its own cited
+     TF `dist_avg` numbers turned out to be millimeters from a lab post-processing CSV, not pixels
+     from SLEAP's own `metrics.val.npz` — inflating the apparent PyTorch-vs-TF gap ~20–40× before
+     correction (corrected, the baseline is competitive). Tier 2.2 must read each production
+     model's legacy reference from its own `metrics.val.npz` directly, not a downstream analysis
+     artifact.
+- **MINOR:** PR #33 also independently reproduced the A3-predict inference-parity finding from a
+  different angle — scoring a legacy run's saved predictions with `sleap_nn`'s Evaluator matches
+  SLEAP's own stored metrics to every printed digit — and found TF itself has a `max_stride 8`
+  collapse (0 predicted instances), the same failure mode as the `output_stride 2` sleap-nn
+  collapse this tier's methodology addresses. Noted for context; no roadmap structure change from
+  this item alone.
