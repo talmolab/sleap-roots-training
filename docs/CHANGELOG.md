@@ -24,8 +24,10 @@ All notable changes to this project are documented here. The format is based on
   instances detected), with per-epoch W&B logging confirmed. The TF reference is shown alongside as
   context only, not a gate. (**Corrected 2026-08-06:** the TF W&B `dist_*` values are
   **millimeters** from a lab post-processing step, so the earlier "20–40× gap" reading was a unit
-  error. In pixels the two backends are comparable and the PyTorch baseline's `vis_recall` is above
-  every TF run; sleap-nn's evaluator also reproduces SLEAP's own metrics exactly. See
+  error. In pixels the two backends are comparable, and the PyTorch baseline detects 44/44 instances
+  on every seed where no TF run exceeds 43/44 (on `vis_recall`, two of its three seeds clear TF's
+  best of 0.872 and seed 43 does not); sleap-nn's evaluator also reproduces SLEAP's own metrics
+  exactly. See
   `docs/tf-reference.md`.) Documented finding: the finer `output_stride 2` collapses to zero predictions
   on 2 of 3 seeds at `confmaps.sigma 2.5`; a `sigma` ablation (`sigma 5.0` trains stably on all 3
   seeds) shows the cause is too-tight confmap targets, not a resolution ceiling or the loss — so the

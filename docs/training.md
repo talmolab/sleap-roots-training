@@ -224,9 +224,10 @@ validation philosophy" — exact backend parity is the wrong bar):
 | 64 | 21.65 – 21.93 | 6.87 – 8.95 | 0.87 | 42–43 / 44 |
 
 **Read in matching units, the PyTorch baseline is competitive and wins on detection.** Its
-`dist_avg` (30.1–37.8) sits inside the TF range (21.7–39.0), and its `vis_recall` (0.85–0.91 at
-**44 / 44** instances detected) is **above every TF run**, the best of which reaches 0.872 on
-43 / 44. The remaining honest gap is the median: TF localizes its matched keypoints tighter
+`dist_avg` (30.1–37.8) sits inside the TF range (21.7–39.0), and it detects **44 / 44** instances on
+every seed, which **no** TF run manages (TF's best is 43 / 44). On `vis_recall` the comparison is
+per-seed rather than wholesale: seeds 42 and 44 (**0.912**, **0.885**) clear TF's best of **0.872**,
+while seed 43 (**0.850**) does not. The remaining honest gap is the median: TF localizes its matched keypoints tighter
 (`dist_p50` 6.9–9.5) than the os4 baseline (17.7–21.2). That gap is a resolution/target-scale
 effect rather than a backend one — this repo's own full-resolution `output_stride 2` runs reach
 `dist_p50` 5.7–12.2, inside TF's range, but at much lower recall (0.38–0.65). So the two backends

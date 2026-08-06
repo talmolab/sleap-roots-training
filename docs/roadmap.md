@@ -145,7 +145,8 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   version of this entry quoted the TF numbers as 0.99–2.08 px. Those values are **millimeters** from
   a lab post-processing step, not SLEAP's pixel metrics, and the "PyTorch is 20–40× worse" reading
   they produced was wrong. In matching units the PyTorch baseline's `dist_avg` sits inside the TF
-  range and its `vis_recall` (0.85–0.91 at 44/44 detected) is above **every** TF run. Caveat carried
+  range, and it detects 44/44 instances on every seed where no TF run exceeds 43/44. On `vis_recall`
+  two of its three seeds (0.912, 0.885) clear TF's best of 0.872 and seed 43 (0.850) does not. Caveat carried
   forward: the error is dominated by detection/association quality, **not** a resolution ceiling
   (higher output resolution buys no gain). A `sigma` ablation settled the earlier `output_stride 2` collapse:
   it was too-tight confmap targets at `sigma 2.5` (`sigma 5.0` trains stably on all 3 seeds), not the
