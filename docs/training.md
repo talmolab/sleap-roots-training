@@ -98,7 +98,10 @@ print(m.files)  # the exact metric arrays sleap-nn wrote (localization distance,
 
 Report the localization error and PCK as the accuracy headline. Note the legacy TF reference
 uses the W&B keys `dist_avg` / `oks_map` (see [tf-reference.md](tf-reference.md)); `sleap-nn`'s
-`.npz` names may differ (inspect `m.files`). Do **not** report `oks_map` as a headline number —
+`.npz` names may differ (inspect `m.files`). **Those TF W&B values are in millimeters**, written by
+a lab post-processing step rather than by SLEAP — use the pixel-space table in
+[tf-reference.md](tf-reference.md) for any comparison against these numbers. Do **not** report
+`oks_map` as a headline number —
 in the TF reference it reads implausibly low and is treated as a mis-calibration hypothesis for
 the root domain (tracked in #17), not an established result.
 
@@ -145,8 +148,9 @@ frame-less stray video, re-embeds frames); the labeled-frame set is unchanged (9
 `dist_avg`, `.p50` → `dist_p50`, `visibility_metrics.recall` → `vis_recall` (the dumper prefixes
 these with the top-level `metrics.` key). Distances are in **original-image pixels** — predictions
 are rescaled from the `scale: 0.5` input back to the source 1088×2048 coordinates before matching
-the original-coordinate ground truth, so they are directly comparable to the TF reference's native
-pixels. (Verified in sleap-nn 0.2.0 source: `sleap_nn/inference/{single_instance,topdown,bottomup}.py`
+the original-coordinate ground truth, so they are directly comparable to the TF reference's
+**pixel-space** metrics (the ones SLEAP itself wrote; the TF W&B summary values are millimeters,
+see [tf-reference.md](tf-reference.md)). (Verified in sleap-nn 0.2.0 source: `sleap_nn/inference/{single_instance,topdown,bottomup}.py`
 divide predicted peaks by `input_scale` then `eff_scale`, and `sleap_nn/training/lightning_modules.py`'s
 `validation_step` transforms predictions **and** GT back to original-image space before
 `sleap_nn/evaluation.py` — which itself does no rescaling — computes the distances.) `oks_map` is
@@ -200,21 +204,36 @@ The legacy TensorFlow `sleap-train` runs (see [tf-reference.md](tf-reference.md)
 range, per run-to-run spread, and are **not** a pass/fail bar (`docs/roadmap.md`, "Oracle /
 validation philosophy" — exact backend parity is the wrong bar):
 
-| TF reference (`max_stride`) | `dist_avg` (px) | `vis_recall` |
-|-----------------------------|-----------------|--------------|
-| 16 | 0.989 – 1.710 | 0.47 – 0.63 |
-| 32 | 1.383 – 2.078 | 0.83 |
+> **Correction (2026-08-06): the "PyTorch is 20–40× worse than TF" claim was wrong, and it was a
+> unit error.** The TF `dist_*` numbers previously quoted here (0.989–2.078) are **millimeters**,
+> emitted by a lab post-processing step, not SLEAP's pixel metrics. SLEAP's own `metrics.val.npz`
+> for those runs reports **pixels**, and in pixels the two backends are comparable. Details,
+> evidence and the full per-run pixel table are in [tf-reference.md](tf-reference.md).
+>
+> A second finding fell out of the same check: scoring a TF run's saved predictions with
+> **sleap-nn's** `Evaluator` reproduces SLEAP's own `metrics.val.npz` on all 11 metrics to every
+> printed digit. The two backends' evaluators are numerically identical, and their inference
+> parameters match as well (`peak_threshold` 0.2, integral refinement at patch size 5, identical
+> PAF grouping constants). There is no measurement discrepancy between the backends.
 
-**Read the two columns together, the comparison is recall-confounded.** The PyTorch baseline's
-`dist_avg` is ~20–40× the TF `dist_avg`, but its `vis_recall` (0.85–0.91) sits **above the TF
-stride-16 and stride-32 runs** (0.47–0.83). (The one stride-64 run reached `vis_recall` 0.884, above
-the PyTorch low end, but it has no replicate pair, so it is excluded from the ranged comparison
-above; see `tf-reference.md`.) The PyTorch model detects *more* keypoints and localizes them
-*looser*, whereas TF localized a smaller, higher-confidence subset very tightly. Because each
-backend's `dist_*` is measured over a different population, the raw `dist` ratio overstates the gap,
-so report both directions, not "20–40× worse." (`max_stride` is the TF sweep axis, **distinct** from
-the `output_stride` of the PyTorch configs, so the two should not be conflated.) TF remains
-context only, not a gate.
+| TF reference (`max_stride`) | `dist_avg` (px) | `dist_p50` (px) | `vis_recall` | instances matched |
+|-----------------------------|-----------------|-----------------|--------------|-------------------|
+| 8 | collapsed (0 predictions) | — | — | 0 / 44 |
+| 16 | 23.72 – 39.00 | 8.21 – 8.42 | 0.50 – 0.56 | 36–40 / 44 |
+| 32 | 29.85 – 30.23 | 8.61 – 9.49 | 0.78 – 0.81 | 42–43 / 44 |
+| 64 | 21.65 – 21.93 | 6.87 – 8.95 | 0.87 | 42–43 / 44 |
+
+**Read in matching units, the PyTorch baseline is competitive and wins on detection.** Its
+`dist_avg` (30.1–37.8) sits inside the TF range (21.7–39.0), and its `vis_recall` (0.85–0.91 at
+**44 / 44** instances detected) is **above every TF run**, the best of which reaches 0.872 on
+43 / 44. The remaining honest gap is the median: TF localizes its matched keypoints tighter
+(`dist_p50` 6.9–9.5) than the os4 baseline (17.7–21.2). That gap is a resolution/target-scale
+effect rather than a backend one — this repo's own full-resolution `output_stride 2` runs reach
+`dist_p50` 5.7–12.2, inside TF's range, but at much lower recall (0.38–0.65). So the two backends
+trade off along the same curve; os4 simply sits at the high-recall end of it.
+
+(`max_stride` is the TF sweep axis, **distinct** from the `output_stride` of the PyTorch configs, so
+the two should not be conflated.) TF remains context only, not a gate.
 
 ### Finding: the `output_stride 2` collapse is a training-schedule (step-count) artifact, not the loss
 

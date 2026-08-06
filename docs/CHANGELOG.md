@@ -22,8 +22,11 @@ All notable changes to this project are documented here. The format is based on
   bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:
   `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all
   instances detected), with per-epoch W&B logging confirmed. The TF reference is shown alongside as
-  context only, not a gate (and the `dist` gap is recall-confounded — PyTorch detects more,
-  localizes looser). Documented finding: the finer `output_stride 2` collapses to zero predictions
+  context only, not a gate. (**Corrected 2026-08-06:** the TF W&B `dist_*` values are
+  **millimeters** from a lab post-processing step, so the earlier "20–40× gap" reading was a unit
+  error. In pixels the two backends are comparable and the PyTorch baseline's `vis_recall` is above
+  every TF run; sleap-nn's evaluator also reproduces SLEAP's own metrics exactly. See
+  `docs/tf-reference.md`.) Documented finding: the finer `output_stride 2` collapses to zero predictions
   on 2 of 3 seeds at `confmaps.sigma 2.5`; a `sigma` ablation (`sigma 5.0` trains stably on all 3
   seeds) shows the cause is too-tight confmap targets, not a resolution ceiling or the loss — so the
   baseline stays `output_stride 4`. Adds `examples/baseline_bottomup_v000_os4.yaml` +
