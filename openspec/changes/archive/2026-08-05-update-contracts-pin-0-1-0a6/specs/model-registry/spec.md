@@ -100,6 +100,54 @@ A selection-matrix rejection — an unreadable file, an out-of-vocabulary `speci
 non-contiguous `age` window — SHALL reach the operator as a clean CLI error carrying the loader's
 row-numbered message, not as an unhandled traceback.
 
+#### Scenario: Only-filter seeds a single canary card, validating only its scope
+
+- **WHEN** `seed-registry --execute --yes --only <collection_id>` is run with only that card's model
+  staged
+- **THEN** only that card is validated and published and linked with the production alias
+- **AND** a subsequent full `seed-registry --execute --yes` skips the canary and publishes the rest
+
+#### Scenario: Unknown --only collection fails fast
+
+- **WHEN** `--only` names a collection id not in the expanded card set
+- **THEN** the command fails fast naming the unknown id, publishing nothing
+
+#### Scenario: Default run is a dry run that resolves models without network
+
+- **WHEN** `seed-registry --models-root <dir>` is run without `--execute`
+- **THEN** the planned collections and per-card metadata are printed
+- **AND** each card's model directory is resolved on the filesystem and any missing model is
+  reported
+- **AND** no wandb network call is made
+- **AND** the command exits with status code 0
+
+#### Scenario: Missing credential fails before the confirmation prompt
+
+- **WHEN** `seed-registry --execute` is run with neither `WANDB_API_KEY` set nor a netrc entry for
+  `api.wandb.ai`
+- **THEN** the command fails fast with a clear error before prompting for confirmation
+- **AND** no wandb network call is made
+
+#### Scenario: Execution requires confirmation
+
+- **WHEN** `seed-registry --execute` is run with a resolvable wandb credential but without `--yes`
+- **THEN** the command names the target entity and registry and requires confirmation before
+  publishing
+- **AND** declining performs no publish
+
+#### Scenario: Execution validates all in-scope cards before publishing any
+
+- **WHEN** `seed-registry --execute --yes` is run and any in-scope card's model cannot be resolved
+  (checksum, missing, or missing essential file)
+- **THEN** the seed fails fast, naming the offending card, before any artifact is published
+- **AND** no partial set of production artifacts is left in the registry
+
+#### Scenario: Successful execution publishes and reports collections
+
+- **WHEN** `seed-registry --execute --yes` is run with valid credentials and a complete models-root
+- **THEN** each not-yet-seeded card is published and linked with the production alias
+- **AND** the command reports the published and skipped collections
+
 #### Scenario: A rejected selection matrix is reported as a CLI error
 
 - **WHEN** `seed-registry` is run against a matrix whose row is out of vocabulary (for example
