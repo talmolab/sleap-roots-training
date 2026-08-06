@@ -3,9 +3,9 @@
 CI-safe: reads ``docs/training.md`` from disk and asserts it documents the workflow — a fenced
 ``sleap-roots-training validate`` command, a fenced ``sleap-nn train --config`` command, the
 empirical ``scan_history()`` per-epoch-W&B check, a pointer to the backend runbook, and the
-reserved-baseline marker (present, so it can't be silently dropped) — while forbidding any
-``TODO`` / ``TBD`` placeholder. The command assertions are scoped to **fenced code blocks** so a
-mutated command fails rather than passing on an unrelated prose mention.
+**established** PyTorch baseline (real headline metrics present, the reserved placeholder gone) —
+while forbidding any ``TODO`` / ``TBD`` placeholder. The command assertions are scoped to
+**fenced code blocks** so a mutated command fails rather than passing on an unrelated prose mention.
 
 Reads with explicit ``utf-8`` and normalizes ``\\r\\n`` so the assertions hold on the Windows CI
 leg regardless of checkout line endings.
@@ -22,8 +22,8 @@ GUIDE = Path(__file__).resolve().parents[1] / "docs" / "training.md"
 #: `mode: str = "cylinder"` and a `bash` fence containing `mode: $MODE` contaminate it.
 _FENCE = re.compile(r"```([^\n]*)\n(.*?)```", re.DOTALL)
 
-#: The exact reserved-baseline marker the follow-up baseline PR replaces with real numbers.
-#: Asserted present so the reservation can't be silently deleted; kept free of TODO/TBD.
+#: The reserved-baseline placeholder the baseline PR replaced with real numbers. Asserted ABSENT
+#: now, so a regression that reintroduces a placeholder instead of real numbers fails.
 _RESERVED_MARKER = "**Reserved** — the PyTorch baseline numbers are established by the follow-up baseline PR"
 
 
@@ -136,10 +136,25 @@ def test_guide_points_to_backend_runbook():
     ), "guide should point to the backend runbook (docs/training-backend.md)"
 
 
-def test_guide_reserves_baseline_section():
+def test_guide_documents_established_baseline():
+    text = _read()
+    # The reserved placeholder must be gone — replaced by real established-baseline numbers.
     assert (
-        _RESERVED_MARKER in _read()
-    ), "guide missing the reserved PyTorch-baseline marker"
+        _RESERVED_MARKER not in text
+    ), "baseline section still shows the reserved placeholder"
+    # The section reports the real accuracy headline and cites the TF reference (context only).
+    for token in ("PyTorch baseline", "dist_avg", "vis_recall", "tf-reference.md"):
+        assert token in text, f"baseline section missing {token!r}"
+    # os4 is the baseline, os2 is the documented collapse — both named (guards an os4/os2 swap).
+    assert "output_stride 4" in text and "output_stride 2" in text
+    assert "collapsed" in text, "the os2 collapse finding must stay documented"
+    # The os4 dist_avg range must parse to two sane floats (lo <= hi) — not merely be a substring.
+    range_lines = [ln for ln in text.splitlines() if "**range**" in ln]
+    assert range_lines, "no os4 baseline `**range**` row found"
+    nums = [float(x) for x in re.findall(r"\d+\.\d+", range_lines[0])]
+    assert len(nums) >= 2, f"range row has too few numbers: {range_lines[0]!r}"
+    lo, hi = nums[0], nums[1]
+    assert 1.0 < lo <= hi < 200.0, f"dist_avg range is not sane px: {lo}-{hi}"
 
 
 def test_guide_has_no_placeholders():

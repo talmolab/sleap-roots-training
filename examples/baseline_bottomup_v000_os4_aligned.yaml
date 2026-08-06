@@ -1,0 +1,94 @@
+# Tier 1 baseline — Arabidopsis primary root, multi-plant cylinder (bottom-up), output_stride 4, ALIGNED to TF.
+#
+# This is examples/baseline_bottomup_v000_os4.yaml with the three unintentional divergences from the
+# legacy TF reference (issue #36) removed, so the baseline is analogous to the TF models instead of
+# silently inheriting sleap-nn defaults:
+#   - use_augmentations_train: false     TF used flip-only; sleap-nn has no flip op, so closest is off.
+#                                        The os4 runs silently applied rotation +/-15 + scale 0.9-1.1.
+#   - min_train_steps_per_epoch: 200     matches TF's ~8x oversampling over the 99-frame train set;
+#                                        os4 used 25 (one pass) -> ~250 vs TF's ~2000 steps of patience.
+#   - early_stopping.min_delta: 1.0e-06  TF value (os4 used 1e-8).
+#
+# Architecture is otherwise IDENTICAL to os4 (the deliberate, documented collapse-escape choices:
+# scale 0.5, max_stride 32, output_stride 4, sigma 2.5, online_mining), so a re-run is directly
+# comparable to the reported os4 numbers and isolates the schedule/augmentation effect. Backbone width
+# (TF 24/1.5 vs 16/2.0, issue #36 item 4) is left as-is here and tracked separately for a joint decision.
+#
+#   sleap-roots-training validate examples/baseline_bottomup_v000_os4_aligned.yaml
+#   sleap-roots-training emit     examples/baseline_bottomup_v000_os4_aligned.yaml -o resolved.yaml
+#   sleap-nn train --config resolved.yaml      # needs the [train] extra (GPU box only)
+
+experiment:
+  species: arabidopsis
+  mode: multiplant cylinder
+  root_type: primary
+  dataset:
+    name: cyl_arabidopsis_primary_6nodes_v000
+    path: data/v000_train.pkg.slp
+
+data_config:
+  train_labels_path:
+    - data/v000_train.pkg.slp
+  val_labels_path:
+    - data/v000_val.pkg.slp
+  use_augmentations_train: false   # ALIGNED (#36): do NOT inherit sleap-nn's default geometric aug
+  preprocessing:
+    ensure_rgb: false
+    ensure_grayscale: false
+    max_height: 1088
+    max_width: 2048
+    scale: 0.5
+    crop_size: null
+    min_crop_size: 100
+    crop_padding: null
+
+model_config:
+  backbone_config:
+    unet:
+      filters: 16
+      filters_rate: 2.0
+      max_stride: 32
+      output_stride: 4
+      up_interpolate: true
+  head_configs:
+    bottomup:
+      confmaps:
+        part_names: [r1, r2, r3, r4, r5, r6]
+        sigma: 2.5
+        output_stride: 4
+      pafs:
+        edges: [[r1, r2], [r2, r3], [r3, r4], [r4, r5], [r5, r6]]
+        sigma: 75.0
+        output_stride: 8
+
+trainer_config:
+  max_epochs: 200
+  min_train_steps_per_epoch: 200   # ALIGNED (#36): match TF's ~8x oversampling (os4 used 25)
+  train_data_loader:
+    batch_size: 4
+  optimizer_name: Adam
+  optimizer:
+    lr: 0.0001
+    amsgrad: false
+  lr_scheduler:
+    reduce_lr_on_plateau:
+      threshold: 1.0e-06
+      threshold_mode: abs
+      cooldown: 3
+      patience: 5
+      factor: 0.5
+      min_lr: 1.0e-08
+  early_stopping:
+    stop_training_on_plateau: true
+    min_delta: 1.0e-06             # ALIGNED (#36): TF value (os4 used 1e-8)
+    patience: 10
+  seed: 42                         # vary 42 / 43 / 44 across the 3 runs
+  save_ckpt: true
+  ckpt_dir: models
+  run_name: baseline_bottomup_v000_os4_aligned_seed42
+  online_hard_keypoint_mining:
+    online_mining: true
+  use_wandb: true
+  wandb:
+    entity: eberrigan-salk-institute-for-biological-studies
+    project: sleap-roots-tier1-baseline
