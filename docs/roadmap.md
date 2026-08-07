@@ -1,7 +1,7 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
-**Last revised:** 2026-08-06 (see the dated revision log at the bottom for what changed and why).
+**Last revised:** 2026-08-07 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
@@ -147,18 +147,31 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   summaries — `scan_history()` returns zero rows, so there is no loss curve and no epoch count.
   That gap made the Tier-0 onboarding repro (#1) impossible to compare against the original run.
   Log per-epoch train/val loss and the stopping epoch.
-- **Oracle:** establish a **PyTorch-native baseline** (2–3 **same-config** runs to get a stable
-  range — not a hyperparameter sweep, which is a different axis of variation) on the held-out data;
-  document config, hyperparameters, loss curves, and accuracy. This validates the config-driven
-  pipeline and methodology (PR #33 — matching architecture/sigma alone isn't sufficient without the
-  training schedule too, or a faithful config falsely appears to collapse; #718). It is **not**
-  itself the production fleet's reference — v000 isn't a production model — so it does not carry
-  the same weight Tier 2.2 gives the actual production models later. The old TF number is reported
-  alongside **as a range, not a point** (#8), because same-config seed/replicate spread is real
-  (~1.5–1.73× `dist_avg` in the legacy runs; see `docs/tf-reference.md`) and must not be mistaken for
-  architecture-driven variation from a sweep. *(W&B versioning is retrofitted in Tier 2.)*
-- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`.
-  **Depends on** Tier 0.5 (#9).
+- **Oracle — ESTABLISHED (2026-07-29, #21):** a **PyTorch-native baseline** (2–3 **same-config**
+  seeds for a stable range — not a hyperparameter sweep) on the v000 held-out val split (Arabidopsis
+  primary-root, multi-plant cylinder, bottom-up, `output_stride 4`): `dist_avg` **30.1–37.8 px**,
+  `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all instances detected; per-epoch W&B
+  logging confirmed; config, hyperparameters, loss curves documented). This baseline — not TF
+  parity — validates the config-driven pipeline and methodology (matching architecture/sigma alone
+  isn't sufficient without the training schedule too, or a faithful config falsely appears to
+  collapse; `sleap-nn#718`); it does **not** itself carry the production fleet's reference weight —
+  v000 isn't a production model, and that role now belongs to Tier 2.2's per-model gate. The old TF
+  numbers are reported **as a range, not a point** and for context only (in **pixels**: stride 16
+  `dist_avg` 23.7–39.0 @ `vis_recall` 0.50–0.56; stride 32 29.9–30.2 @ 0.78–0.81; stride 64 21.7–21.9
+  @ 0.87; stride 8 collapsed to 0 predictions; see `docs/tf-reference.md`). **Correction
+  (2026-08-06):** an earlier version of this entry quoted the TF numbers as 0.99–2.08 px. Those
+  values are **millimeters** from a lab post-processing step, not SLEAP's pixel metrics, and the
+  "PyTorch is 20–40× worse" reading they produced was wrong. In matching units the PyTorch
+  baseline's `dist_avg` sits inside the TF range, and it detects 44/44 instances on every seed where
+  no TF run exceeds 43/44. On `vis_recall` two of its three seeds (0.912, 0.885) clear TF's best of
+  0.872 and seed 43 (0.850) does not. Caveat carried forward: the error is dominated by
+  detection/association quality, **not** a resolution ceiling (higher output resolution buys no
+  gain). A `sigma` ablation settled the earlier `output_stride 2` collapse: it was too-tight confmap
+  targets at `sigma 2.5` (`sigma 5.0` trains stably on all 3 seeds), not the loss or resolution.
+  Full write-up: `docs/training.md` ("PyTorch baseline"). *(W&B versioning is retrofitted in
+  Tier 2.)*
+- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`; baseline
+  established in #21. **Depends on** Tier 0.5 (#9).
 
 ### Tier 2 — Dataset registry + W&B artifact integration
 - **Deliverable:** labeled `.slp` datasets and trained models versioned as W&B artifacts
@@ -172,7 +185,7 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   label set cannot be traced to its experiment — and `cyl` (labels) vs `cylinder` (models) means a
   model cannot be joined to the labels it trained on. A `LabelCard` mirroring `ModelCard`, plus a
   row-level sample manifest (the ad hoc labeling-package build process already computes this
-  provenance in a personal script, not yet ported into a shared repo — see #10), is a prerequisite
+  provenance in a personal script, not yet ported into a shared repo — see #26), is a prerequisite
   for the lineage oracle.
 - **Shared/generalist models have no way to be represented once.** `ModelCard.species` is a single
   required string, so a model trained once but serving multiple species (confirmed: one
@@ -285,9 +298,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
      single source's traits degrade) — so the model isn't silently compensating for distortion.
 - **Tooling:** check `sleap-io` for existing skeleton/instance resampling; if absent, build a local
   utility and consider upstreaming it.
-- **Depends on queryable label metadata** (#10): node counts and node names are today recoverable
-  only from free-text artifact descriptions, so "measure spacing per species/root-type" cannot be
-  scripted until `LabelCard` lands.
+- **Depends on queryable label metadata** (#11): node counts and node names for the existing 8
+  label collections are today recoverable only from free-text artifact descriptions; `LabelCard`
+  itself has landed (#10), but "measure spacing per species/root-type" cannot be scripted until
+  those collections are backfilled onto it (#11).
 - **Tracking:** Tier-2.7 EPIC. *(Pairs selection + eval with resampling + sweep tooling.
   Tier 3 generalist training depends on this.)*
 
@@ -708,3 +722,19 @@ registry species scope).
   exhaustive) before backfilling it onto `LabelCard`.
 - **MINOR:** **#16** (Tier-1 EPIC) and **#10** (label-registry tracking issue) closed — both
   tracked work that had already shipped (#21/PR #33, and `sleap-roots-contracts#24` respectively).
+
+**Roadmap revision (2026-08-07)** — merge-conflict reconciliation, prompted by an adversarial PR
+review of the branch carrying the above 2026-08-04/2026-08-06 entries.
+- **IMPORTANT (accuracy):** **Tier 1's Oracle bullet reconciled with `main`.** This branch's
+  reworded bullet (validates methodology, doesn't carry the production-fleet reference weight) was
+  drafted before `main` picked up PR #33's landed baseline (`ESTABLISHED`, real numbers, the
+  units-correction paragraph). A naive merge-conflict resolution would have silently dropped PR
+  #33's established results from the roadmap; reconciled by keeping PR #33's content and layering
+  this branch's role-reframing sentence on top.
+- **MINOR (citation accuracy):** the schedule-matching finding's bare `#718` reference is now
+  qualified as `sleap-nn#718` (an upstream issue, not one in this repo) — every other cross-repo
+  reference in this document is qualified this way and this one wasn't.
+- **MINOR (staleness):** two references to the now-closed #10 were updated to point at the issues
+  that actually still track that work: Tier 2's "not yet ported into a shared repo" note now cites
+  #26 (not #10, which only tracked the `LabelCard` contract itself); Tier 2.7's label-metadata
+  dependency now cites #11 (the backfill — `LabelCard` itself already landed via #10).

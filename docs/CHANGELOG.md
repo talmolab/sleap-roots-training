@@ -7,6 +7,47 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- Pinned `sleap-roots-contracts` to `0.1.0a6` (from `0.1.0a3`) and **collapsed the local mode
+  vocabulary into the contract-owned `Mode`**. `chooser.MODE_VOCAB` is now derived from
+  `sleap_roots_contracts.Mode` rather than restated here, so the producer and the
+  `sleap-roots-predict` consumer agree by construction instead of by reconciliation at acceptance.
+  `SPECIES_VOCAB` stays local — `ModelCard.species` is a free `str`, so there is no contract-side
+  species vocabulary to defer to. **Nothing accepted or published changes:** the contract's `Mode`
+  is set-identical to the vocabulary it replaces, and all 7 rows of the committed selection matrix
+  are already in vocabulary, so no card that validated before stops validating and no config that
+  validated before stops validating. Two *error-reporting* surfaces did change, both noted below.
+  Upstream, `0.1.0a6` is
+  a breaking *validation* tightening (`ModelCard.mode` is a `Mode` and no longer a free `str`;
+  `age_min`/`age_max` reject `bool` and `numpy.bool_`) — neither reaches anything this package
+  produces. This also unblocks `add-label-registry` (#10), which needs `LabelCard`.
+
+  **For config authors:** `MODE_VOCAB` also backs `validate`'s check on the hand-written
+  `experiment.mode`, so the contract now governs a user-facing config field and not only published
+  metadata. A future `sleap-roots-contracts` release that *narrows* `Mode` would therefore reject a
+  `mode:` you have already written. The three authoring surfaces are guarded in CI — the committed
+  selection matrix, the shipped `examples/`, and every `mode:` documented in `docs/training.md` — so
+  a narrowing fails at bump time here rather than in your config. Modes are matched **exactly** at
+  every surface (no case or whitespace normalization — `Cylinder` and `multiplant-cylinder` are
+  errors, as before); a near miss now gets a "did you mean" hint on the error, never a silent
+  correction. The hint comes from a shared helper, so it also applies to `experiment.species` and
+  `experiment.root_type`. Rationale and the full `a3 → a6` delta review are in the change's
+  `design.md`.
+
+  **For registry operators:** `seed-registry` now reports a rejected selection matrix as a clean
+  `Error: ...` instead of an unhandled traceback — out-of-vocabulary `species`/`mode` and a
+  non-contiguous `age` carry the loader's row-numbered message unchanged, and a file that cannot be
+  loaded at all (a directory, invalid YAML, or YAML whose top level is not a mapping) now names the
+  path and what was wrong with it. Same failures, same messages — only the packaging changed.
+  `--selection-matrix` also rejects a directory at the argument itself rather than failing later
+  inside the loader.
+
+  **Cold-start cost:** this is the first code path in the package that actually imports
+  `sleap_roots_contracts` (and transitively `pydantic`) rather than only reading its version, and
+  `chooser` is on the CLI's import path — so `--help`, `--version` and every shell TAB-completion
+  press pay it, not just `train` / `seed-registry`. Measured at **+72–87 ms** (machine-dependent;
+  an earlier draft of this entry said ~183 ms, which was `chooser`'s total import cost rather than
+  what this change adds). Immaterial next to a training run, but noted because it departs from the
+  lazy-import convention this repo uses for `wandb` and `sleap-nn`.
 - The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
   wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
   `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb
@@ -17,6 +58,24 @@ All notable changes to this project are documented here. The format is based on
   before the confirmation prompt rather than deep inside `wandb.init()`.
 
 ### Added
+- Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)
+  run on the exact original v000 held-out split (Arabidopsis primary-root, multi-plant cylinder,
+  bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:
+  `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all
+  instances detected), with per-epoch W&B logging confirmed. The TF reference is shown alongside as
+  context only, not a gate. (**Corrected 2026-08-06:** the TF W&B `dist_*` values are
+  **millimeters** from a lab post-processing step, so the earlier "20–40× gap" reading was a unit
+  error. In pixels the two backends are comparable, and the PyTorch baseline detects 44/44 instances
+  on every seed where no TF run exceeds 43/44 (on `vis_recall`, two of its three seeds clear TF's
+  best of 0.872 and seed 43 does not); sleap-nn's evaluator also reproduces SLEAP's own metrics
+  exactly. See
+  `docs/tf-reference.md`.) Documented finding: the finer `output_stride 2` collapses to zero predictions
+  on 2 of 3 seeds at `confmaps.sigma 2.5`; a `sigma` ablation (`sigma 5.0` trains stably on all 3
+  seeds) shows the cause is too-tight confmap targets, not a resolution ceiling or the loss — so the
+  baseline stays `output_stride 4`. Adds `examples/baseline_bottomup_v000_os4.yaml` +
+  `..._os2.yaml` + `..._os2_sigma5.yaml` (the ablation), `scripts/clean_pkg.py` (make the v000
+  `.pkg.slp` self-contained for the offline GPU box), and `scripts/dump_val_metrics.py`; write-up in
+  `docs/training.md` ("PyTorch baseline").
 - `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
   config-driven training-config schema + CLI. A config is `sleap-nn`'s native
   `data_config`/`model_config`/`trainer_config` **plus** a repo-owned `experiment` block
