@@ -1,7 +1,7 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
-**Last revised:** 2026-07-24 (see the dated revision log at the bottom for what changed and why).
+**Last revised:** 2026-08-07 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
@@ -20,6 +20,13 @@ we **establish a PyTorch-native baseline** and grade later tiers against *it*, s
 numbers **for reference only**. Before Tier 0 closes, re-run/extract the old model's documented
 results so the TF reference is solid (notebook outputs are fragile).
 
+**Not to be confused with `sleap-roots-pipeline`'s separate roadmap** (`docs/bloom-integration/roadmap.md`
+there, tracking A0–A4 service-integration milestones across repos). That roadmap's now-closed
+**A3-predict parity gate** (`sleap-roots-pipeline#15`) validated the *inference engine* — sleap-nn
+reproduces classic-SLEAP's predictions on the *same already-trained* legacy weights. Tier 2.2 below
+is the *training*-pipeline counterpart: a different question (can sleap-nn reproduce a model's
+legacy accuracy *from scratch*), tracked here, not there.
+
 Tiers are graded against **establish-then-reproduce-or-beat** targets:
 - **Keypoint tiers:** establish a PyTorch baseline on a dataset; later tiers match/beat that
   baseline (PCK / localization error). Old TF result shown for context, not as a pass/fail gate.
@@ -29,9 +36,14 @@ Tiers are graded against **establish-then-reproduce-or-beat** targets:
   (each specialist reproduces its own baseline before the comparison is trusted) and includes
   **trait validation** (e.g. root angle, length, density). Old TF numbers appear as a reference
   column.
+- **Production-fleet tier (Tier 2.2 — the one deliberate exception):** for a model that is
+  *already shipped* and about to be replaced by a sleap-nn-trained retraining, the old TF number
+  **is** the bar (within tolerance) — regressing a model already in production is a different risk
+  than a keypoint tier's general accuracy target, where no prior deployed number exists to protect.
+  Every other tier above keeps TF as context, not a gate.
 
 Exact tolerances are fixed at each tier's kickoff brainstorm (JIT), grounded in the established
-PyTorch baseline.
+PyTorch baseline (or, for Tier 2.2, the production model's own legacy TF number).
 
 ## Upstream version pins (releases first)
 
@@ -61,8 +73,10 @@ of work, not a permanent owner:
 - **Cross-training is a requirement, not a hope:** everyone ships at least one PR in the *other*
   track, and labels a real batch. **Every PR is cross-reviewed by someone from the other track** —
   one reviewer on the engineering angle, one on the modeling/domain angle.
-- **Co-owned seams:** the evaluation/comparison harness (Tier 4) and the segmentation
-  bootstrap → review/correct loop (Tiers 6 + 6.5).
+- **Co-owned seams:** the evaluation/comparison harness (Tier 4), the segmentation
+  bootstrap → review/correct loop (Tiers 6 + 6.5), and the fleet-wide training-parity gate
+  (Tier 2.2 — registry/dedup tooling is engineering, per-model training + metric comparison is
+  modeling/eval).
 - Cadence: weekly pairing + async team check-in with Elizabeth. `.slp`/sleap-io is the contract.
 
 ---
@@ -138,22 +152,26 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   primary-root, multi-plant cylinder, bottom-up, `output_stride 4`): `dist_avg` **30.1–37.8 px**,
   `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all instances detected; per-epoch W&B
   logging confirmed; config, hyperparameters, loss curves documented). This baseline — not TF
-  parity — is the reproduce-or-beat reference for later tiers; the old TF numbers are reported **as
-  a range, not a point** and for context only (in **pixels**: stride 16 `dist_avg` 23.7–39.0 @
-  `vis_recall` 0.50–0.56; stride 32 29.9–30.2 @ 0.78–0.81; stride 64 21.7–21.9 @ 0.87; stride 8
-  collapsed to 0 predictions; see `docs/tf-reference.md`). **Correction (2026-08-06):** an earlier
-  version of this entry quoted the TF numbers as 0.99–2.08 px. Those values are **millimeters** from
-  a lab post-processing step, not SLEAP's pixel metrics, and the "PyTorch is 20–40× worse" reading
-  they produced was wrong. In matching units the PyTorch baseline's `dist_avg` sits inside the TF
-  range, and it detects 44/44 instances on every seed where no TF run exceeds 43/44. On `vis_recall`
-  two of its three seeds (0.912, 0.885) clear TF's best of 0.872 and seed 43 (0.850) does not. Caveat carried
-  forward: the error is dominated by detection/association quality, **not** a resolution ceiling
-  (higher output resolution buys no gain). A `sigma` ablation settled the earlier `output_stride 2` collapse:
-  it was too-tight confmap targets at `sigma 2.5` (`sigma 5.0` trains stably on all 3 seeds), not the
-  loss or resolution. Full write-up: `docs/training.md` ("PyTorch baseline"). *(W&B versioning is
-  retrofitted in Tier 2.)*
-- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`;
-  baseline established in #21. **Depends on** Tier 0.5 (#9).
+  parity — validates the config-driven pipeline and methodology (matching architecture/sigma alone
+  isn't sufficient without the training schedule too, or a faithful config falsely appears to
+  collapse; `sleap-nn#718`); it does **not** itself carry the production fleet's reference weight —
+  v000 isn't a production model, and that role now belongs to Tier 2.2's per-model gate. The old TF
+  numbers are reported **as a range, not a point** and for context only (in **pixels**: stride 16
+  `dist_avg` 23.7–39.0 @ `vis_recall` 0.50–0.56; stride 32 29.9–30.2 @ 0.78–0.81; stride 64 21.7–21.9
+  @ 0.87; stride 8 collapsed to 0 predictions; see `docs/tf-reference.md`). **Correction
+  (2026-08-06):** an earlier version of this entry quoted the TF numbers as 0.99–2.08 px. Those
+  values are **millimeters** from a lab post-processing step, not SLEAP's pixel metrics, and the
+  "PyTorch is 20–40× worse" reading they produced was wrong. In matching units the PyTorch
+  baseline's `dist_avg` sits inside the TF range, and it detects 44/44 instances on every seed where
+  no TF run exceeds 43/44. On `vis_recall` two of its three seeds (0.912, 0.885) clear TF's best of
+  0.872 and seed 43 (0.850) does not. Caveat carried forward: the error is dominated by
+  detection/association quality, **not** a resolution ceiling (higher output resolution buys no
+  gain). A `sigma` ablation settled the earlier `output_stride 2` collapse: it was too-tight confmap
+  targets at `sigma 2.5` (`sigma 5.0` trains stably on all 3 seeds), not the loss or resolution.
+  Full write-up: `docs/training.md` ("PyTorch baseline"). *(W&B versioning is retrofitted in
+  Tier 2.)*
+- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`; baseline
+  established in #21. **Depends on** Tier 0.5 (#9).
 
 ### Tier 2 — Dataset registry + W&B artifact integration
 - **Deliverable:** labeled `.slp` datasets and trained models versioned as W&B artifacts
@@ -167,13 +185,98 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   label set cannot be traced to its experiment — and `cyl` (labels) vs `cylinder` (models) means a
   model cannot be joined to the labels it trained on. A `LabelCard` mirroring `ModelCard`, plus a
   row-level sample manifest (the ad hoc labeling-package build process already computes this
-  provenance in a personal script, not yet ported into a shared repo — see #10), is a prerequisite
+  provenance in a personal script, not yet ported into a shared repo — see #26), is a prerequisite
   for the lineage oracle.
+- **Shared/generalist models have no way to be represented once.** `ModelCard.species` is a single
+  required string, so a model trained once but serving multiple species (confirmed: one
+  primary-root model already serves arabidopsis/canola/pennycress) is registered N times —
+  currently 13 registrations for only 8 physically distinct weight sets, each a full separate
+  ~75MB artifact upload (training#39, surfaced while building A3-predict's parity harness — see
+  Tier 2.2). Decide during this tier: retype `ModelCard.species` to a tuple, adopt a
+  canonical-registration + lightweight-alias scheme, or accept the duplication as a documented
+  tradeoff — #39 lays out the concrete options. Tier 2.2 dedups on `weights_checksum` in the
+  interim regardless of which way this goes.
 - **Oracle:** round-trip a dataset and a model through the registries; lineage reproduces a run;
   **a dry-run sweep (≈5 configs, 1 species) launches and logs with full lineage** — verifying the
   registry is solid **before** the expensive Tier 3 sweeps.
-- **Tracking:** Tier-2 EPIC; #10 (LabelCard contract), #11 (backfill existing collections).
-  *(Good home for a cross-track engineering PR.)*
+- **`LabelCard` stays single-species.** Unlike `ModelCard` (#39 — one physical model shared across
+  species, no way to express that), a `LabelCard` never represents more than one species. A
+  generalist model's multi-species training data is combined from separate single-species
+  `LabelCard`-backed `.slp` files **at training time**, not via a pre-built or pre-registered
+  combined artifact — `sleap-nn`'s `DataConfig.train_labels_path`/`val_labels_path` already accept
+  a list of paths and split each independently. This requires the combined files to share a
+  skeleton (Tier 2.7) and does not reproduce any original combined split exactly, which is an
+  accepted tradeoff in favor of clean per-species versioning/lineage and future per-dataset
+  data-engineering work (per-dataset splits, per-dataset contribution to a generalist model).
+- **Tracking:** Tier-2 EPIC; #10 (LabelCard contract — shipped, `sleap-roots-contracts#24`), #11
+  (backfill existing collections onto `LabelCard`, now unblocked — carries an explicit requirement
+  to verify each collection is actually single-species before backfilling, not just trust its
+  name), #39 (registry-duplication decision, models only). *(Good home for a cross-track
+  engineering PR.)*
+
+### Tier 2.2 — Per-model training-backend parity (sleap-nn vs. legacy TF, full production fleet)
+- **Deliverable:** for every **physically distinct** production model (dedup on `weights_checksum`,
+  not the 13 `ModelCard` registrations — see Tier 2's registry-duplication decision / #39), retrain
+  via the sleap-nn backend. **Use that model's exact legacy TF config and dataset — not a
+  modernized config, not a "TF-inspired" one, the literal same split and hyperparameters TF used**,
+  following the schedule-*and*-architecture-matched translation approach Tier 1 validated the hard
+  way (#21, #36): matching resolution + sigma alone was not sufficient — the training
+  schedule/step-count had to match too, or a faithful config falsely appears to collapse. If a
+  production model's exact original dataset cannot be **confidently identified** (real risk — see
+  #11's own finding that 6 of the 8 existing label collections have gaps in *provenance metadata*,
+  not necessarily lost frames — the images themselves are recoverable from the W&B artifact, but
+  broken `data_path`s and undocumented fields make it hard to confirm a given collection is the
+  exact one a legacy model trained on), flag and exclude that model from this tier's gate rather
+  than approximating it; a fabricated "close enough" split must never quietly stand in for the real
+  one. **A model excluded this way is held, not exempted** — it does not proceed into Tier 3 until
+  its dataset is actually recovered/confirmed, so the fleet-wide "gate cleared" claim is never
+  diluted by an unresolved gap. Compare the
+  resulting model's evaluation metrics directly against that model's own real legacy TF numbers,
+  per model, not pooled — the same discipline `docs/tf-reference.md` already applies to the one
+  Tier 1 dataset, extended to the full fleet.
+- **Verify the legacy reference's units before trusting it.** PR #33 found its own cited TF
+  `dist_avg` numbers were **millimeters from a lab post-processing CSV, not pixels from SLEAP's own
+  `metrics.val.npz`** — a unit mismatch that made the PyTorch baseline look ~20–40× worse than it
+  actually is; corrected, it's competitive (inside TF's own pixel range, ahead on recall). Read each
+  production model's legacy reference from its own `metrics.val.npz` directly, not from a downstream
+  analysis artifact, before this tier's numbers go into anyone's gate.
+- **Relationship to A3-predict (explicit, so the two aren't conflated):** `sleap-roots-pipeline#15`
+  / `sleap-roots-predict#33` proved sleap-nn's **inference engine** reproduces classic-SLEAP's
+  predictions on the *same already-trained* legacy weights. This tier proves sleap-nn's **training**
+  pipeline can reproduce each model's legacy accuracy *from scratch* — a different failure mode: a
+  training backend that can't reproduce known-good accuracy is a training bug; a healthy-looking
+  training run whose weights don't work at inference time (already ruled out, fleet-wide) is a
+  separate one.
+- **Oracle (hard gate):** a production model does not proceed into Tier 3 until its sleap-nn
+  from-scratch reproduction meets/beats its legacy TF number within tolerance, or a documented,
+  investigated exception is recorded — mirror `pipeline#15`'s rice-crown-age6-10 investigation (rule
+  out a real difficulty confound before assuming a backend defect). Exact tolerance is fixed **at
+  this tier's kickoff** (JIT, per the convention above), grounded in two already-real datapoints, not
+  decided from a blank slate:
+  - the real legacy TF numbers per production model (extends `docs/tf-reference.md`'s per-model
+    discipline to the full fleet)
+  - the per-model inference-parity relative-delta numbers `sleap-roots-predict`'s harness already
+    measured (`pipeline#15` / `predict#33`'s 8-row table) — so this tier's *training*-side tolerance
+    is not confounded with a gap the inference-parity gate already explained and closed
+
+  These two datapoints aren't confounded because they measure different failure surfaces:
+  inference-parity asks whether the *same already-trained* weights produce the same predictions
+  under a different runtime (numerical/engine precision — `sleap-roots-pipeline#15` /
+  `sleap-roots-predict#33`'s question). Training-parity asks whether training *from scratch*
+  reproduces known-good accuracy at all (recipe/schedule fidelity — PR #21/#36's finding that a
+  faithful architecture can still "collapse" purely from a training-schedule mismatch, unrelated to
+  inference-engine precision). A gap in one doesn't predict or bound a gap in the other, so the
+  inference-delta table informs how much slack to expect from engine-level noise without
+  substituting for the training-side tolerance itself.
+- **Depends on:** Tier 2 (registry/lineage — need it to enumerate "every production model" against
+  tracked, versioned data) and #39 (train once per distinct `weights_checksum`, not once per card,
+  or this retrains the same physical model up to 4×). **Sequenced, not parallel:** kickoff waits
+  for #11 (backfill) and #39 (dedup decision) to close — retraining "the actual pipeline" against
+  the real dataset registry is the point of this tier, so it can't start against registry loose
+  ends.
+- **Tracking:** Tier-2.2 EPIC (filed at kickoff, JIT); links #21 / #36 (the Tier-1 methodology this
+  generalizes), #39 (dedup blocker), `sleap-roots-pipeline#15` + `sleap-roots-predict#33` (the
+  inference-side precedent + reusable ground-truth/tolerance-decision methodology).
 
 ### Tier 2.5 — Labeling strategy + seed QC *(before sweeps)*
 - **Deliverable:** documented labeling strategy/coverage plan + a **minimal seed set of QC
@@ -210,9 +313,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
      single source's traits degrade) — so the model isn't silently compensating for distortion.
 - **Tooling:** check `sleap-io` for existing skeleton/instance resampling; if absent, build a local
   utility and consider upstreaming it.
-- **Depends on queryable label metadata** (#10): node counts and node names are today recoverable
-  only from free-text artifact descriptions, so "measure spacing per species/root-type" cannot be
-  scripted until `LabelCard` lands.
+- **Depends on queryable label metadata** (#11): node counts and node names for the existing 8
+  label collections are today recoverable only from free-text artifact descriptions; `LabelCard`
+  itself has landed (#10), but "measure spacing per species/root-type" cannot be scripted until
+  those collections are backfilled onto it (#11).
 - **Tracking:** Tier-2.7 EPIC. *(Pairs selection + eval with resampling + sweep tooling.
   Tier 3 generalist training depends on this.)*
 
@@ -222,7 +326,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   compute location isn't prescribed, given Run:AI's sparse availability.** **Draft the comparison
   matrix** (crops × root types) with Elizabeth to scope Tier 4.
 - **Oracle:** generalist model matches/exceeds the old generalist-notebook result on held-out
-  test sets; comparison matrix drafted. *(Depends on Tier 2 lineage + Tier 2.7 unified skeleton.)*
+  test sets; comparison matrix drafted. *(Depends on Tier 2 lineage, Tier 2.7 unified skeleton, and
+  Tier 2.2's per-model hard gate — a production model held by Tier 2.2 does not feed into this
+  tier's sweeps.)*
 - **Tracking:** Tier-3 EPIC. *(Splits into a "runs it" role and a "builds the tooling" role.)*
 
 ### Tier 4 — Evaluation + generalist-vs-specialist comparison harness
@@ -398,14 +504,20 @@ From the pragmatism review — keep throughput high and de-risk the likely-overr
 
 - **Weekly team check-in** (Elizabeth + the team, ~30 min): blockers, next-tier kickoff plan,
   compute/infra status (Run:AI, the A5000 workstation, W&B), SLEAP-app coordination. **Watch for
-  A5000 contention:** Tiers 3, 6, and 7 can all fall back to the same single workstation when
+  A5000 contention:** Tiers 2.2, 3, 6, and 7 can all fall back to the same single workstation when
   Run:AI is unavailable — if more than one needs it concurrently, that's a real bottleneck to
-  surface at the weekly check-in, not something this roadmap schedules around in advance.
+  surface at the weekly check-in, not something this roadmap schedules around in advance. Tier 2.2
+  alone implies roughly **16–24 training runs** (8 physically distinct production models × Tier
+  1's own 2–3-same-config-seed precedent), so it's a real contender for that contention, not just a
+  documentation nicety.
   **Escalation rule:** if a tier's
   oracle isn't trending toward met by mid-tier, escalate immediately — don't silently debug.
 - **Right-size the per-tier review:** keep the adversarial OpenSpec *proposal* review, but run it
-  **light for the straightforward tiers (1–3)** and **full-depth for the complex/cross-repo tiers
-  (4 and 8)**. Cross-track review is a ~30-min async "other-angle" check, not a gate.
+  **light for the straightforward tiers (1, 2, 2.5, 2.7, 3)** and **full-depth for the
+  complex/cross-repo tiers (2.2, 4, and 8)**. Tier 2.2 is a hard gate on Tier 3 whose tolerance
+  leans on methodology from two other repos (`sleap-roots-pipeline`, `sleap-roots-predict`) — the
+  same cross-repo-dependency reasoning that puts Tier 8 in this bucket. Cross-track review is a
+  ~30-min async "other-angle" check, not a gate.
 - **Smoke-test early, not late:** run the Tier-2 dry-run sweep in the *first* days of the tier so
   W&B-lineage bugs surface with time to fix.
 - **Cap the comparison matrix:** start Tier 3/4 at ~2 crops × ≤2 root types (≈4–8 models); expand
@@ -433,6 +545,10 @@ From the pragmatism review — keep throughput high and de-risk the likely-overr
 - The comparison matrix (which crops × root types) — drafted at Tier 3, locked at Tier 4.
 - The common skeleton / node count per root type for unification — set at Tier 2.7.
 - Phase boundary timing (summer→fall), contingent on available team hours.
+- Whether/how to resolve the shared-model-registry duplication (#39) — decided during Tier 2;
+  Tier 2.2 dedups on `weights_checksum` in the interim either way.
+- Tier 2.2's exact per-model tolerance — fixed at Tier 2.2 kickoff, grounded in the real legacy TF
+  numbers and `sleap-roots-predict`'s measured inference-parity deltas (see Tier 2.2).
 
 ## Roadmap review reconciliations (2026-06-24)
 
@@ -567,3 +683,96 @@ label inventory; two related Phase-1 fixes folded in.
   currently possible given `sleap_nn`'s `@oneof`-constrained `HeadConfig` (verified directly
   against `sleap_nn/config/model_config.py`); recorded as a future idea, not scheduled.
 - Design doc: `docs/superpowers/specs/2026-07-24-phase-2-segmentation-roadmap-revision-design.md`.
+
+**Roadmap revision (2026-08-04)** — production-model training-backend parity, prompted by the
+now-closed A3-predict inference-parity gate.
+- **IMPORTANT (completeness):** **Tier 2.2 added** (per-model training-backend parity: sleap-nn vs.
+  legacy TF, full production fleet) — generalizes Tier 1's single-dataset baseline methodology
+  (#21, hard-won through PR #33's schedule-vs-loss investigation, #36) to every production model, as
+  a **hard gate** before Tier 3's generalist sweeps build on the sleap-nn training pipeline broadly.
+  Complements, not duplicates, the now-closed A3-predict inference-engine parity gate
+  (`sleap-roots-pipeline#15`, closed; `sleap-roots-predict#33`) — that gate validated the inference
+  engine on fixed legacy weights; this tier validates the training pipeline's ability to reproduce
+  legacy accuracy from scratch, per model.
+- **IMPORTANT (registry correctness):** **Tier 2 gained an open decision**: #39 found the
+  production registry holds 13 `ModelCard` registrations for only 8 physically distinct models,
+  because `ModelCard.species` can't express a shared/generalist model. Flagged for resolution during
+  Tier 2; Tier 2.2 dedups on `weights_checksum` in the interim.
+- **MINOR:** noted the distinction between this roadmap and `sleap-roots-pipeline`'s separate
+  Bloom-integration roadmap (`docs/bloom-integration/roadmap.md`), so the closed A3-predict
+  (inference) gate isn't mistaken for covering this new (training) gate.
+- Related, closed without a roadmap change needed: `sleap-roots-predict#32` (contracts `0.1.0a6`
+  pin bump confirmed safe against the live registry; no code change required).
+
+**Roadmap revision (2026-08-06)** — follow-up clarity pass on Tier 2.2, a hard-won lesson from
+PR #33's own units bug, and coordination decisions from a progress review (sequencing + label
+registry species scope).
+- **IMPORTANT (clarity):** **Tier 1's oracle reworded** — it validates the config-driven pipeline
+  and methodology, not the production fleet's reference; that role now belongs to Tier 2.2. The
+  prior wording ("...is the reference for later tiers") predated Tier 2.2 and overclaimed Tier 1's
+  ongoing role.
+- **IMPORTANT (rigor):** **Tier 2.2 gained two additions**, both prompted by PR #33 continuing to
+  surface real problems after the 2026-08-04 entry above:
+  1. The "exact legacy TF config and dataset" requirement is now its own emphasized sentence
+     (previously a clause inside a longer sentence about dedup) plus an explicit gap policy: a
+     production model whose exact original dataset can't be recovered is flagged and excluded from
+     the gate, never approximated — mirroring `#11`'s own "do not invent values" rule.
+  2. **A units-verification requirement**, direct from PR #33 (`668bb83`, 2026-08-06): its own cited
+     TF `dist_avg` numbers turned out to be millimeters from a lab post-processing CSV, not pixels
+     from SLEAP's own `metrics.val.npz` — inflating the apparent PyTorch-vs-TF gap ~20–40× before
+     correction (corrected, the baseline is competitive). Tier 2.2 must read each production
+     model's legacy reference from its own `metrics.val.npz` directly, not a downstream analysis
+     artifact.
+- **MINOR:** PR #33 also independently reproduced the A3-predict inference-parity finding from a
+  different angle — scoring a legacy run's saved predictions with `sleap_nn`'s Evaluator matches
+  SLEAP's own stored metrics to every printed digit — and found TF itself has a `max_stride 8`
+  collapse (0 predicted instances), the same failure mode as the `output_stride 2` sleap-nn
+  collapse this tier's methodology addresses. Noted for context; no roadmap structure change from
+  this item alone.
+- **IMPORTANT (sequencing):** **Tier 2.2's "Depends on" line now says explicitly that kickoff is
+  sequenced after #11/#39, not run in parallel with them** — Tier 2.2 is meant to retrain against
+  the real dataset registry, so it can't start while Tier 2's own registry loose ends are still
+  open.
+- **IMPORTANT (Tier 2 completeness):** **`LabelCard` will not mirror `ModelCard`'s species-tuple
+  question (#39).** Every `LabelCard` stays single-species; multi-species generalist training data
+  is combined from separate single-species files at training time (`sleap-nn`'s `DataConfig`
+  already accepts a list of `.slp` paths and splits each independently). Posted as a decision on
+  #11, which also now carries an explicit requirement to verify each of the 8 existing collections
+  is actually single-species (a preliminary spot-check found no evidence of mixing, but wasn't
+  exhaustive) before backfilling it onto `LabelCard`.
+- **MINOR:** **#16** (Tier-1 EPIC) and **#10** (label-registry tracking issue) closed — both
+  tracked work that had already shipped (#21/PR #33, and `sleap-roots-contracts#24` respectively).
+
+**Roadmap revision (2026-08-07)** — merge-conflict reconciliation, prompted by an adversarial PR
+review of the branch carrying the above 2026-08-04/2026-08-06 entries.
+- **IMPORTANT (accuracy):** **Tier 1's Oracle bullet reconciled with `main`.** This branch's
+  reworded bullet (validates methodology, doesn't carry the production-fleet reference weight) was
+  drafted before `main` picked up PR #33's landed baseline (`ESTABLISHED`, real numbers, the
+  units-correction paragraph). A naive merge-conflict resolution would have silently dropped PR
+  #33's established results from the roadmap; reconciled by keeping PR #33's content and layering
+  this branch's role-reframing sentence on top.
+- **MINOR (citation accuracy):** the schedule-matching finding's bare `#718` reference is now
+  qualified as `sleap-nn#718` (an upstream issue, not one in this repo) — every other cross-repo
+  reference in this document is qualified this way and this one wasn't.
+- **MINOR (staleness):** two references to the now-closed #10 were updated to point at the issues
+  that actually still track that work: Tier 2's "not yet ported into a shared repo" note now cites
+  #26 (not #10, which only tracked the `LabelCard` contract itself); Tier 2.7's label-metadata
+  dependency now cites #11 (the backfill — `LabelCard` itself already landed via #10).
+- **IMPORTANT (survivorship bias):** **Tier 2.2's exclusion policy now says explicitly that an
+  excluded model is held, not exempted** — it does not proceed into Tier 3 until its dataset is
+  actually recovered/confirmed. Without this, "excluded from the gate" was ambiguous between a
+  safe hold and a silent exemption that would let the fleet-wide "gate cleared" claim overstate
+  readiness on exactly the hardest-to-verify models. Also tightened the #11 citation backing this
+  policy: the real risk is unrecoverable *provenance metadata* on 6 of 8 label collections, not
+  lost frames (which remain pullable from the W&B artifact) — the previous wording overstated it as
+  full dataset loss.
+- **IMPORTANT (rigor):** **Tier 2.2's tolerance grounding gained the actual decomposition
+  argument**, not just an assertion: inference-parity deltas (`pipeline#15`/`predict#33`) and
+  training-parity tolerance measure different failure surfaces — engine-numerical precision on
+  already-trained weights vs. training-recipe/schedule fidelity from scratch (PR #21/#36) — so a
+  gap in one doesn't predict a gap in the other.
+- **MINOR (resourcing):** **Tier 2.2 added to the "Watch for A5000 contention" bullet**, with its
+  implied ~16–24 training runs (8 models × Tier 1's 2–3-seed precedent) named explicitly — it was
+  previously omitted despite sitting immediately before Tiers 3/6/7 on the same watchlist.
+- **MINOR (completeness):** **Tier 3's "Depends on" line now names Tier 2.2's hard gate**, not just
+  Tier 2/2.7 — a model Tier 2.2 holds does not feed into Tier 3's sweeps.
