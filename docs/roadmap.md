@@ -222,10 +222,15 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   following the schedule-*and*-architecture-matched translation approach Tier 1 validated the hard
   way (#21, #36): matching resolution + sigma alone was not sufficient — the training
   schedule/step-count had to match too, or a faithful config falsely appears to collapse. If a
-  production model's exact original dataset cannot be recovered (real risk — see #11's own
-  "expect gaps... do not invent values to satisfy the schema" finding on 6 of the 8 existing label
-  collections), flag and exclude that model from this tier's gate rather than approximating it; a
-  fabricated "close enough" split must never quietly stand in for the real one. Compare the
+  production model's exact original dataset cannot be **confidently identified** (real risk — see
+  #11's own finding that 6 of the 8 existing label collections have gaps in *provenance metadata*,
+  not necessarily lost frames — the images themselves are recoverable from the W&B artifact, but
+  broken `data_path`s and undocumented fields make it hard to confirm a given collection is the
+  exact one a legacy model trained on), flag and exclude that model from this tier's gate rather
+  than approximating it; a fabricated "close enough" split must never quietly stand in for the real
+  one. **A model excluded this way is held, not exempted** — it does not proceed into Tier 3 until
+  its dataset is actually recovered/confirmed, so the fleet-wide "gate cleared" claim is never
+  diluted by an unresolved gap. Compare the
   resulting model's evaluation metrics directly against that model's own real legacy TF numbers,
   per model, not pooled — the same discipline `docs/tf-reference.md` already applies to the one
   Tier 1 dataset, extended to the full fleet.
@@ -253,6 +258,16 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   - the per-model inference-parity relative-delta numbers `sleap-roots-predict`'s harness already
     measured (`pipeline#15` / `predict#33`'s 8-row table) — so this tier's *training*-side tolerance
     is not confounded with a gap the inference-parity gate already explained and closed
+
+  These two datapoints aren't confounded because they measure different failure surfaces:
+  inference-parity asks whether the *same already-trained* weights produce the same predictions
+  under a different runtime (numerical/engine precision — `sleap-roots-pipeline#15` /
+  `sleap-roots-predict#33`'s question). Training-parity asks whether training *from scratch*
+  reproduces known-good accuracy at all (recipe/schedule fidelity — PR #21/#36's finding that a
+  faithful architecture can still "collapse" purely from a training-schedule mismatch, unrelated to
+  inference-engine precision). A gap in one doesn't predict or bound a gap in the other, so the
+  inference-delta table informs how much slack to expect from engine-level noise without
+  substituting for the training-side tolerance itself.
 - **Depends on:** Tier 2 (registry/lineage — need it to enumerate "every production model" against
   tracked, versioned data) and #39 (train once per distinct `weights_checksum`, not once per card,
   or this retrains the same physical model up to 4×). **Sequenced, not parallel:** kickoff waits
@@ -311,7 +326,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   compute location isn't prescribed, given Run:AI's sparse availability.** **Draft the comparison
   matrix** (crops × root types) with Elizabeth to scope Tier 4.
 - **Oracle:** generalist model matches/exceeds the old generalist-notebook result on held-out
-  test sets; comparison matrix drafted. *(Depends on Tier 2 lineage + Tier 2.7 unified skeleton.)*
+  test sets; comparison matrix drafted. *(Depends on Tier 2 lineage, Tier 2.7 unified skeleton, and
+  Tier 2.2's per-model hard gate — a production model held by Tier 2.2 does not feed into this
+  tier's sweeps.)*
 - **Tracking:** Tier-3 EPIC. *(Splits into a "runs it" role and a "builds the tooling" role.)*
 
 ### Tier 4 — Evaluation + generalist-vs-specialist comparison harness
@@ -487,9 +504,12 @@ From the pragmatism review — keep throughput high and de-risk the likely-overr
 
 - **Weekly team check-in** (Elizabeth + the team, ~30 min): blockers, next-tier kickoff plan,
   compute/infra status (Run:AI, the A5000 workstation, W&B), SLEAP-app coordination. **Watch for
-  A5000 contention:** Tiers 3, 6, and 7 can all fall back to the same single workstation when
+  A5000 contention:** Tiers 2.2, 3, 6, and 7 can all fall back to the same single workstation when
   Run:AI is unavailable — if more than one needs it concurrently, that's a real bottleneck to
-  surface at the weekly check-in, not something this roadmap schedules around in advance.
+  surface at the weekly check-in, not something this roadmap schedules around in advance. Tier 2.2
+  alone implies roughly **16–24 training runs** (8 physically distinct production models × Tier
+  1's own 2–3-same-config-seed precedent), so it's a real contender for that contention, not just a
+  documentation nicety.
   **Escalation rule:** if a tier's
   oracle isn't trending toward met by mid-tier, escalate immediately — don't silently debug.
 - **Right-size the per-tier review:** keep the adversarial OpenSpec *proposal* review, but run it
@@ -738,3 +758,21 @@ review of the branch carrying the above 2026-08-04/2026-08-06 entries.
   that actually still track that work: Tier 2's "not yet ported into a shared repo" note now cites
   #26 (not #10, which only tracked the `LabelCard` contract itself); Tier 2.7's label-metadata
   dependency now cites #11 (the backfill — `LabelCard` itself already landed via #10).
+- **IMPORTANT (survivorship bias):** **Tier 2.2's exclusion policy now says explicitly that an
+  excluded model is held, not exempted** — it does not proceed into Tier 3 until its dataset is
+  actually recovered/confirmed. Without this, "excluded from the gate" was ambiguous between a
+  safe hold and a silent exemption that would let the fleet-wide "gate cleared" claim overstate
+  readiness on exactly the hardest-to-verify models. Also tightened the #11 citation backing this
+  policy: the real risk is unrecoverable *provenance metadata* on 6 of 8 label collections, not
+  lost frames (which remain pullable from the W&B artifact) — the previous wording overstated it as
+  full dataset loss.
+- **IMPORTANT (rigor):** **Tier 2.2's tolerance grounding gained the actual decomposition
+  argument**, not just an assertion: inference-parity deltas (`pipeline#15`/`predict#33`) and
+  training-parity tolerance measure different failure surfaces — engine-numerical precision on
+  already-trained weights vs. training-recipe/schedule fidelity from scratch (PR #21/#36) — so a
+  gap in one doesn't predict a gap in the other.
+- **MINOR (resourcing):** **Tier 2.2 added to the "Watch for A5000 contention" bullet**, with its
+  implied ~16–24 training runs (8 models × Tier 1's 2–3-seed precedent) named explicitly — it was
+  previously omitted despite sitting immediately before Tiers 3/6/7 on the same watchlist.
+- **MINOR (completeness):** **Tier 3's "Depends on" line now names Tier 2.2's hard gate**, not just
+  Tier 2/2.7 — a model Tier 2.2 holds does not feed into Tier 3's sweeps.
