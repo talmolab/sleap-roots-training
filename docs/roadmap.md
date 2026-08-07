@@ -170,8 +170,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   targets at `sigma 2.5` (`sigma 5.0` trains stably on all 3 seeds), not the loss or resolution.
   Full write-up: `docs/training.md` ("PyTorch baseline"). *(W&B versioning is retrofitted in
   Tier 2.)*
-- **Tracking:** Tier-1 EPIC; foundation change `openspec/changes/add-config-schema/`; baseline
-  established in #21. **Depends on** Tier 0.5 (#9).
+- **Tracking:** Tier-1 EPIC; foundation change
+  `openspec/changes/archive/2026-08-07-add-config-schema/` (archived — implemented in PR #20);
+  baseline established in #21. **Depends on** Tier 0.5 (#9).
 
 ### Tier 2 — Dataset registry + W&B artifact integration
 - **Deliverable:** labeled `.slp` datasets and trained models versioned as W&B artifacts
@@ -776,3 +777,6 @@ review of the branch carrying the above 2026-08-04/2026-08-06 entries.
   previously omitted despite sitting immediately before Tiers 3/6/7 on the same watchlist.
 - **MINOR (completeness):** **Tier 3's "Depends on" line now names Tier 2.2's hard gate**, not just
   Tier 2/2.7 — a model Tier 2.2 holds does not feed into Tier 3's sweeps.
+- **MINOR (housekeeping):** **`openspec/changes/add-config-schema/` archived** (all tasks were
+  complete; PR #20 already implemented it) as `openspec/changes/archive/2026-08-07-add-config-schema/`.
+  Tier 1's "Tracking" line now points at the archived path instead of the stale pre-archive one.
