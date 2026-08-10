@@ -56,9 +56,8 @@ shapes at once. New-shape metadata is therefore **not** readable by a consumer s
 pre-`selectors` contract, whose `ModelCard` is `extra="ignore"` with those four fields required — it
 would drop `selectors` and then fail on the missing required fields. Forward compatibility (new code
 reading old published metadata) is handled by the tolerant read; **backward** compatibility is
-handled operationally instead, by not overwriting the collections old consumers read until their
-upgrade is confirmed deployed — see `design.md` "Reverse compatibility" and the retirement gate in
-`tasks.md`.
+handled operationally instead: the collections an old-pinned consumer reads SHALL NOT be overwritten
+or have their production alias dropped until that consumer's upgrade is confirmed deployed.
 
 #### Scenario: Metadata validates against the ModelCard contract
 
@@ -504,7 +503,7 @@ per-collection alias query (`ArtifactCollection.aliases`), which is one lightwei
 collection. The registry-wide membership query (`Api.registry(...).versions(...)`) MAY be used instead
 where it is available, but SHALL NOT be assumed available: it is gated on a server feature flag and
 raises when the flag is absent, and it additionally requires an `organization` that this package's
-registry configuration does not currently carry. Any use of it SHALL therefore sit behind a
+registry configuration does not carry. Any use of it SHALL therefore sit behind a
 capability probe with the per-collection path as the documented fallback. Only collections carrying
 the production alias SHALL be named; non-production collections SHALL be excluded silently rather
 than reported as orphans.
@@ -543,12 +542,14 @@ metadata blob.
 Where the read-back shows stale metadata, the seed SHALL refresh it in place through the artifact's
 own metadata-update path (setting `Artifact.metadata` and calling `Artifact.save()`, which issues an
 `updateArtifact` mutation) and re-read to confirm, rather than requiring another `--force` re-log,
-which cannot create a new version while the digest is unchanged. If the refresh still does not take,
-the collection SHALL be reported in a distinct `failed` bucket, the command SHALL exit non-zero, and
-the remaining cards SHALL still be attempted so that one stale collection does not abort the seed.
-The determination SHALL be **structural** — `selectors` present and no card-level
-`species`/`mode`/`age_min`/`age_max` — and SHALL NOT be "does this validate against `ModelCard`",
-which a tolerant-read contract satisfies for the legacy shape by design.
+which cannot create a new version while the digest is unchanged. The refresh SHALL NOT re-upload the
+model directory. If the refresh fails — whether it **raises** or the re-read still shows the legacy
+shape — the collection SHALL be reported in a distinct `failed` bucket, the command SHALL exit
+non-zero, and the remaining cards SHALL still be attempted, so that neither a stale collection nor a
+transient error on one collection aborts the seed.
+The determination SHALL use the same structural shape test the Registry Verification Command
+requirement defines, and SHALL NOT be restated independently — one definition, so the publish path and
+the verification path cannot drift apart on what counts as migrated.
 
 #### Scenario: Re-publish that leaves stale metadata is refreshed in place
 

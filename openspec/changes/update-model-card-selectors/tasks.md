@@ -3,7 +3,7 @@
 Groups **1** and **2** are work in *other* repos, recorded as acceptance conditions in **prose, not
 checkboxes**. The reason is bookkeeping, not tooling: `openspec archive` only *warns and prompts* on
 incomplete tasks (it hard-fails solely in `--json` mode without `--yes`, and this repo's convention is
-`--yes`), but a change archived at 41/43 with two boxes nobody here can ever tick is a false record.
+`--yes`), but a change archived at 70 of 72 with two boxes nobody here can ever tick is a false record.
 The items in those groups that genuinely are ours stay checkboxes. See `proposal.md` "Blocked on".
 
 **TDD.** `openspec/project.md` mandates test-first. Groups 3 and 4 are numbered by *subject* so that
@@ -40,7 +40,8 @@ and in both cases the tests are authored and confirmed red before the implementa
       this file — including writing the literal id formula into the Collection Identifier Scheme
       requirement in the delta spec **and deleting its pending-decision paragraph**, which otherwise
       archives into the permanent spec as a TODO pointing at a file that has moved into
-      `changes/archive/`.
+      `changes/archive/`. Sweep the delta spec for *any* remaining pointer at `design.md`, `tasks.md`,
+      or a decision number for the same reason — normative text must stand alone once archived.
 - [ ] 0.7 Decide how `choose_models` behaves when **more than one** production card matches one
       selection context. Under option 1 plus the tolerant read, the interval between the re-seed and
       the retirement has both the old flat card and the new physical-model card matching, e.g.,
@@ -165,7 +166,10 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
 - [ ] 3.8 Update `tests/test_registry_cards.py`, `tests/test_registry_chooser.py`,
       `tests/test_registry_smoke.py`. Expansion yields **exactly 8 cards**, the shared primary carries
       4 selectors, the two lateral models carry 2 each, every card's metadata validates against the
-      real `ModelCard`, legacy models still yield `sleap_nn_version is None`.
+      real `ModelCard`, legacy models still yield `sleap_nn_version is None`. Also re-key
+      `test_crown_only_row_single_card` (`tests/test_registry_cards.py:38`), which reads
+      `result[0].age_min`/`age_max` off the `Card` — 3.2/3.3 move the window onto the selector, so it
+      reddens at 3.2 and no other task names it.
 - [ ] 3.9 Re-key `test_matrix_lock_collection_to_model` (`tests/test_registry_cards.py:220-226`). It
       asserts `{collection_id: source_model_id} == <13-entry literal>`; under an
       id-derived-from-model scheme that degenerates to `{slug(x): x}` and stops testing anything.
@@ -229,7 +233,7 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       otherwise has no test, and the current test builds a flat `cards.Card(...)` that stops
       compiling. Keep `_EXPECTED_MODES` spelled out so an upstream narrowing stays a failure.
 - [ ] 3.21 New test: a metadata mapping with an empty `selectors` list fails `ModelCard` validation.
-      Update `tests/test_registry_smoke.py:12-31`, which builds the flat six-key card, at the same time.
+      Update `tests/test_registry_smoke.py:10-29`, which builds the flat six-key card, at the same time.
 - [ ] 3.22 New test: `sleap_nn_version` stays a **card-level scalar** and is absent from `Selector` —
       assert it is not in any emitted selector dict and not in `Selector.model_fields`.
 - [ ] 3.23 New test: `card_to_metadata` emits an **exact** key set of
@@ -252,7 +256,7 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       there is silent. Consider adding it to `tests/test_scripts.py`, which currently loads only two of
       the other scripts (`clean_pkg`, `dump_val_metrics` at `:29-30`; `pull_tf_reference.py` is
       likewise untested).
-- [ ] 3.28 Check `tests/test_config.py:322-329`
+- [ ] 3.28 Check `tests/test_config.py:321-328`
       (`test_root_type_vocab_mirrors_cards_slots`, asserting `config.ROOT_TYPE_VOCAB ==
       frozenset(cards._ROOT_SLOTS)`) — green only while 3.2 preserves `_ROOT_SLOTS`.
 - [ ] 3.29 New test for the **dedup** rule, which the committed matrix cannot exercise: no two rows
@@ -262,9 +266,10 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       equality) and 3.19 (ordered literal over the committed matrix) both stay green if the dedupe is
       deleted. Use a synthetic two-identical-rows matrix and assert `len(selectors) == 1`.
 - [ ] 3.30 Anchor the three §3 tests no other task names, all of which redden at 3.1 or 3.4:
-      `test_collection_id_slugs_mode` (`tests/test_registry_cards.py:183-190`) — the **only** test
-      hardcoding old id literals such as `"rice-cylinder-crown-age6-10"`;
-      `test_metadata_validates_against_real_modelcard` (`:113-124`); and
+      `test_collection_id_slugs_mode` (`tests/test_registry_cards.py:185-191`) — the only
+      *assertion-level* old id literal (`"rice-cylinder-crown-age6-10"` at `:191`) outside 3.9's
+      `EXPECTED_MODEL_BY_COLLECTION` (`:203-217`) and 3.16's `test_registry_publish.py:10-11`;
+      `test_metadata_validates_against_real_modelcard` (`:115-124`); and
       `test_every_committed_matrix_card_validates_against_the_real_modelcard` (`:158-182`). The first
       belongs with 3.4, the other two with commit A's scope.
 - [ ] 3.G Gate before committing: `uv lock --check`, `uv run pytest -m "not integration"`,
@@ -283,7 +288,7 @@ implementation step green at all), then 4.7, then 4.13, then the 4.G gate.
 that is disproven the same way §3's boundary was. Verified, **five** existing tests go red: putting the
 4.5 read-back in `seed_registry` reddens `test_seed_publishes_all_distinct`
 (`test_registry_publish.py:151`, which asserts `report["published"] == calls`) **and**
-`test_seed_idempotent_skip_and_force` (`:165-190`, which publishes 12 of 13 against a `_FakeApi` that
+`test_seed_idempotent_skip_and_force` (`:166-184`, which publishes 12 of 13 against a `_FakeApi` that
 has no `.artifact`, so the read-back raises `AttributeError`); putting it in `publish_card` instead
 reddens `test_publish_card` with a **real network call** (confirmed live — it loads credentials from
 `~/.netrc` and reaches `api.wandb.ai`), because that test monkeypatches `wandb.Artifact` but not
@@ -331,8 +336,10 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       one that is not — so the check discriminates. This pairing matters because that report is exactly
       what §6.3 pastes as its acceptance evidence. Give the fake **spy** `delete`/`link` methods that
       fail the test if called, so the scenario's "does not delete or move the alias" is actually
-      asserted rather than passing by `AttributeError`, and a spy per-version accessor that fails if
-      called, so the "does not read every version of every collection" clause is asserted too.
+      asserted rather than passing by `AttributeError`. Put the per-version spy on the **collection
+      object**, not on `_FakeApi.artifacts` — `--verify` legitimately calls the latter for *expected*
+      collections (`publish.py:73-76`), so spying there would fail on correct behavior; what must never
+      happen is a per-version walk of the unexpected ones.
 - [ ] 4.5 Implement the Re-Publish Metadata Refresh check and its remedy. Read back the server's own
       view — after `logged.wait()`, `logged.metadata` and `logged.digest` are the server's values
       (`wait()` re-fetches), and `run.link_artifact(...)` already returns a membership-backed artifact
@@ -349,6 +356,10 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       `artifact(name, type=None)` matching `wandb.Api.artifact`'s signature. Record explicitly that
       the offline test covers **our classifier only** — the premise that wandb leaves the previous
       metadata live after a content-identical re-log is server behavior no fake can confirm (see 6.5).
+      Also spy that the remedy path calls neither `Artifact.add_dir` nor `run.log_artifact` a second
+      time (assert one logged artifact and an unchanged `add_dir` count), so an implementation that
+      "refreshes" by re-logging fails here rather than silently no-opping in production — the digest is
+      unchanged, so a re-log cannot create a new version.
 - [ ] 4.7 Verify a re-seed of unchanged weights produces an **unchanged** `weights_checksum` (Bloom
       idempotency), with a test. `logged.digest` after `wait()` gives this for free. Verify, do not
       assume — and do not credit selector ordering for it.
@@ -365,12 +376,14 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
 - [ ] 4.11 Test that `--force` alone does not satisfy the refresh check: a `--force` re-seed of
       byte-identical weights whose read-back metadata is still flat is reported **failed**. In the same
       test, pin "the remaining cards are still attempted": three cards with the middle one stale must
-      give `failed == [middle]` and `published == [first, last]`. Without that assertion a classifier
-      that raises on the first stale collection passes 4.6/4.9/4.11 and aborts mid-migration.
+      give `failed == [middle]` and `published == [first, last]`. Repeat it with the middle card's
+      refresh **raising** rather than merely reading back stale — a `CommError` from `updateArtifact`
+      must land in `failed` too, not propagate and abort the seed. Without both assertions a classifier
+      that stops at the first problem passes 4.6/4.9/4.11 and aborts mid-migration.
 - [ ] 4.12 Update `tests/test_registry_publish.py` and `tests/test_registry_cli.py` for the new
       `failed` bucket, the widened `verify_registry` signature, and the new report keys —
       `seed_registry` returns only `{"published", "skipped"}` today (`publish.py:163`) and
-      `cli.py:184-185` echoes only those. See this group's header for the four tests that go red and
+      `cli.py:184-185` echoes only those. See this group's header for the five tests that go red and
       why. Also make `test_publish_card` monkeypatch `wandb.Api` so a unit test cannot reach the
       network.
 - [ ] 4.13 Make a partial failure recoverable: `seed_registry` logs each publish with `logger.info`,
@@ -388,8 +401,12 @@ Verified standalone-safe: no test reads the files this group edits (`tests/test_
 
 Note the conflict surface is **not** this group. The in-flight labeling-package branch does not touch
 `docs/roadmap.md` at all; it touches `uv.lock`, `pyproject.toml`, `cli.py`, and `tests/conftest.py` — so
-it collides with **§3.1 and §4**, not §5. Rebase §3/§4 on `main` after that branch merges, and resolve
-`uv.lock` by re-running `uv lock`, never by hand-merging hunks.
+it collides with **§3.1 and §4**. It does, however, also insert ~21 lines at the top of the same
+`[Unreleased]` / `### Added` block §5.6 rewrites, so if it lands first every §5.6 line anchor drifts by
+about +21 — re-locate them by content, not by number. It also adds a third audience marker to
+`docs/CHANGELOG.md`, which weakens §5.6's "only two exist" reasoning without changing the
+recommendation (`**For registry operators:**` is still the accurate audience). Rebase §3/§4 on `main`
+after that branch merges, and resolve `uv.lock` by re-running `uv lock`, never by hand-merging hunks.
 
 - [ ] 5.1 `README.md:99-101` "Notes for downstream consumers" states the **opposite** of the new
       design ("one artifact per species (distinct `registry_id`s) ... predict-side dedupe by
@@ -462,7 +479,12 @@ window, and re-run `--verify` immediately before 6.3 to confirm nothing else wro
       the registry. (c) **Never delete a
       collection**: deletion is not recoverable, and the alias is what makes a version selectable.
       (d) Record each new collection's first version as it is created, which is what a
-      resume-after-partial-failure needs (see 4.13).
+      resume-after-partial-failure needs (see 4.13). (e) Rehearse the **un-retirement** as well, since
+      §6.3 is the irreversible step and §6.0 otherwise only rehearses the drop: restore `production`
+      from the 6.0(a) snapshot via `Artifact.link(<registry target>, aliases=[alias])` on the recorded
+      source version, or by fetching the link and asserting `is_link` before touching `aliases` — never
+      `save()` on the source artifact, which has the same verified failure mode as the drop (it aliases
+      the source collection and reports success).
 - [ ] 6.1 **Canary first**, and make it falsifiable. Re-seed one collection with
       `seed-registry --only <collection>`, then: (a) `--verify --only <id>` for producer-side alias +
       new-shape read-back; (b) run the **upgraded** predict's selection against the live registry for
@@ -494,5 +516,9 @@ window, and re-run `--verify` immediately before 6.3 to confirm nothing else wro
       `openspec/specs/model-registry/spec.md`. Verified: because the expansion and publishing
       requirements are replaced (removed + re-added) rather than modified in place, the archiver
       appends them at the **end** of the file, so the spec reads matrix → metadata → resolution →
-      lineage → ... → expansion → publishing. Move the two back above `ModelCard Selection Metadata`
-      and `Legacy Model Directory Resolution` respectively.
+      lineage → ... → expansion → publishing. Move the two back above `ModelCard Selection Metadata` and
+      `Seed Run Lineage` respectively — verified against the current spec, where expansion sits at
+      position 2 and publishing between `Legacy Model Directory Resolution` and `Seed Run Lineage`.
+      This is the one task that cannot be ticked before `openspec archive` runs, because the file it
+      edits does not contain those requirements until the archiver moves them: tick it in the archived
+      copy of `tasks.md` immediately after the move, so the record is not left falsely incomplete.
