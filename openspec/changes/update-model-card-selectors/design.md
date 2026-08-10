@@ -21,10 +21,8 @@ from `LabelCard`s). Changing what any model actually does. Re-training anything.
 ### 1. Bundle the selector; do not tuple axes independently
 
 A card carries `selectors: tuple[Selector, ...]`, each a whole `(species, mode, age_min, age_max)`.
-Matching is "**any** selector matches all four fields", never a cross product. Independent tuples
-would let `species=(canola, arabidopsis)` × `mode=(cylinder, multiplant cylinder)` advertise canola
-in multiplant cylinder, which was never trained or validated. A silently wrong match is worse than a
-duplicated file.
+Matching is "**any** selector matches all four fields", never a cross product — see `proposal.md`
+"Why not tuple `species` and `mode` independently" for the argument and the worked example.
 
 ### 2. `root_type` stays scalar
 
@@ -67,19 +65,40 @@ Candidates:
 the model, and it is the only option where adding a species to an existing card does not rename a
 live collection. Needs sign-off, since it renames all 13 production collections.
 
-**Two constraints on option 1 that are easy to miss.**
+**Three constraints on option 1 that are easy to miss.**
 
-- *The slug must be a legal wandb artifact name.* Every `source_model_id` in the committed matrix
-  contains `/` (e.g. `rice/younger/crown/220821_163331.multi_instance.n=867`), and
-  `wandb.sdk.artifacts._validators.INVALID_ARTIFACT_NAME_CHARS` is exactly `{"/"}` — so a naive
-  `source_model_id` → id mapping produces names wandb rejects. (`=` and `.` are *not* in that set, so
-  the `n=743` suffix and the timestamp dots are fine as far as the validator is concerned.) The
-  existing tests cannot catch a violation because `_FakeArtifact` validates nothing, so the check has
-  to be an explicit assertion against wandb's own validator.
+- *The slug must satisfy wandb's real name rule, which is stricter than the obvious one.* A
+  `source_model_id` looks like `rice/younger/crown/220821_163331.multi_instance.n=867`, and the
+  tempting check is `wandb.sdk.artifacts._validators.INVALID_ARTIFACT_NAME_CHARS`, which is exactly
+  `{"/"}`. **That check is wrong**, and an earlier draft of this document asserted from it that "the
+  `n=743` suffix and the timestamp dots are fine". Verified against the pinned writer:
+  `wandb.Artifact.__init__` applies `re.match(r"^[a-zA-Z0-9_\-.]+$", name)` **before** it delegates to
+  `validate_artifact_name`, so `=` is rejected too. Run against the real thing:
+
+  ```
+  validate_artifact_name('...240611_102513.multi_instance.n=743')  -> ACCEPTED
+  wandb.Artifact(name='...240611_102513.multi_instance.n=743')     -> ValueError: Artifact name may
+      only contain alphanumeric characters, dashes, underscores, and dots.
+  ```
+
+  So a slug that only strips `/` passes `validate_artifact_name` and then **aborts the live seed on
+  the first card**. `_` `-` `.` are legal; `/` and `=` are not; the bound is `NAME_MAXLEN` = 128 and
+  the longest current id is well inside it. The legality test must construct a real
+  `wandb.Artifact` (offline, no credential needed) — the existing `_FakeArtifact` validates nothing,
+  so nothing in the suite catches this today.
 - *The rename cannot ship before the collapse.* Under the current per-row expansion, 13 cards map
   onto only 8 distinct `source_model_id`s, so an id derived from the model id yields duplicates and
   `publish.py`'s duplicate-id guard aborts the seed. The id change is therefore **downstream** of the
   expansion change, never a standalone step — see "Sequencing inside this repo".
+- *It silently retires a safety guard, which has to be re-established explicitly.* Today
+  `collection_id` is built from `(species, mode_slug, root_type, age)`, so the duplicate-id check
+  doubles as a check that **no two physical models claim the same selection context**. Derive the id
+  from the model instead and two models with an identical selector get two distinct ids: both
+  publish, both take the production alias, and the consumer finds two production cards matching one
+  query. Verified that no such collision exists in the committed matrix today — so this is a lost
+  *future* guard, exactly the class the existing "guard against future matrix edits" scenario exists
+  for. The delta therefore restates the guard on the **selectors** rather than leaving it to depend on
+  the id scheme.
 
 ## Investigated: the wandb link-into-many-collections path
 
@@ -137,9 +156,8 @@ registry. Ordering therefore matters more than usual:
 - Only under option 3 (canonical selector, ids preserved for the 8 surviving names) is the count 5 —
   8 collections get re-seeded in place and the other 5 fall away. The design rejects option 3.
 
-Every acceptance gate that names a number therefore has to read it off the 0.2 decision rather than
-hardcode it; `tasks.md` §6.2 states the count as "13 under option 1, 5 under option 3" for exactly
-this reason, and the delta spec's orphan scenario avoids a literal count altogether.
+Every acceptance gate that names a number therefore reads it off the 0.2 decision (`tasks.md` §6.2)
+rather than hardcoding it, and the delta spec's orphan scenario carries no literal count.
 
 **On step 4, the recommendation is to explicitly retire the orphans** (drop the `production` alias)
 after the 8 new collections verify **and** the upgraded consumer is confirmed deployed. Leaving them
@@ -195,6 +213,25 @@ correctly; it says nothing about whether anything is able to read them yet.
 This is a genuine argument for option 1 over option 2/3 that is independent of the naming argument:
 options that preserve ids overwrite live data in place and delete the fallback.
 
+**But the fallback has a cost that has to be decided, not discovered: for the length of the migration
+window, two production cards match the same selection context.** Option 1 is additive, and the
+tolerant read keeps the 13 old flat cards *valid* rather than merely present. So between the re-seed
+and the retirement, a query for (canola, cylinder, age 2–13, primary) matches **both** the old
+`canola-cylinder-primary-age2-13` card and the new physical-model card — both production-aliased,
+both pointing at the same weights. The only precedent for two simultaneous production aliases in the
+spec is the two rice crown models, which cover *disjoint* contexts. This is the same context twice.
+
+Two consequences, neither of which the additive-safety argument above survives on its own:
+
+- If `choose_models` raises on an ambiguous match, the canary is the outage.
+- If it picks arbitrarily or takes the first match, **the canary can pass while being served by the
+  old card**, which makes its success criterion unfalsifiable. So the canary has to assert on the
+  *selected* card's `registry_id`, not merely that selection succeeded.
+
+It also means decisions 0.3 and 0.4 are **coupled**: without the tolerant read the ambiguity cannot
+arise, because the old cards stop validating. Task 0.7 records this as its own decision rather than
+leaving it as an emergent property of two decisions made separately.
+
 **Decisions are settled here, not in PR comments.** Because 0.2/0.3/0.4 rename live production
 identifiers and change what is selectable, the agreed answers are folded back into this document
 (and `tasks.md`) before implementation starts, matching this repo's precedent for past breaking
@@ -215,8 +252,16 @@ rather than per-commit. The constraint is real for two other reasons.
   that subscript raises `KeyError` — so the pin bump cannot be green without touching tests, whatever
   else it is bundled with.
 
-So the pin bump, the expansion/metadata rewrite, the collection-id change, and the matching test
-rewrite are **one atomic commit** (`tasks.md` §3).
+**How far that atomicity extends depends on decision 0.3, and an earlier draft overstated it.** The
+two reasons above force `pyproject.toml` + `uv.lock` + the contract-facing test assertions together —
+three or four files, not nine. Under **0.3 = tolerant read** (the recommendation), the pin bump can
+then stand alone and green: verified that all 13 *unchanged* flat cards still validate against a
+tolerant-read `ModelCard`, so `cards.py` need not move in the same commit. Under **0.3 = flag day**
+the old cards stop validating and the pin drags the expansion rewrite in with it.
+
+So: the pin bump plus its test adjustments is commit 1; the expansion, metadata, and collection-id
+rewrite plus its test rewrite is commit 2 — **unless 0.3 chooses flag day, in which case they merge**.
+`tasks.md` §3 carries the split and says which condition collapses it.
 
 **The publish tests belong in that same commit, and this was proven rather than reasoned.** Changing
 the collection-id scheme in isolation and running the suite produces **11 failures, 9 of them in
@@ -244,14 +289,32 @@ commit boundary, not an independent choice made afterwards.
   filtered `add_dir`; selector ordering is irrelevant to it. Determinism is still worth having, for
   reproducible and reviewable metadata, just not for this reason.
 
-  The *inverse* risk follows from the same fact and is unmentioned in earlier drafts: since metadata
-  sits outside the digest, re-logging identical weights with **new** metadata may be treated as a
-  content-level no-op, so the old flat metadata can stay live on the production-aliased artifact while
-  the seed report cheerfully says `published`. That is a silent half-migration. `--force` does not
-  close it — `publish.py:146` shows `--force` bypassing the idempotency *read*, which is not the same
-  as guaranteeing a new stored metadata blob. Hence the Re-Publish Metadata Refresh requirement in the
-  delta spec and the read-back assertion in `tasks.md` §4: verify the metadata actually landed, do not
-  infer it from an exit code.
+  The *inverse* risk follows from the same fact, and it is not a "may": wandb documents on
+  `Artifact.digest` that "if an artifact has the same digest as the current `latest` version, then
+  `log_artifact` is a no-op", and the saver returns early on an already-committed digest without
+  writing a manifest. So re-logging identical weights with **new** metadata creates no new version,
+  and the old flat metadata can stay live on the production-aliased artifact while the seed report
+  says `published`. That is a silent half-migration. `--force` does not close it — `publish.py:146`
+  bypasses the idempotency *read*, which is not the same as guaranteeing a new stored metadata blob.
+
+  There *is* a supported remedy, and the requirement names it rather than dead-ending at "report a
+  failure": setting `Artifact.metadata` and calling `Artifact.save()` on a committed artifact issues an
+  `updateArtifact` mutation — a metadata-only write that does not involve the digest at all. Worth
+  being precise about when this fires: under option 1 **this migration will never hit it**, because
+  every id is new, so every sequence is new and nothing dedupes. It fires on the *next* metadata-only
+  edit — adding a selector to an existing card — which is precisely the operation option 1 is chosen
+  to make cheap. So the requirement is not migration insurance; it is the guarantee that the thing
+  option 1 advertises actually works.
+
+- **Metadata coercion, which fails silently in the worst possible way.**
+  `wandb.Artifact(metadata=...)` runs the mapping through `validate_metadata`, which **coerces rather
+  than rejects** non-JSON-native values. Verified against the pinned writer: a tuple of `Selector`
+  *pydantic models* — the most natural implementation, reusing the contract type directly — comes back
+  as a list of `repr` **strings** (`"species='canola' …"`), and a `NamedTuple` comes back as a
+  positional list with the field names gone. Both publish unreadable selection metadata with a
+  successful exit code, and no existing test can see it because `_FakeArtifact` stores metadata
+  verbatim and the one assertion that checks it compares `card_to_metadata` against itself. Hence the
+  explicit JSON-native clause and the post-coercion scenario in the delta spec.
 - **Age-window semantics unchanged.** A card serving canola (2–13) and pennycress (2–14) advertises
   neither window globally. `choose_models` must match the age against the *matching selector*, not
   against a card-level min/max, or canola silently gains a year of coverage.
