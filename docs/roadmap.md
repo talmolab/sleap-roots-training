@@ -193,10 +193,19 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   primary-root model already serves arabidopsis/canola/pennycress) is registered N times —
   currently 13 registrations for only 8 physically distinct weight sets, each a full separate
   ~75MB artifact upload (training#39, surfaced while building A3-predict's parity harness — see
-  Tier 2.2). Decide during this tier: retype `ModelCard.species` to a tuple, adopt a
-  canonical-registration + lightweight-alias scheme, or accept the duplication as a documented
-  tradeoff — #39 lays out the concrete options. Tier 2.2 dedups on `weights_checksum` in the
-  interim regardless of which way this goes.
+  Tier 2.2). **Direction set (2026-08-10):** not a bare `species` tuple — independently tupling
+  `species` and `mode` would let a card match combinations nobody validated (e.g. canola in
+  `multiplant cylinder`, never trained/tested). Instead `ModelCard` gets a
+  `selectors: tuple[Selector, ...]` field, each selector bundling its own
+  `species`/`mode`/`age_min`/`age_max` together, with `root_type` staying scalar (always intrinsic
+  to the physical weights) — one card per physical model, collapsing registrations from 13 to 8.
+  This also sidesteps the canola-age-13-vs-14 question (each selector keeps its own age window on
+  the same card); the longer-term idea of validating/deriving age windows from the associated
+  `LabelCard`(s) instead of hand-curating them is tracked separately (#46), out of scope for #39.
+  `predict#14`'s `weights_checksum`-keyed warm-cache dedup covers the consumer-side symptom in the
+  interim and stays useful as defense-in-depth after this lands. Tier 2.2 dedups on
+  `weights_checksum` either way. Implementation not yet proposed — #39 tracks scoping the OpenSpec
+  change.
 - **Oracle:** round-trip a dataset and a model through the registries; lineage reproduces a run;
   **a dry-run sweep (≈5 configs, 1 species) launches and logs with full lineage** — verifying the
   registry is solid **before** the expensive Tier 3 sweeps.
@@ -546,8 +555,11 @@ From the pragmatism review — keep throughput high and de-risk the likely-overr
 - The comparison matrix (which crops × root types) — drafted at Tier 3, locked at Tier 4.
 - The common skeleton / node count per root type for unification — set at Tier 2.7.
 - Phase boundary timing (summer→fall), contingent on available team hours.
-- Whether/how to resolve the shared-model-registry duplication (#39) — decided during Tier 2;
-  Tier 2.2 dedups on `weights_checksum` in the interim either way.
+- Shared-model-registry duplication (#39) — **direction set 2026-08-10:** a `ModelCard.selectors`
+  list (see Tier 2), not a bare `species` tuple; implementation still to be proposed via OpenSpec.
+  Tier 2.2 dedups on `weights_checksum` in the interim either way. Age-window provenance (deriving
+  `age_min`/`age_max` from the associated `LabelCard`(s)) split out as a separate, unscheduled
+  follow-up (#46).
 - Tier 2.2's exact per-model tolerance — fixed at Tier 2.2 kickoff, grounded in the real legacy TF
   numbers and `sleap-roots-predict`'s measured inference-parity deltas (see Tier 2.2).
 
@@ -780,3 +792,25 @@ review of the branch carrying the above 2026-08-04/2026-08-06 entries.
 - **MINOR (housekeeping):** **`openspec/changes/add-config-schema/` archived** (all tasks were
   complete; PR #20 already implemented it) as `openspec/changes/archive/2026-08-07-add-config-schema/`.
   Tier 1's "Tracking" line now points at the archived path instead of the stale pre-archive one.
+
+**Roadmap revision (2026-08-10)** — #39 direction set (registry-duplication design), prompted by
+Anirudh's redundancy-math review before starting the proposal.
+- **IMPORTANT (registry correctness):** **#39's fix direction decided**: `ModelCard` gains a
+  `selectors: tuple[Selector, ...]` field (species/mode/age_min/age_max bundled per selector,
+  `root_type` staying scalar) rather than independently tupling `species` and `mode` — the latter
+  would let a card match untested combinations (canola × `multiplant cylinder` was never
+  trained/validated). One card per physical model collapses the 13 registrations to 8, the full fix
+  rather than the 1-of-5 partial reduction a bare `species` tuple would give (verified against
+  `registry/data/model_selection.yaml`: only the pennycress/arabidopsis-cylinder primary pair shares
+  species+mode+age and would merge from species alone; the arabidopsis pair differs only by `mode`,
+  the canola/pennycress pairs only by `age`).
+- **IMPORTANT (scope discipline):** **Age-window provenance split out** as its own, unscheduled
+  follow-up (#46) rather than folded into #39 — the selector-list design means #39 doesn't need to
+  decide whether canola's model is "good through age 14" to land; that question (and the
+  longer-term idea of deriving `age_min`/`age_max` from the associated `LabelCard`(s) instead of
+  hand-curating them at promotion) is tracked separately.
+- **MINOR:** cross-linked `predict#14` (the consumer-side symptom — warm cache materializing shared
+  weights up to 4x) so it doesn't drift out of sync with #39's landed design.
+- Anirudh is separately checking whether a no-contract-change alternative (wandb linking one
+  artifact into multiple registry collections) is viable; optional under the selector-list design,
+  not blocking it.
