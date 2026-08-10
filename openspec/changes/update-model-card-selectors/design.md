@@ -4,7 +4,9 @@
 
 `ModelCard.species` is a scalar `str`, so a model validated for several species must be registered
 once per species. Measured on the committed matrix: 7 rows expand to 13 cards over 8 physical
-models, giving 5 redundant ~75MB artifacts. See `proposal.md` for the counts and for why neither a
+models, giving 5 redundant *registrations* of already-stored weights — the cost is maintenance drift,
+not bytes, since wandb content-addresses the blobs (see `proposal.md`). See `proposal.md` for the
+counts and for why neither a
 bare `species` tuple (removes 1 of 5) nor independent `species`/`mode` tuples (admits unvalidated
 combinations) is the right shape.
 
@@ -102,32 +104,21 @@ live collection. Needs sign-off, since it renames all 13 production collections.
 
 ## Investigated: the wandb link-into-many-collections path
 
-Checked against the pinned writer (`wandb>=0.28.0,<0.29.0`, 0.28.0 installed). This was the
-alternative that would have deduplicated storage **without** a contract change, so it is worth
-recording why it does not substitute for this proposal — and why it becomes *more* usable once this
-proposal lands.
+This was the alternative that would have deduplicated storage **without** a contract change. Checked
+against the pinned writer (`wandb>=0.28.0,<0.29.0`, 0.28.0 installed).
 
-**Linking does not duplicate storage.** `Run.link_artifact(artifact, target_path, aliases)` states
-plainly: "W&B does not duplicate artifacts when you link an artifact to a collection." So one logged
-artifact can be linked into N collections for one upload.
+Linking one artifact into N collections genuinely does not duplicate storage. But **a collection
+cannot carry its own structured metadata** — `ArtifactCollection` exposes only `description` and
+`tags`, with no `metadata` property, so the `ModelCard` blob lives on `Artifact.metadata` and is
+shared by every collection the artifact is linked into. Under the *old* flat schema that made
+link-many unusable: four collections would share one blob whose single `species` is whichever card
+published it, silently breaking `choose_models` for the other three. So the duplication was a
+*contract* limitation, not a wandb one — which is the framing `proposal.md` uses.
 
-**But a collection cannot carry its own structured metadata.** `ArtifactCollection` exposes only
-`description` (a free string) and `tags` (strings) as settable fields — there is **no `metadata`
-property**. The structured `ModelCard` metadata lives on `Artifact.metadata`, which is shared by
-every collection the artifact is linked into.
-
-**Therefore, under the *old* flat schema, link-many was unusable**: four collections would share one
-metadata blob whose single `species` is whichever card published it, silently breaking
-`choose_models` for the other three. That is exactly the constraint that forced the duplication in
-the first place, and it confirms the framing in `proposal.md` — the duplication is a *contract*
-limitation, not a wandb one.
-
-**Under the selector-list design the objection disappears.** One card already describes every
-(species, mode, age) it serves, so an artifact linked into several collections would carry metadata
-that is *correct* in all of them rather than wrong in all but one. So link-many becomes a viable
-future option for per-species **discoverability** (a browsable collection per species pointing at
-shared weights) if that is ever wanted. It is **not needed for storage**, because one card per
-physical model already means one upload.
+Under the selector-list design the objection disappears, because one card already describes every
+context it serves. Link-many therefore becomes a viable future option for per-species
+**discoverability** (a browsable collection per species over shared weights), but it is **not** needed
+for storage: one card per physical model already means one upload.
 
 Caveat on confidence: this is API-surface introspection performed offline, not a live test against
 the production registry, and registry collections may differ from ordinary project artifact
@@ -265,7 +256,8 @@ rewrite plus its test rewrite is commit 2 — **unless 0.3 chooses flag day, in 
 
 **The publish tests belong in that same commit, and this was proven rather than reasoned.** Changing
 the collection-id scheme in isolation and running the suite produces **11 failures, 9 of them in
-`tests/test_registry_publish.py` and `tests/test_registry_cli.py`** (baseline: 64 passed) — the two
+`tests/test_registry_publish.py` and `tests/test_registry_cli.py`** (against the full 226-test suite:
+11 failed, 215 passed, and nothing outside those two files plus `test_registry_cards.py`) — the two
 files an earlier draft deferred to commit 2. Both build their expectations from `collection_id()`, and
 `tests/conftest.py`'s `tiny_matrix` uses `soy/p` / `soy/l` as model ids, which an id derived from
 `source_model_id` has to slug. Those two test files therefore move into §3.
@@ -276,6 +268,11 @@ check (§4) — new behavior with new tests, green on its own. Docs (§5) are sa
 Finally, the ordering *within* §3 is not free either: the id rename cannot precede the collapse, since
 13 cards over 8 model ids collide on the duplicate-id guard. Decision 0.2 is thus a hard input to the
 commit boundary, not an independent choice made afterwards.
+
+**PR split.** §3 and §4 go in **separate PRs**, not one. Together they are ~44 tasks over 9 files with
+roughly 37 test edits, and a reviewer cannot separate a behavior change from test churn at that size.
+§4 is self-contained once §3 lands, because §4.12 owns its own test updates. So: PR 1 = §3 (as one or
+two commits per 0.3), PR 2 = §4, PR 3 = §5 docs (rebased last), PR 4 = §6 migration + archive.
 
 ## Risks
 
@@ -289,22 +286,25 @@ commit boundary, not an independent choice made afterwards.
   filtered `add_dir`; selector ordering is irrelevant to it. Determinism is still worth having, for
   reproducible and reviewable metadata, just not for this reason.
 
-  The *inverse* risk follows from the same fact, and it is not a "may": wandb documents on
-  `Artifact.digest` that "if an artifact has the same digest as the current `latest` version, then
-  `log_artifact` is a no-op", and the saver returns early on an already-committed digest without
-  writing a manifest. So re-logging identical weights with **new** metadata creates no new version,
-  and the old flat metadata can stay live on the production-aliased artifact while the seed report
-  says `published`. That is a silent half-migration. `--force` does not close it — `publish.py:146`
-  bypasses the idempotency *read*, which is not the same as guaranteeing a new stored metadata blob.
+  **Under option 1 this migration never hits the no-op path** — every id is new, so every sequence is
+  new and nothing dedupes. The Re-Publish Metadata Refresh requirement therefore is not migration
+  insurance; it is the guarantee that the *next* metadata-only edit works, which is adding a selector
+  to an existing card — precisely the operation option 1 is chosen to make cheap.
 
-  There *is* a supported remedy, and the requirement names it rather than dead-ending at "report a
+  The mechanism: wandb documents on `Artifact.digest` that "if an artifact has the same digest as the
+  current `latest` version, then `log_artifact` is a no-op". So re-logging identical weights with
+  **new** metadata creates no new version, and the old flat metadata can stay live on the
+  production-aliased artifact while the seed report says `published` — a silent half-migration.
+  `--force` does not close it: `publish.py:146` bypasses the idempotency *read*, which is not the same
+  as guaranteeing a new stored metadata blob. (Do not cite `ArtifactSaver` for this; verified that in
+  0.28.0 it is reached only from `wandb/sdk/internal/sender.py`, which nothing imports — the live path
+  runs through wandb-core. The docstring plus the live observation in `tasks.md` §6.5 are the evidence.)
+
+  There *is* a supported remedy, which the requirement names rather than dead-ending at "report a
   failure": setting `Artifact.metadata` and calling `Artifact.save()` on a committed artifact issues an
-  `updateArtifact` mutation — a metadata-only write that does not involve the digest at all. Worth
-  being precise about when this fires: under option 1 **this migration will never hit it**, because
-  every id is new, so every sequence is new and nothing dedupes. It fires on the *next* metadata-only
-  edit — adding a selector to an existing card — which is precisely the operation option 1 is chosen
-  to make cheap. So the requirement is not migration insurance; it is the guarantee that the thing
-  option 1 advertises actually works.
+  `updateArtifact` mutation — a metadata-only write that does not involve the digest at all. Verified
+  it also works through a registry **link**, since the mutation targets the source artifact id and the
+  metadata blob is shared.
 
 - **Metadata coercion, which fails silently in the worst possible way.**
   `wandb.Artifact(metadata=...)` runs the mapping through `validate_metadata`, which **coerces rather

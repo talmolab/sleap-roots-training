@@ -115,12 +115,22 @@ there (filing the two tracking issues, 1.0 / 2.0, and verifying predict's lister
 
 ## Impact
 
-- **Affected specs:** `model-registry` — two requirements replaced (removed + re-added under
-  per-physical-model names, because their scenarios assert the per-row behavior by name and OpenSpec's
-  archiver refuses a MODIFIED block that drops a scenario name), three modified in place
-  (`ModelCard Selection Metadata`, `Idempotent Re-Seed`, `Registry Verification Command`,
-  `Registry Seeding CLI with Confirmed Execution`), three added (Collection Identifier Scheme,
-  Orphaned Collection Reporting, Re-Publish Metadata Refresh).
+- **Affected specs:** `model-registry`. The archiver applies this as **+5 added, ~4 modified,
+  −2 removed**:
+  - **Two replaced** (removed, then re-added under per-physical-model names) — `Per-Species,
+    Per-Root-Type Card Expansion` and `Production Model Publishing and Registry Linking`. This change
+    inverts their core rule, and their scenarios assert the per-row behavior *by name*
+    (`Shared model expands per species`, `Shared weights are published as distinct per-species
+    artifacts`), so a MODIFIED block would leave statements in the permanent spec that the change
+    makes false. It would also not archive: openspec 1.7.0's archiver hard-fails a MODIFIED block that
+    omits any scenario name present in the current spec — verified by running `openspec archive`
+    against a throwaway copy, and note `validate --strict` passes either way, so this is not a check
+    validation can catch. `RENAMED` does not help, as it carries only the name.
+  - **Four modified in place** — `ModelCard Selection Metadata`, `Idempotent Re-Seed`,
+    `Registry Verification Command`, `Registry Seeding CLI with Confirmed Execution`, each re-pasted
+    in full.
+  - **Three new** — Collection Identifier Scheme, Orphaned Collection Reporting, Re-Publish Metadata
+    Refresh. (The archiver counts the two re-added requirements as ADDED too, hence +5.)
 - **Affected code:** `registry/cards.py` (expansion, `card_to_metadata`, `collection_id`, and its
   docstrings, which currently describe per-row/per-species semantics as fact), `registry/__init__.py`
   and `registry/chooser.py` (docstrings asserting the flat shape as fact), `registry/publish.py`

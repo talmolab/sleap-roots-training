@@ -108,8 +108,9 @@ already-seeded collections.
 
 Because `log_artifact` is a no-op when the content digest matches the collection's latest version
 (wandb documents this on `Artifact.digest`), `--force` SHALL NOT be specified or documented as
-guaranteeing a **new version** for unchanged weights: what it guarantees is the alias re-point and
-the metadata refresh (see Re-Publish Metadata Refresh). A skipped card SHALL still have its stored
+guaranteeing a **new version** for unchanged weights: what it guarantees is the alias re-point and an
+*attempted* metadata refresh, whose success is established by read-back and never inferred from
+`--force` having been passed (see Re-Publish Metadata Refresh). A skipped card SHALL still have its stored
 metadata shape checked, because the skip path is the default path on every re-run and is therefore
 exactly where a half-migrated collection would otherwise sit undetected.
 
@@ -127,7 +128,9 @@ exactly where a half-migrated collection would otherwise sit undetected.
 - **THEN** the seed re-logs the artifact and re-points the production alias
 - **AND** it reports the move
 - **AND** when the content digest is unchanged, no new version is created — so the alias re-point and
-  the metadata refresh, not a new version, are what `--force` delivers
+  an attempted metadata refresh, not a new version, are what `--force` delivers
+- **AND** whether that refresh actually landed is decided by the read-back, not by `--force` having
+  been passed
 
 #### Scenario: A skipped collection carrying legacy metadata is still reported
 
@@ -454,7 +457,9 @@ The scheme SHOULD be stable against a metadata-only edit, so that adding a selec
 card does not rename a live production collection.
 
 The concrete formula is the subject of decision 0.2 in `tasks.md` (recommendation: derive from
-`source_model_id`); this requirement fixes the properties any chosen formula must satisfy.
+`source_model_id`); this requirement fixes the properties any chosen formula must satisfy. *(This
+paragraph is replaced by the agreed formula in task 0.6, before this change is archived — it must not
+reach the permanent spec as a pointer into `changes/archive/`.)*
 
 #### Scenario: Collection ids are legal wandb artifact names
 
@@ -492,10 +497,17 @@ an unrelated collection cannot fail a verification that previously could not see
 all.
 
 Orphan detection SHALL determine alias membership without paginating every artifact version of every
-collection in the registry. The registry holds roughly 100 collections, most of them non-production
-sweep and training-run artifacts, so a per-version scan is proportional to every version in the
-registry rather than to the card set. Only collections carrying the production alias SHALL be named;
-non-production collections SHALL be excluded silently rather than reported as orphans.
+collection in the registry. The registry holds far more collections than cards — most of them
+non-production sweep and training-run artifacts — so a per-version scan is proportional to every
+version in the registry rather than to the card set. Alias membership SHALL be read from the
+per-collection alias query (`ArtifactCollection.aliases`), which is one lightweight call per
+collection. The registry-wide membership query (`Api.registry(...).versions(...)`) MAY be used instead
+where it is available, but SHALL NOT be assumed available: it is gated on a server feature flag and
+raises when the flag is absent, and it additionally requires an `organization` that this package's
+registry configuration does not currently carry. Any use of it SHALL therefore sit behind a
+capability probe with the per-collection path as the documented fallback. Only collections carrying
+the production alias SHALL be named; non-production collections SHALL be excluded silently rather
+than reported as orphans.
 
 #### Scenario: Verify reports collections the expansion no longer produces
 

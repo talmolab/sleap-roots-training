@@ -35,8 +35,7 @@ and in both cases the tests are authored and confirmed red before the implementa
       collections are the only thing an un-upgraded consumer can still read, so the alias drop, not
       the re-seed, is the compatibility cliff.
 - [ ] 0.5 Confirm cross-repo ownership and sequencing with the `sleap-roots-contracts` owner
-      (unassigned as of this proposal — group 1 blocks everything else). *Not tickable here either;
-      kept as a checkbox only because the conversation is ours to start.*
+      (unassigned as of this proposal — group 1 blocks everything else).
 - [ ] 0.6 Once 0.2/0.3/0.4/0.7 are agreed, **fold the decisions back into `design.md`** and update
       this file — including writing the literal id formula into the Collection Identifier Scheme
       requirement in the delta spec **and deleting its pending-decision paragraph**, which otherwise
@@ -51,6 +50,12 @@ and in both cases the tests are authored and confirmed red before the implementa
       assert on the **selected card's `registry_id`**, or a passing canary is consistent with the old
       card serving every request. 0.3 and 0.4 are coupled through this: without the tolerant read the
       ambiguity cannot arise.
+      **A `raise` outcome forecloses the whole additive-window strategy**, so this decision gates §6's
+      step order, not just the canary's assertion. If predict raises on ambiguity, then every additive
+      publish breaks the *upgraded* consumer the moment it lands, and no intermediate state is safe:
+      the only options left are interleaving publish-then-retire per collection — which surrenders the
+      un-upgraded fallback one collection at a time, and so guts the 0.4 / §6.3 gate that fallback
+      exists to support — or choosing 0.3 = flag day. §6.1–6.3 as written presuppose a non-raising 0.7.
 
 ## 1. Contracts (`sleap-roots-contracts`, separate repo — must land first)
 
@@ -97,10 +102,12 @@ Acceptance conditions, as above.
 
 ## 3. This repo — pin + expansion + metadata + collection id + tests
 
-**Execution order (TDD):** 3.1 first (a hard prerequisite — no test can import `Selector` before the
-pin), then author 3.8–3.26 and **confirm they fail for the intended reason** (`AttributeError` /
-`ImportError` on `Card.selectors`, not an incidental error), then implement 3.2–3.5 to green, then
-3.6/3.7 docstrings, then the 3.G gate.
+**Execution order (TDD).** The task numbers below are grouped by *subject* so cross-references stay
+stable; they are **not** the order to work in. Work in this order: 3.1 first (a hard prerequisite — no
+test can import `Selector` before the pin), then author 3.8–3.26 and **confirm they fail for the
+intended reason** (`AttributeError` / `ImportError` on `Card.selectors`, not an incidental error), then
+implement 3.2–3.5b to green, then the 3.27/3.28 collateral checks, then 3.6/3.7 docstrings, then the
+3.G gate.
 
 **Commit boundary — one commit or two, decided by 0.3.** Two things genuinely force files together:
 `uv sync --locked` requires `pyproject.toml` and `uv.lock` to move as a pair, and
@@ -119,9 +126,10 @@ residual cost of a red intermediate commit is `git bisect` and `git blame`, not 
 
 **Ordering inside the group:** 3.5 must land **with or before** 3.2 — 3.2's `(source_model_id,
 root_type)` grouping key silently tolerates a model in two slots by emitting two cards, which is
-exactly what 3.5 forbids. And 3.4 depends on 0.6, not just 0.2: the formula belongs in the delta spec
-before it is implemented. Expect the full suite to be red from 3.1 until the last test lands; drive it
-per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite runs.
+exactly what 3.5 forbids. Likewise 3.5b must land **with or before** 3.4, since 3.4 is what removes the
+incidental catch that covers it today. And 3.4 depends on 0.6, not just 0.2: the formula belongs in the
+delta spec before it is implemented. Expect the full suite to be red from 3.1 until the last test
+lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite runs.
 
 - [ ] 3.1 Bump the `sleap-roots-contracts` pin (`pyproject.toml`, `uv.lock` together).
 - [ ] 3.2 Rewrite `expand_rows_to_cards` to group by `(source_model_id, root_type)` and attach one
@@ -227,9 +235,13 @@ per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite
 - [ ] 3.23 New test: `card_to_metadata` emits an **exact** key set of
       `{root_type, selectors, source_model_id}` and no card-level `species`/`mode`/`age_min`/`age_max`.
       Re-key `test_card_to_metadata_exact_keys_and_raw_mode` (`tests/test_registry_cards.py:95-112`).
-- [ ] 3.24 New test: the one-scheme invariant — monkeypatch `cards.collection_id` to a sentinel and
-      assert the publish path, the `--only` filter (`cli.py:107-114`), and the `--verify` expected set
-      (`cli.py:115-119`) all observe it.
+- [ ] 3.24 New test: the one-scheme invariant. Patch **both** `publish.collection_id` and
+      `cards.collection_id` — `publish.py:16-20` does `from ...cards import collection_id`, so patching
+      only the `cards` attribute leaves the publish path on the real function while `cli.py:109,114,115`
+      (which go through `cards.collection_id`) observe the patch, and the test silently proves nothing.
+      The sentinel must be **injective per card**; a constant one trips the duplicate-id guards at
+      `cli.py:116-118` / `publish.py:136-138` before the assertion runs. Assert the publish path, the
+      `--only` filter, and the `--verify` expected set all agree.
 - [ ] 3.25 New test: the two rice crown models remain two distinct cards in two distinct collections.
 - [ ] 3.26 New test: a **stale old-scheme** `--only` id (e.g. `canola-cylinder-primary-age2-13`, as
       sitting in runbooks and `README.md` today) fails fast via `cli.py:110-113` with an actionable
@@ -237,11 +249,24 @@ per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite
       synthetic `does-not-exist`.
 - [ ] 3.27 Check `scripts/regen_model_checksums.py:24` (`expand_rows_to_cards`, `c.source_model_id`)
       still works. It is in **no** CI path filter, **no** lint target, and **no** test, so a break
-      there is silent. Consider adding it to `tests/test_scripts.py`, which currently imports only the
-      other three scripts.
+      there is silent. Consider adding it to `tests/test_scripts.py`, which currently loads only two of
+      the other scripts (`clean_pkg`, `dump_val_metrics` at `:29-30`; `pull_tf_reference.py` is
+      likewise untested).
 - [ ] 3.28 Check `tests/test_config.py:322-329`
       (`test_root_type_vocab_mirrors_cards_slots`, asserting `config.ROOT_TYPE_VOCAB ==
       frozenset(cards._ROOT_SLOTS)`) — green only while 3.2 preserves `_ROOT_SLOTS`.
+- [ ] 3.29 New test for the **dedup** rule, which the committed matrix cannot exercise: no two rows
+      contribute an identical `(species, mode, age_min, age_max)` to one card today (the two
+      arabidopsis rows differ by `mode`; canola/pennycress differ by species *and* `age_max`), and the
+      matrix loader does not reject duplicate rows. So 3.2's "de-duplicated" is untested — 3.10 (set
+      equality) and 3.19 (ordered literal over the committed matrix) both stay green if the dedupe is
+      deleted. Use a synthetic two-identical-rows matrix and assert `len(selectors) == 1`.
+- [ ] 3.30 Anchor the three §3 tests no other task names, all of which redden at 3.1 or 3.4:
+      `test_collection_id_slugs_mode` (`tests/test_registry_cards.py:183-190`) — the **only** test
+      hardcoding old id literals such as `"rice-cylinder-crown-age6-10"`;
+      `test_metadata_validates_against_real_modelcard` (`:113-124`); and
+      `test_every_committed_matrix_card_validates_against_the_real_modelcard` (`:158-182`). The first
+      belongs with 3.4, the other two with commit A's scope.
 - [ ] 3.G Gate before committing: `uv lock --check`, `uv run pytest -m "not integration"`,
       `uv run black --check src/sleap_roots_training tests`,
       `uv run ruff check src/sleap_roots_training`. `uv lock --check` is load-bearing here and nowhere
@@ -250,16 +275,20 @@ per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite
 
 ## 4. This repo — verification and re-publish safety
 
-**Execution order (TDD):** author 4.4, 4.6, 4.8–4.11 and confirm red, then implement 4.1–4.3 and 4.5,
-then 4.7, then the 4.G gate.
+**Execution order (TDD).** Numbers are subjects, not sequence. Work in this order: author 4.4, 4.6,
+4.8–4.11 and confirm red, then implement 4.1–4.3, 4.5 **and 4.12 together** (4.12 is what makes the
+implementation step green at all), then 4.7, then 4.13, then the 4.G gate.
 
 **This group is *not* green without touching existing tests** — an earlier draft claimed it was, and
-that is disproven the same way §3's boundary was. Verified: putting the 4.5 read-back in
-`seed_registry` reddens `test_seed_publishes_all_distinct` (`test_registry_publish.py:151`, which
-asserts `report["published"] == calls`); putting it in `publish_card` instead reddens `test_publish_card`
-with a **real network call**, because that test monkeypatches `wandb.Artifact` but not `wandb.Api`; and
-4.1–4.3 redden `test_verify_only_scopes` and `test_verify_needs_no_models_root`, both of which
-monkeypatch `verify_registry` with the frozen signature `(cfg, expected, api=None)`
+that is disproven the same way §3's boundary was. Verified, **five** existing tests go red: putting the
+4.5 read-back in `seed_registry` reddens `test_seed_publishes_all_distinct`
+(`test_registry_publish.py:151`, which asserts `report["published"] == calls`) **and**
+`test_seed_idempotent_skip_and_force` (`:165-190`, which publishes 12 of 13 against a `_FakeApi` that
+has no `.artifact`, so the read-back raises `AttributeError`); putting it in `publish_card` instead
+reddens `test_publish_card` with a **real network call** (confirmed live — it loads credentials from
+`~/.netrc` and reaches `api.wandb.ai`), because that test monkeypatches `wandb.Artifact` but not
+`wandb.Api`; and 4.1–4.3 redden `test_verify_only_scopes` and `test_verify_needs_no_models_root`, both
+of which monkeypatch `verify_registry` with the frozen signature `(cfg, expected, api=None)`
 (`test_registry_cli.py:185,208`). So 4.12 is mandatory, not optional.
 
 There is deliberately **no** "delete the per-species duplicate-publish path" task — a previous draft
@@ -269,12 +298,18 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
 - [ ] 4.1 Extend `--verify` to report production-aliased collections the current expansion no longer
       produces, without deleting or re-pointing them. Determine alias membership **without**
       paginating every version of every collection: `_collection_has_production` (`publish.py:65-76`)
-      pages every version at 50/page and is fine for 8 expected collections, but the registry holds
-      ~100 collections, most of them sweep/run artifacts. Use `ArtifactCollection.aliases` (one light
-      query per collection) or `Registry.versions(...)` (one paginated stream carrying collection name
-      + membership aliases + metadata, which answers orphan reporting **and** 4.2's shape check at
-      once). `_existing_collections` (`publish.py:57-62`) currently discards the collection objects to
-      a set of names and will need to keep them.
+      pages every version at 50/page and is fine for 8 expected collections, but the registry holds far
+      more collections than cards, most of them sweep/run artifacts. Use `ArtifactCollection.aliases`,
+      which is genuinely one lightweight query per collection (the collection fragment carries no
+      aliases, so the property issues its own call). Do **not** reach for
+      `Api.registry(...).versions(...)` as an equal alternative, tempting as the one-stream shape is:
+      verified that `api.registry()` raises `RuntimeError` unless the server advertises the
+      artifact-registry-search feature, and `Registry` also requires an `organization` that
+      `RegistryConfig` does not carry (`registry/config.py:32-42` only synthesizes the `{entity}-org`
+      prefix). If used at all it must sit behind a capability probe with the per-collection path as the
+      fallback — otherwise the offline fakes in 4.4 give exactly the false green that the artifact-name
+      check gave before 3.14 was corrected. `_existing_collections` (`publish.py:57-62`) currently
+      discards the collection objects to a set of names and will need to keep them.
 - [ ] 4.2 Add the metadata **shape** check to `--verify`: for each expected collection whose
       production-aliased artifact is present, report whether its metadata is the `selectors` shape or
       the legacy flat shape, and exit non-zero on legacy. Without this, `--verify` reports `present`
@@ -288,12 +323,16 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       `--verify --only <one>` would report every other collection as orphaned. Suppress orphan
       reporting under `--only` and say so in the output; keep orphans and indeterminate collections
       out of the exit code, while a missing alias or a legacy shape on an *expected* collection fails.
-- [ ] 4.4 Tests for orphan reporting, which has **zero** coverage today: an orphan is named; a
-      non-production collection is not; an orphan alone does not change the exit code; an
-      undeterminable collection is reported indeterminate and does not change the exit code; `--only`
-      suppresses the check and says so. Give the fake **spy** `delete`/`link` methods that fail the
-      test if called, so the scenario's "does not delete or move the alias" is actually asserted
-      rather than passing by `AttributeError`.
+- [ ] 4.4 Tests for orphan reporting **and the shape check**, which have **zero** coverage today: an
+      orphan is named; a non-production collection is not; an orphan alone does not change the exit
+      code; an undeterminable collection is reported indeterminate and does not change the exit code;
+      `--only` suppresses the check and says so. Plus, for 4.2: an expected collection present with
+      **legacy** metadata is named as legacy **and** exits non-zero, paired with a `selectors`-shaped
+      one that is not — so the check discriminates. This pairing matters because that report is exactly
+      what §6.3 pastes as its acceptance evidence. Give the fake **spy** `delete`/`link` methods that
+      fail the test if called, so the scenario's "does not delete or move the alias" is actually
+      asserted rather than passing by `AttributeError`, and a spy per-version accessor that fails if
+      called, so the "does not read every version of every collection" clause is asserted too.
 - [ ] 4.5 Implement the Re-Publish Metadata Refresh check and its remedy. Read back the server's own
       view — after `logged.wait()`, `logged.metadata` and `logged.digest` are the server's values
       (`wait()` re-fetches), and `run.link_artifact(...)` already returns a membership-backed artifact
@@ -324,7 +363,10 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       never sees it — and the skip path is the default on every re-run, so a half-migrated collection
       sits there undetected. Check the metadata shape on the skip path too and report it distinctly.
 - [ ] 4.11 Test that `--force` alone does not satisfy the refresh check: a `--force` re-seed of
-      byte-identical weights whose read-back metadata is still flat is reported **failed**.
+      byte-identical weights whose read-back metadata is still flat is reported **failed**. In the same
+      test, pin "the remaining cards are still attempted": three cards with the middle one stale must
+      give `failed == [middle]` and `published == [first, last]`. Without that assertion a classifier
+      that raises on the first stale collection passes 4.6/4.9/4.11 and aborts mid-migration.
 - [ ] 4.12 Update `tests/test_registry_publish.py` and `tests/test_registry_cli.py` for the new
       `failed` bucket, the widened `verify_registry` signature, and the new report keys —
       `seed_registry` returns only `{"published", "skipped"}` today (`publish.py:163`) and
@@ -342,8 +384,12 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
 
 Verified standalone-safe: no test reads the files this group edits (`tests/test_training_docs.py` and
 `tests/test_backend_docs.py` lock only `docs/training.md` and `docs/training-backend.md`). Land it
-**last** and rebase rather than merge — `docs/roadmap.md` is the highest-churn file in the repo and
-another branch is already editing the adjacent `LabelCard` material.
+**last** and rebase rather than merge.
+
+Note the conflict surface is **not** this group. The in-flight labeling-package branch does not touch
+`docs/roadmap.md` at all; it touches `uv.lock`, `pyproject.toml`, `cli.py`, and `tests/conftest.py` — so
+it collides with **§3.1 and §4**, not §5. Rebase §3/§4 on `main` after that branch merges, and resolve
+`uv.lock` by re-running `uv lock`, never by hand-merging hunks.
 
 - [ ] 5.1 `README.md:99-101` "Notes for downstream consumers" states the **opposite** of the new
       design ("one artifact per species (distinct `registry_id`s) ... predict-side dedupe by
@@ -352,8 +398,9 @@ another branch is already editing the adjacent `LabelCard` material.
 - [ ] 5.2 `README.md:34-35` ("each stamped with **flat** `ModelCard` selection metadata") and
       `README.md:74-79` "Rerun contract", which advertises `--force` as the way to move an alias — now
       explicitly not sufficient evidence of a metadata refresh (§4.5). The canary section at
-      `README.md:81-85` needs the `--verify --only` orphan-suppression note and "seeds the rest" is 7,
-      not 12; it does **not** need an id update, since it uses the `<collection_id>` placeholder.
+      `README.md:81-85` needs the `--verify --only` orphan-suppression note, and may optionally state
+      the count ("seeds the remaining 7 of 8" — the line currently gives no number). It does **not**
+      need an id update, since it uses the `<collection_id>` placeholder.
 - [ ] 5.3 `docs/roadmap.md`: `:93-94` (13 `production` cards), `:102` (#3 "→ 15 cards", per-row math),
       `:182-183` ("already carries 13 `production`-aliased collections"), `:191-208` (the whole
       "Shared/generalist models have no way to be represented once" bullet — note `:191-193` is the
@@ -376,10 +423,11 @@ another branch is already editing the adjacent `LabelCard` material.
       (`0.0.1a0`), so a reader of the next release must not see "added flat metadata" followed by
       "removed flat metadata" for a shape they never saw. Specifically: `:99-103` ("flat `ModelCard`
       selection metadata"), `:104-107` ("7 rows → 13 cards over 8 SHA256-pinned models" → 8 cards, one
-      per physical model), and inside the `:10-58` contracts-pin entry, `:14-15` ("`ModelCard.species`
+      per physical model), and inside the `:10-50` contracts-pin entry, `:14-15` ("`ModelCard.species`
       is a free `str`, so there is no contract-side species vocabulary") and `:20`
-      ("`ModelCard.mode` is a `Mode`") — both become false and both sit deep inside a 48-line entry, so
-      they must be named or they will be walked past. Put the breaking-change and id-rename narrative
+      ("`ModelCard.mode` is a `Mode`") — both become false and both sit deep inside a 41-line entry, so
+      they must be named or they will be walked past (`:51-58` is a separate bullet, the
+      wandb-credential-guard entry, and needs no change). Put the breaking-change and id-rename narrative
       in the `### Changed` entry, **not** inside `### Added`. Use `**For registry operators:**`, which
       exists at `:36`; `**For config authors:**` (`:24`) is the only other, and both sit in one entry —
       a formatting habit rather than a deep convention, so reuse it because it is the accurate
@@ -405,9 +453,13 @@ window, and re-run `--verify` immediately before 6.3 to confirm nothing else wro
       migration; under option 1 nothing is overwritten, so there is no old alias to re-point and the
       real rollback runs the other way. (a) Record the current 13 collection → aliased artifact
       **version** mappings to a file committed with this PR, as a baseline snapshot. (b) The rollback
-      for an additive re-seed is to **remove `production` from the newly created collections**
-      (`Artifact.aliases` + `.save()`, i.e. `deleteAliases`; or `Artifact.unlink()` to drop the
-      membership) — rehearse *that* on the canary, not an alias re-point. (c) **Never delete a
+      for an additive re-seed is to **remove `production` from the newly created collections** —
+      rehearse *that* on the canary, not an alias re-point. Prefer `Artifact.unlink()`, which raises
+      unless the object really is the link. If instead using `Artifact.aliases = [...]; .save()`, first
+      fetch the **link** and assert `artifact.is_link`: verified that `save()` builds its alias target
+      from the object's own entity/project/name, so run against the *source* artifact it issues
+      `deleteAliases` against the source collection, reports success, and leaves `production` live in
+      the registry. (c) **Never delete a
       collection**: deletion is not recoverable, and the alias is what makes a version selectable.
       (d) Record each new collection's first version as it is created, which is what a
       resume-after-partial-failure needs (see 4.13).
