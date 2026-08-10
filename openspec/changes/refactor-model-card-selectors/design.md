@@ -65,6 +65,40 @@ Candidates:
 the model, and it is the only option where adding a species to an existing card does not rename a
 live collection. Needs sign-off, since it renames all 13 production collections.
 
+## Investigated: the wandb link-into-many-collections path
+
+Checked against the pinned writer (`wandb>=0.28.0,<0.29.0`, 0.28.0 installed). This was the
+alternative that would have deduplicated storage **without** a contract change, so it is worth
+recording why it does not substitute for this proposal — and why it becomes *more* usable once this
+proposal lands.
+
+**Linking does not duplicate storage.** `Run.link_artifact(artifact, target_path, aliases)` states
+plainly: "W&B does not duplicate artifacts when you link an artifact to a collection." So one logged
+artifact can be linked into N collections for one upload.
+
+**But a collection cannot carry its own structured metadata.** `ArtifactCollection` exposes only
+`description` (a free string) and `tags` (strings) as settable fields — there is **no `metadata`
+property**. The structured `ModelCard` metadata lives on `Artifact.metadata`, which is shared by
+every collection the artifact is linked into.
+
+**Therefore, under the *old* flat schema, link-many was unusable**: four collections would share one
+metadata blob whose single `species` is whichever card published it, silently breaking
+`choose_models` for the other three. That is exactly the constraint that forced the duplication in
+the first place, and it confirms the framing in `proposal.md` — the duplication is a *contract*
+limitation, not a wandb one.
+
+**Under the selector-list design the objection disappears.** One card already describes every
+(species, mode, age) it serves, so an artifact linked into several collections would carry metadata
+that is *correct* in all of them rather than wrong in all but one. So link-many becomes a viable
+future option for per-species **discoverability** (a browsable collection per species pointing at
+shared weights) if that is ever wanted. It is **not needed for storage**, because one card per
+physical model already means one upload.
+
+Caveat on confidence: this is API-surface introspection performed offline, not a live test against
+the production registry, and registry collections may differ from ordinary project artifact
+collections in ways the local classes do not reveal. Treat it as strong evidence about the shape,
+and verify against the live registry before building anything on it.
+
 ## Migration: the live registry is the real risk
 
 The 13 already-published artifacts carry the **old flat** metadata (`species`, `mode`, `age_min`,
