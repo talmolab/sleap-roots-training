@@ -104,14 +104,18 @@ instead of hand-curating them is tracked separately in #46.
 Two of the three repos involved are outside this one, and nothing here can mark their work done. They
 are listed as prerequisites rather than tickable tasks so this change stays archivable; `tasks.md`
 §1 and §2 record the acceptance conditions, and the items that genuinely are ours stay checkboxes
-there (filing the two tracking issues, 1.0 / 2.0, and verifying predict's lister behavior, 2.5).
+there (filing the two tracking issues, 1.0 / 2.0). Task 2.5, reading predict's lister behavior, was the
+load-bearing unknown and Elizabeth resolved it on 2026-08-11 against predict's actual code; its answers
+changed the migration plan and are recorded in full in `tasks.md`.
 
 - **`sleap-roots-contracts`** — add `Selector`, reshape `ModelCard`, release a pre-release. Must land
-  first; this repo cannot bump a pin that does not exist. Owner unassigned as of this proposal
+  first; this repo cannot bump a pin that does not exist. Do **not** add a tolerant read for the legacy
+  flat shape (see `design.md` "Reverse compatibility"). Owner unassigned as of this proposal
   (`tasks.md` 0.5). Issue: *to be filed.*
 - **`sleap-roots-predict`** — generalize `choose_models`, match age against the *matching* selector,
-  pin the new contracts. Must be deployed before the old collections are retired, not merely merged.
-  Issue: *to be filed*; cross-link predict#14.
+  pin the new contracts. Ordered on **deploy**, in both directions: not before this repo's re-seed is
+  live and verified, and the old collections are not retired until after it is deployed. Merging and
+  pinning can happen at any time. Issue: *to be filed*; cross-link predict#14.
 
 ## Impact
 
@@ -148,12 +152,14 @@ there (filing the two tracking issues, 1.0 / 2.0, and verifying predict's lister
   of this design; `docs/roadmap.md`; `docs/CHANGELOG.md`; and the `model-registry` spec Purpose, still
   a literal `TBD` placeholder.
 - **BREAKING, cross-repo, and ordered.** See "Blocked on" above and `design.md` for sequencing plus
-  the live-registry migration, which is the sharpest risk. Forward: the 13 already-published
-  artifacts carry old flat metadata and stop validating against the new `ModelCard` (handled by the
-  tolerant read). Backward: an old-pinned consumer cannot read a new-shape card either, and the schema
-  cannot fix that without a dishonest scalar `species` — so it is handled operationally, by the
-  recommended id scheme leaving the 13 old collections untouched and gating their retirement on the
-  consumer's confirmed deployment.
+  the live-registry migration, which is the sharpest risk. Both directions of schema mismatch resolve
+  the same way, and not in the schema: predict skips a card it cannot validate, per artifact, with a
+  warning. So the 13 old flat cards stop being visible to an upgraded consumer and the 8 new ones are
+  invisible to an old-pinned one, which cleanly partitions the two generations during the migration
+  window. What the producer owes is operational, not structural: leave the 13 old collections and their
+  alias alone until the upgraded consumer is confirmed deployed. Note this **reverses** an earlier
+  recommendation to add a tolerant read in contracts; that would have kept both shapes valid at once
+  and so produced an ambiguous match, which `choose_models` raises on.
 - **Related:** sleap-roots-predict#14 (warm cache materializing shared weights up to 4x) becomes
   largely moot for the shared-primary case once this lands, though its checksum-dedup remains
   reasonable defense-in-depth. #46 tracks LabelCard-derived age windows.

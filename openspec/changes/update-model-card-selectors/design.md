@@ -133,10 +133,12 @@ validating**, so a consumer upgraded past the contract bump cannot read the curr
 registry. Ordering therefore matters more than usual:
 
 1. `sleap-roots-contracts`: add `Selector`, change `ModelCard`, release a new pre-release version.
-2. `sleap-roots-predict`: generalize `choose_models` to "any selector matches", pin the new
-   contracts.
-3. This repo: bump the pin, rewrite expansion/metadata/publishing, re-seed the registry so all 8
+2. This repo: bump the pin, rewrite expansion/metadata/publishing, re-seed the registry so all 8
    collections carry new-shape cards.
+3. `sleap-roots-predict`: generalize `choose_models` to "any selector matches", pin the new contracts,
+   and **deploy only after step 2 is live and verified**. Merging and pinning can happen earlier; it is
+   the deploy that is ordered. See "Reverse compatibility" for why this reverses the order an earlier
+   draft gave.
 4. Retire the now-orphaned collections — **decide explicitly**, do not leave it implicit.
 
 **How many collections are orphaned depends entirely on the 0.2 id decision, and it is not 5.**
@@ -173,13 +175,48 @@ Two viable transition strategies, to be chosen with the contracts owner:
   card into a single-selector card), letting predict upgrade before the re-seed and removing the
   flag-day window. More code, but no moment where the live registry is unreadable.
 
-**Recommendation: tolerant read**, because the registry is production data consumed by a pipeline we
-do not control the deploy timing of. Revisit if the contracts owner prefers a clean break.
+**Recommendation, reversed on 2026-08-11: no tolerant read.** The argument above is wrong, and it was
+wrong because it reasoned about the contract in isolation instead of about the consumer that reads it.
+Elizabeth resolved task 2.5 against predict's actual code and two facts settle it: predict **skips** a
+card it cannot validate, with a warning, isolated per artifact, without aborting the listing; and
+`choose_models` **raises** when more than one card matches a context.
 
-## Reverse compatibility: the tolerant read only covers one direction
+Work the four states through, with the additive re-seed in place (8 new collections, 13 old ones still
+production-aliased):
 
-The tolerant read solves **new code reading old data**. The opposite direction is a real gap and is
-not solved by it.
+| consumer contract | old 13 flat cards | new 8 selector cards | matches per context | outcome |
+|---|---|---|---|---|
+| old pin | valid, listed | fail on 4 missing required fields, skipped | 1 | works |
+| new pin **with** tolerant read | lifted to one selector, valid, listed | valid, listed | **2** | **raises** |
+| new pin **without** tolerant read | `selectors` missing, skipped | valid, listed | 1 | works |
+
+The tolerant read is the only row that breaks. Skip-with-warning already provides the graceful
+degradation the tolerant read was supposed to provide, and it provides it in **both** directions, so
+adding the tolerant read does not remove a window, it manufactures an outage inside one. Dropping it
+also deletes a task from the contracts change and permanently removes the "two valid production cards
+for one selection context" state instead of merely surviving it.
+
+What the tolerant read really bought was insensitivity to **deploy order**, and that cost does not
+disappear: without it, the re-seed must land **before** the upgraded predict is deployed, or that
+consumer skips all 13 old collections, finds nothing, and cannot select a model. So the cross-repo
+order is contracts, then this repo's re-seed, then predict's deploy, then retirement — not the
+contracts-predict-here order stated earlier in this document. Predict may merge and pin whenever; the
+constraint is on its deploy. The failure mode if that slips is loud and immediate (no model found, not
+a wrong model), it destroys nothing in the registry, and it is undone by rolling back predict's deploy.
+That is a coordination commitment rather than a technical guarantee, which is why it gets an owner in
+`tasks.md` 0.8.
+
+The alternative worth recording: keep the tolerant read and change `choose_models` to dedupe matches
+that share a `weights_checksum` rather than raising. It is robust to deploy order, since the competing
+cards point at identical weights. It was not chosen because it needs a contracts change *and* a predict
+behavior change to ship before the window, and because raising on an ambiguous selection is a guard
+worth keeping in general rather than one to relax for a migration.
+
+## Reverse compatibility: both directions, and why neither needs a schema fix
+
+Once the tolerant read is dropped (see above), *both* directions of mismatch are handled by the same
+consumer behavior: predict skips a card it cannot validate, with a warning, per artifact. What follows
+is why the schema deliberately does not try to help.
 
 Verified against the installed contract: `ModelCard.model_config` is `{'frozen': True, 'extra':
 'ignore'}`, and `species`, `mode`, `age_min`, `age_max`, `root_type`, `registry_id`, `version` are all
@@ -204,24 +241,20 @@ correctly; it says nothing about whether anything is able to read them yet.
 This is a genuine argument for option 1 over option 2/3 that is independent of the naming argument:
 options that preserve ids overwrite live data in place and delete the fallback.
 
-**But the fallback has a cost that has to be decided, not discovered: for the length of the migration
-window, two production cards match the same selection context.** Option 1 is additive, and the
-tolerant read keeps the 13 old flat cards *valid* rather than merely present. So between the re-seed
-and the retirement, a query for (canola, cylinder, age 2–13, primary) matches **both** the old
-`canola-cylinder-primary-age2-13` card and the new physical-model card — both production-aliased,
-both pointing at the same weights. The only precedent for two simultaneous production aliases in the
-spec is the two rice crown models, which cover *disjoint* contexts. This is the same context twice.
+**The trap this avoids.** Had the tolerant read gone in, the additive window would have carried two
+*valid* production cards for one selection context: a query for (canola, cylinder, age 2–13, primary)
+would match both the old `canola-cylinder-primary-age2-13` card and the new physical-model card, both
+production-aliased, both pointing at the same weights. The only precedent for two simultaneous
+production aliases in this spec is the two rice crown models, which cover *disjoint* contexts; this
+would have been the same context twice, and `choose_models` raises on exactly that (task 2.5d). So the
+window would have thrown an unhandled `ValueError` on live traffic the moment the first new collection
+picked up the alias, not merely confused the canary. Dropping the tolerant read removes the state
+entirely rather than managing it.
 
-Two consequences, neither of which the additive-safety argument above survives on its own:
-
-- If `choose_models` raises on an ambiguous match, the canary is the outage.
-- If it picks arbitrarily or takes the first match, **the canary can pass while being served by the
-  old card**, which makes its success criterion unfalsifiable. So the canary has to assert on the
-  *selected* card's `registry_id`, not merely that selection succeeded.
-
-It also means decisions 0.3 and 0.4 are **coupled**: without the tolerant read the ambiguity cannot
-arise, because the old cards stop validating. Task 0.7 records this as its own decision rather than
-leaving it as an emergent property of two decisions made separately.
+Decisions 0.3, 0.4 and 0.7 are therefore **coupled**, and 0.7 records the reasoning so it is not
+re-derived as an emergent property of three decisions made separately. The canary still asserts on the
+*selected* card's `registry_id` (§6.1), not merely that selection succeeded — cheap, and it is the
+assertion that proves this analysis against live data rather than only on paper.
 
 **Decisions are settled here, not in PR comments.** Because 0.2/0.3/0.4 rename live production
 identifiers and change what is selectable, the agreed answers are folded back into this document
@@ -230,7 +263,7 @@ changes. A decision recorded only in a review thread is not a decision.
 
 ## Sequencing inside this repo
 
-Cross-repo ordering (contracts → predict → here) is a hard dependency. *Within* this repo the commit
+Cross-repo ordering (contracts, then this repo's re-seed, then predict's deploy) is a hard dependency. *Within* this repo the commit
 boundary is also constrained, but **not** for the reason an earlier draft of this document gave. That
 draft said splitting the pin bump from the test rewrite "would redden `main`". It would not: this repo
 squash-merges, so intermediate commits never land on `main` individually, and CI runs on PR sync
@@ -243,16 +276,20 @@ rather than per-commit. The constraint is real for two other reasons.
   that subscript raises `KeyError` — so the pin bump cannot be green without touching tests, whatever
   else it is bundled with.
 
-**How far that atomicity extends depends on decision 0.3, and an earlier draft overstated it.** The
-two reasons above force `pyproject.toml` + `uv.lock` + the contract-facing test assertions together —
-three or four files, not nine. Under **0.3 = tolerant read** (the recommendation), the pin bump can
-then stand alone and green: verified that all 13 *unchanged* flat cards still validate against a
-tolerant-read `ModelCard`, so `cards.py` need not move in the same commit. Under **0.3 = flag day**
-the old cards stop validating and the pin drags the expansion rewrite in with it.
+**How far that atomicity extends depends on decision 0.3.** The two reasons above force
+`pyproject.toml` + `uv.lock` + the contract-facing test assertions together, three or four files rather
+than nine. Whether more comes with them turns on 0.3, and the recommendation there reversed on
+2026-08-11:
 
-So: the pin bump plus its test adjustments is commit 1; the expansion, metadata, and collection-id
-rewrite plus its test rewrite is commit 2 — **unless 0.3 chooses flag day, in which case they merge**.
-`tasks.md` §3 carries the split and says which condition collapses it.
+- Under **no tolerant read** (now recommended), it is **one commit**. The instant the pin moves, the new
+  `ModelCard` rejects the flat mapping `card_to_metadata` still emits, so every test that validates
+  card metadata against the real contract goes red and `cards.py` has to move with the pin.
+- Under **tolerant read** (no longer recommended), the pin bump can stand alone and green: verified that
+  all 13 *unchanged* flat cards still validate against a tolerant-read `ModelCard`, so `cards.py` need
+  not move in the same commit, and the expansion, metadata and id rewrite is a second commit.
+
+An earlier draft asserted the split unconditionally while recommending the tolerant read, which was the
+wrong pairing in both directions. `tasks.md` §3 carries both branches.
 
 **The publish tests belong in that same commit, and this was proven rather than reasoned.** Changing
 the collection-id scheme in isolation and running the suite produces **11 failures, 9 of them in
@@ -315,6 +352,18 @@ two commits per 0.3), PR 2 = §4, PR 3 = §5 docs (rebased last), PR 4 = §6 mig
   successful exit code, and no existing test can see it because `_FakeArtifact` stores metadata
   verbatim and the one assertion that checks it compares `card_to_metadata` against itself. Hence the
   explicit JSON-native clause and the post-coercion scenario in the delta spec.
+- **The id rename resets every Bloom idempotency key, and `weights_checksum` does not protect you.**
+  Surfaced by Elizabeth resolving task 2.5(e) on 2026-08-11; it was unflagged in every earlier draft,
+  including the risk list it belongs in. `sleap-roots-contracts`' `compute_idempotency_key` hashes
+  `(registry_id, version, weights_checksum)`, so renaming all 8 collections changes every downstream
+  key **even though the weights are byte-identical**. Bloom will therefore not recognize a post-rename
+  run as identical to a pre-rename one for the same scan, weights and parameters, and will recompute.
+  This is a cost, not a bug: redundant compute, once, as a step change rather than ongoing churn. Note
+  the earlier risk analysis in this document worried about the *opposite* failure — digest churn
+  causing Bloom double-counting — and concluded the pinned archive form keeps `weights_checksum`
+  stable. That conclusion still holds and is simply not sufficient, because `weights_checksum` is only
+  one of three inputs to the key. It also does not argue for a different id scheme: any scheme that
+  lets one card carry several species has to rename these ids. Accept it knowingly (`tasks.md` 0.2).
 - **Age-window semantics unchanged.** A card serving canola (2–13) and pennycress (2–14) advertises
   neither window globally. `choose_models` must match the age against the *matching selector*, not
   against a card-level min/max, or canola silently gains a year of coverage.

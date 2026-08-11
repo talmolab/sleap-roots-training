@@ -54,10 +54,11 @@ list. Either degradation publishes unreadable selection metadata with a successf
 The "no card-level `species`/`mode`/`age_min`/`age_max`" clause deliberately rules out emitting both
 shapes at once. New-shape metadata is therefore **not** readable by a consumer still pinned to the
 pre-`selectors` contract, whose `ModelCard` is `extra="ignore"` with those four fields required — it
-would drop `selectors` and then fail on the missing required fields. Forward compatibility (new code
-reading old published metadata) is handled by the tolerant read; **backward** compatibility is
-handled operationally instead: the collections an old-pinned consumer reads SHALL NOT be overwritten
-or have their production alias dropped until that consumer's upgrade is confirmed deployed.
+would drop `selectors` and then fail on the missing required fields. Neither direction of mismatch is
+repaired in the schema, because the consumer already degrades safely in both: it skips a card it
+cannot validate, per artifact, with a warning. What the producer SHALL guarantee instead is
+operational: the collections an old-pinned consumer reads SHALL NOT be overwritten or have their
+production alias dropped until that consumer's upgrade is confirmed deployed.
 
 #### Scenario: Metadata validates against the ModelCard contract
 
@@ -435,10 +436,10 @@ deterministic.)
 
 ### Requirement: Collection Identifier Scheme
 
-Because a card no longer has a single `species`/`mode`/age window to name itself with, the package
-SHALL derive each card's collection id from a **single documented scheme implemented in one
-function**, used by publishing, `--only`, and `--verify` alike, so the producer cannot compute one id
-when writing and a different one when reading back. The id SHALL be a deterministic function of the
+The package SHALL derive each card's collection id from a **single documented scheme implemented in
+one function**, used by publishing, `--only`, and `--verify` alike, so the producer cannot compute one
+id when writing and a different one when reading back. A scheme is needed at all because a card no
+longer has a single `species`/`mode`/age window to name itself with. The id SHALL be a deterministic function of the
 card alone and SHALL be unique across the expanded card set (the duplicate-id fail-fast guard in
 Per-Physical-Model Publishing and Registry Linking still applies, and now also guards against a lossy
 slug collapsing two distinct model ids).
@@ -532,10 +533,10 @@ than reported as orphans.
 
 ### Requirement: Re-Publish Metadata Refresh
 
-Because artifact metadata is not part of the `add_dir` manifest digest, re-logging unchanged weights
-is a content-level no-op, which can leave the previously published metadata live. A re-seed that
-reports a collection as `published` SHALL therefore confirm that the metadata visible on the
-production-aliased artifact is the new-shape metadata. `--force` SHALL NOT be treated as sufficient
+A re-seed that reports a collection as `published` SHALL confirm that the metadata visible on the
+production-aliased artifact is the new-shape metadata. This is required because artifact metadata is
+not part of the `add_dir` manifest digest, so re-logging unchanged weights is a content-level no-op
+that can leave the previously published metadata live. `--force` SHALL NOT be treated as sufficient
 evidence of a refresh, since it bypasses the idempotency read rather than guaranteeing a new stored
 metadata blob.
 
