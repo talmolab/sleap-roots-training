@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import shutil
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -467,14 +468,41 @@ def test_a_drive_relative_source_image_is_rejected_even_when_its_scan_resolves(
     assert "source_image" in str(excinfo.value)
 
 
-def test_an_ordinary_relative_path_containing_a_colon_still_copies(tmp_path):
+@pytest.mark.parametrize(
+    "scan_path",
+    [
+        "images/Wave1/Day3_20250101/PI:594301",
+        # The colon in a position no drive letter can occupy, and a lone trailing one.
+        "images/Wave1/QR:1/scan",
+        "images/Wave1/Day3/QR1:",
+    ],
+)
+def test_an_ordinary_relative_path_containing_a_colon_is_not_treated_as_a_drive(
+    scan_path,
+):
     """The drive check keys on the drive component, not on the colon character.
 
-    A colon anywhere but the second position is an ordinary path character to
-    `PureWindowsPath`, and rejecting on the character would have failed real scan
-    directories -- accession ids like `PI:594301` are exactly the naming this repo already
-    handles elsewhere.
+    Rejecting on the character would have failed real scan directories -- accession ids
+    like `PI:594301` are exactly the naming this repo handles elsewhere. Asserted against
+    the guard rather than through a copy so it runs on every platform: a colon cannot
+    appear in a Windows filename at all, so the round-trip below is POSIX-only while the
+    *rule* has to hold identically everywhere, which is the half that could regress.
     """
+    from sleap_roots_training.labeling.copy_images import _assert_contained_relative
+
+    assert str(
+        _assert_contained_relative(scan_path, "source_scan_path", "curated.jpg")
+    ) == scan_path.replace("\\", "/")
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="A colon cannot appear in a Windows filename, so the directory cannot be "
+    "created there. The rule this exercises is pinned cross-platform by the test above; "
+    "what is POSIX-only is a scan directory actually being named this way.",
+)
+def test_an_ordinary_relative_path_containing_a_colon_still_copies(tmp_path):
+    """The same rule driven through a real copy, where such a directory can exist."""
     bloomctl_scans, _ = build_download(tmp_path)
     colon_path = "images/Wave1/Day3_20250101/PI:594301"
     scan_dir = bloomctl_scans.parent / colon_path

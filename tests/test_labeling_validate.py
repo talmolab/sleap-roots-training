@@ -299,7 +299,12 @@ def test_a_recorded_skeleton_reordered_against_the_slp_is_rejected(tmp_path):
     with pytest.raises(ValueError) as excinfo:
         validate_package(package_dir)
 
-    assert "lateral" in str(excinfo.value)
+    message = str(excinfo.value)
+    # Both orderings, not just the root type: every project filename in this package
+    # contains "lateral", so that word alone would also match a failure from any other
+    # check -- the weak-assertion class this PR has already shipped once.
+    assert str(list(reversed_lateral)) in message
+    assert str(list(SKELETONS["lateral"])) in message
 
 
 def test_validation_reads_nothing_outside_the_package(tmp_path):

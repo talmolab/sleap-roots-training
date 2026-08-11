@@ -150,6 +150,48 @@ def test_a_manifest_that_was_empty_from_the_start_is_refused_by_name(tmp_path):
     assert not output_dir.exists()
 
 
+@pytest.mark.parametrize("column", ["scan_id", "frame_index", "output_filename"])
+def test_a_manifest_missing_a_column_names_it_instead_of_raising_key_error(
+    tmp_path, column
+):
+    """The orchestrator validated no columns of its own, and indexed one immediately.
+
+    Second-order effect of the ordering fix above, pinned because it is a different
+    failure from the empty one and would otherwise be incidental. The first thing this
+    stage did with a manifest was `groupby("scan_id")`, so a renamed or dropped column
+    escaped as a bare `KeyError: 'scan_id'` -- which `cli.py`'s `except (OSError,
+    ValueError)` does not catch, so the operator got the traceback that `_labeling_error`
+    exists to prevent. Every *other* stage validated its columns at its entrance; this one
+    inherited the check only once `assert_buildable_manifest` was hoisted ahead of the
+    selection cross-check.
+    """
+    manifest_csv, scans_csv, predictions_dir = download(tmp_path)
+    rows = list(csv.DictReader(manifest_csv.open()))
+    remaining = [c for c in ss.MANIFEST_COLUMNS if c != column]
+    with manifest_csv.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=remaining, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    output_dir = tmp_path / "soybean-weep-labeling"
+
+    with pytest.raises(ValueError) as excinfo:
+        build_labeling_package(
+            manifest_csv,
+            scans_csv,
+            predictions_dir,
+            output_dir,
+            METADATA,
+            bloom_experiment_id=10102496,
+            accessions=ACCESSIONS,
+            selection=SELECTION,
+        )
+
+    message = str(excinfo.value)
+    assert "missing required column" in message
+    assert column in message
+    assert not output_dir.exists()
+
+
 def test_a_failed_build_writes_no_package_directory(tmp_path):
     """Task 4.7's rule, raised to the package.
 
