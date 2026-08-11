@@ -43,7 +43,7 @@ from sleap_roots_training.labeling.metadata import (
     write_package_metadata,
 )
 from sleap_roots_training.labeling.skeletons import skeleton_table_sha256
-from sleap_roots_training.registry.lineage import _resolve_git_sha
+from sleap_roots_training.registry.lineage import resolve_git_sha
 from sleap_roots_training.labeling.layout import IMAGES_DIRNAME, MANIFEST_FILENAME
 from sleap_roots_training.labeling.render_readme import render_readme
 from sleap_roots_training.labeling.validate import validate_package
@@ -110,7 +110,7 @@ def build_provenance(
         # The same resolver the model registry stamps its seed runs with: explicit env
         # override, then `git rev-parse` anchored at the package (with `+dirty`), then the
         # installed version, then "unknown". Never raises.
-        code_version=_resolve_git_sha(),
+        code_version=resolve_git_sha(),
         prediction_models=prediction_models(
             manifest, Path(predictions_dir), root_types
         ),

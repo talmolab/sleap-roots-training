@@ -335,6 +335,33 @@ This is not a regression the port introduces; the old selection had no superset 
 pre-port collection is a **new label set**, not a v2 of the old one. #10's `LabelCard` versioning
 should not present it as one.
 
+### F5 revisited — "not absolute" is not the same as "does not anchor"
+
+Recorded during the third blocking review of #40, against the guard the second one added.
+
+Rejecting absolute `source_scan_path`/`source_image` values closed the door F5 named, and the
+second review widened it to `PureWindowsPath` after finding `PurePosixPath("C:/x").is_absolute()`
+is `False`. Both checks ask the same question — *is this path absolute?* — and there is a third
+form where the honest answer is "no" and the path anchors anyway. `D:scan` is **drive-relative**:
+a drive letter with no separator after the colon, meaning `scan` under whatever the process's
+current directory on drive D happens to be. Windows does not call it absolute, `pathlib` agrees,
+and joining it onto a concrete base discards the base outright — `WindowsPath("C:/pkg") / "D:scan"`
+is `D:scan`. A `subst`-mapped drive then reads an arbitrary file into `images/` under a curated
+name while the copy reports success, which is exactly the F5 outcome by a different door. F11
+records that the shipped WEEP artifact points at a `Z:` drive, so drive-qualified paths in this
+data are observed, not hypothetical.
+
+**Decision.** Check the *drive component*, not absoluteness: reject any manifest path where
+`PureWindowsPath(text).drive` is non-empty, keeping the absolute and `..` messages distinct so the
+error names which rule fired. A drive component is what makes a path anchor in either convention,
+so it is the property worth testing. `output_filename` needs no equivalent — it already rejects
+`:` outright as a Windows-reserved character, which subsumes every drive form.
+
+The general lesson, and the reason this is recorded rather than just fixed: two rounds of this
+guard were written against a *definition* (absolute) when the hazard is a *behavior* (the base
+gets discarded on join). The colon-in-a-directory-name case is pinned green alongside the
+rejections so the rule stays keyed on the drive and not on the character.
+
 ## Decision 1: Port first, change second — characterization tests before behavior changes
 
 Sequence: bring each script in with its behavior preserved, pin that behavior in tests, *then* make

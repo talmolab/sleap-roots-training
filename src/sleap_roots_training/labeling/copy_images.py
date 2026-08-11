@@ -58,6 +58,17 @@ def _assert_contained_relative(
     F11 records that the real shipped WEEP manifest carried Windows paths, so this
     producer is observed rather than hypothetical.
 
+    Being absolute is not the only way a path anchors, and the check is on the drive rather
+    than on absoluteness for that reason (third blocking review of #40). ``D:scan`` — a
+    drive letter with no separator after the colon — is *drive-relative*: it names ``scan``
+    under whatever the process's current directory on drive D happens to be. Windows does
+    not call that absolute and neither does ``PureWindowsPath.is_absolute()``, so it passed
+    the check added here for ``C:\scan``. Joining it onto a concrete base discards the base
+    outright — ``WindowsPath("C:/pkg") / "D:scan"`` is ``D:scan`` — so a ``subst``-mapped
+    drive reads a file from anywhere on the machine into the package while the copy reports
+    success. A drive component is what makes a path anchor, in either form, so that is what
+    is rejected.
+
     ``..`` is rejected for the same reason the absolute case is: manifests are an
     anticipated hand-edited and reused input (this module's own docstring), and a ``..``
     segment reads a file from anywhere on the filesystem into the package under a curated
@@ -72,7 +83,8 @@ def _assert_contained_relative(
         The normalized relative path.
 
     Raises:
-        ValueError: If the path is absolute in either convention, or escapes the base.
+        ValueError: If the path is absolute in either convention, names a drive, or
+            escapes the base.
     """
     text = str(path).replace("\\", "/")
     relative = PurePosixPath(text)
@@ -82,6 +94,16 @@ def _assert_contained_relative(
             f"path {text!r} for {output_filename!r}. Bloom does not emit absolute paths; "
             "an absolute one means the manifest was hand-edited or rewritten, and it "
             "would resolve against a directory this package knows nothing about."
+        )
+    drive = PureWindowsPath(text).drive
+    if drive:
+        raise ValueError(
+            f"{column} must be relative to the scans.csv directory, got {text!r} for "
+            f"{output_filename!r}, which names a drive ({drive!r}). A drive-relative path "
+            "is not absolute, but it still anchors: joining it onto the download directory "
+            "discards that directory and resolves against the current directory of that "
+            "drive instead, reading an arbitrary file into the package under a curated "
+            "name."
         )
     if ".." in relative.parts:
         raise ValueError(

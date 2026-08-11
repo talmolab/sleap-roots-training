@@ -467,7 +467,9 @@ def test_an_edited_table_is_re_read_rather_than_served_from_the_cache(tmp_path):
 
     That is a footgun aimed squarely at the operator correcting a node count — which the
     table's own header says is expected for the three TRANSCRIBED, NOT VERIFIED crops — so
-    the key includes the file's size and mtime.
+    the key is the file's *content* hash. Size and mtime were tried and rejected: a
+    same-length correction (``6`` to ``9``) leaves the size identical, and a checkout can
+    reuse an mtime at coarser resolution than an edit-and-rerun takes.
     """
     body = (
         "skeletons:\n  - species: soybean\n    root_type: primary\n    node_count: 6\n"

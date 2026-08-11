@@ -281,6 +281,27 @@ def test_a_recorded_skeleton_that_disagrees_with_the_slp_is_rejected(tmp_path):
     assert "r4" in message
 
 
+def test_a_recorded_skeleton_reordered_against_the_slp_is_rejected(tmp_path):
+    """Node *order* is polarity, and a same-length swap keeps every count agreeing.
+
+    The check is order-sensitive in the code but was only exercised by a count mismatch
+    (above), so a reversed skeleton — a tip-first model, which inverts root polarity while
+    node counts stay identical — was pinned at build time and not at the package-level
+    validator that #10's `publish-labels` actually calls (third blocking review of #40).
+    """
+    reversed_lateral = tuple(reversed(SKELETONS["lateral"]))
+    assert len(reversed_lateral) == len(SKELETONS["lateral"])
+    package_dir = complete_package(
+        tmp_path,
+        record=package_record(skeletons=dict(SKELETONS, lateral=reversed_lateral)),
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_package(package_dir)
+
+    assert "lateral" in str(excinfo.value)
+
+
 def test_validation_reads_nothing_outside_the_package(tmp_path):
     """ "No dependency on the machine that produced it" (Decision 3), made checkable.
 

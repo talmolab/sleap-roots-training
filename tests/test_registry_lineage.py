@@ -20,27 +20,27 @@ def _fake_git(rev="deadbeef\n", status="\n"):
 
 def test_git_sha_env_override(monkeypatch):
     monkeypatch.setenv("SLEAP_ROOTS_TRAINING_GIT_SHA", "override-sha")
-    assert lineage._resolve_git_sha() == "override-sha"
+    assert lineage.resolve_git_sha() == "override-sha"
 
 
 def test_git_sha_clean(monkeypatch):
     monkeypatch.delenv("SLEAP_ROOTS_TRAINING_GIT_SHA", raising=False)
     monkeypatch.setattr(lineage, "_git_root", lambda: Path("/repo"))
     monkeypatch.setattr(lineage.subprocess, "run", _fake_git())
-    assert lineage._resolve_git_sha() == "deadbeef"
+    assert lineage.resolve_git_sha() == "deadbeef"
 
 
 def test_git_sha_dirty_suffix(monkeypatch):
     monkeypatch.delenv("SLEAP_ROOTS_TRAINING_GIT_SHA", raising=False)
     monkeypatch.setattr(lineage, "_git_root", lambda: Path("/repo"))
     monkeypatch.setattr(lineage.subprocess, "run", _fake_git(status="M file\n"))
-    assert lineage._resolve_git_sha() == "deadbeef+dirty"
+    assert lineage.resolve_git_sha() == "deadbeef+dirty"
 
 
 def test_git_sha_no_repo_falls_back_never_raises(monkeypatch):
     monkeypatch.delenv("SLEAP_ROOTS_TRAINING_GIT_SHA", raising=False)
     monkeypatch.setattr(lineage, "_git_root", lambda: None)
-    sha = lineage._resolve_git_sha()  # must not raise
+    sha = lineage.resolve_git_sha()  # must not raise
     assert sha == "unknown" or sha.startswith("v")
 
 

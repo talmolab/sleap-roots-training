@@ -362,6 +362,83 @@ def test_an_absolute_source_scan_path_is_rejected_rather_than_mangled(
     assert "source_scan_path" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "scan_path",
+    [
+        "D:hpi_dev/images/Wave1/Day3/QR",
+        "D:hpi_dev\\images\\Wave1\\Day3\\QR",
+        # A bare drive reference, which anchors just as hard as one with a tail.
+        "D:",
+    ],
+)
+def test_a_drive_relative_source_scan_path_is_rejected_rather_than_anchoring(
+    tmp_path, scan_path
+):
+    r"""A drive letter with no separator after the colon is not absolute, and still anchors.
+
+    Third blocking review of #40. `D:scan` is *drive-relative*: it means "scan, resolved
+    against whatever the process's current directory on drive D happens to be". Windows
+    agrees it is not absolute, and so do both flavours — `PureWindowsPath("D:scan")
+    .is_absolute()` is False — so it passed the guard added for `C:\scan`. But joining it
+    onto a concrete base discards the base outright: `WindowsPath("C:/pkg") / "D:scan"` is
+    `D:scan`, not `C:/pkg/D:scan`. A `subst`-mapped drive then reads a file from anywhere
+    on the machine into `images/` under a curated name, and the copy reports success --
+    the same silent-substitution outcome the absolute and `..` guards exist to prevent.
+
+    The drive is what makes a path anchor, so the drive is what gets checked, rather than
+    a definition of "absolute" that Windows and pathlib both read differently here.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    write_scans_csv(bloomctl_scans, scan_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", scan_path)
+
+    with pytest.raises(ValueError, match="names a drive") as excinfo:
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+    assert "source_scan_path" in str(excinfo.value)
+    assert not (tmp_path / "package/images").exists()
+
+
+def test_a_drive_relative_source_image_is_rejected_even_when_its_scan_resolves(
+    tmp_path,
+):
+    # The same bypass at the per-row guard, which the scan-directory guard never reaches.
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    rows = list(csv.DictReader(manifest.open()))
+    for row in rows:
+        row["source_image"] = f"D:planted/{Path(row['source_image']).name}"
+    with manifest.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match="names a drive") as excinfo:
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+    assert "source_image" in str(excinfo.value)
+
+
+def test_an_ordinary_relative_path_containing_a_colon_still_copies(tmp_path):
+    """The drive check keys on the drive component, not on the colon character.
+
+    A colon anywhere but the second position is an ordinary path character to
+    `PureWindowsPath`, and rejecting on the character would have failed real scan
+    directories -- accession ids like `PI:594301` are exactly the naming this repo already
+    handles elsewhere.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    colon_path = "images/Wave1/Day3_20250101/PI:594301"
+    scan_dir = bloomctl_scans.parent / colon_path
+    scan_dir.mkdir(parents=True)
+    for view_index in range(1, 73):
+        (scan_dir / f"{view_index}.jpg").write_bytes(f"jpeg-{view_index}".encode())
+    write_scans_csv(bloomctl_scans, colon_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", colon_path)
+    images_dir = tmp_path / "package/images"
+
+    assert copy_selected_images(manifest, bloomctl_scans, images_dir) == 3
+    assert (images_dir / "A3244_9DK8KJJEZR_age3_1.jpg").read_bytes() == b"jpeg-25"
+
+
 def test_an_absolute_source_image_is_rejected_even_when_its_scan_resolves(tmp_path):
     # The second guard, on the per-row path rather than the scan directory. Reachable only
     # once the scan directory itself resolves, so the manifest keeps a valid scan path and

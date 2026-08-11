@@ -204,7 +204,10 @@ def test_a_declared_frame_count_that_disagrees_is_an_error(tmp_path):
     """The README is where a number reaches a human, so it runs the same rule."""
     package_dir = complete_package(tmp_path, record=package_record(frame_count=99))
 
-    with pytest.raises(ValueError, match="99"):
+    # Anchored to the field, not the bare digits: "99" alone would also match a tmp_path
+    # segment or an unrelated count, which is how a weak `match=` hid a dead guard earlier
+    # in this PR.
+    with pytest.raises(ValueError, match="frame_count=99"):
         render_readme(package_dir)
 
 
