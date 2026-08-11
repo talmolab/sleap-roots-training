@@ -277,6 +277,95 @@ def test_a_duplicate_entry_is_rejected(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# Blocking review of #40 — a row that loads but can never be reached, and `verified`
+# --------------------------------------------------------------------------------------
+
+
+def test_an_age_agnostic_row_may_not_shadow_an_age_split_one(tmp_path):
+    """RED against the port: both loaded cleanly and the age-split row did nothing.
+
+    The per-key dedup above does not catch this — the keys genuinely differ — but
+    ``lookup_skeleton`` returns the age-agnostic row before it ever consults the age, so
+    ``lookup("rice", "crown", age=7)`` answered with the agnostic row's count and the
+    9-node age row was unreachable. That is the same silent-first-match failure the dedup
+    exists to prevent, one level up.
+    """
+    body = (
+        "skeletons:\n"
+        "  - species: rice\n    root_type: crown\n    age: null\n    node_count: 6\n"
+        "  - species: rice\n    root_type: crown\n"
+        '    age: "6, 7, 8"\n    node_count: 9\n'
+    )
+    with pytest.raises(ValueError, match="both an age-agnostic row"):
+        load_skeleton_table(write_table(tmp_path, body))
+
+
+def test_a_fully_age_split_pair_is_still_allowed(tmp_path):
+    """The positive control: rice's real split has no agnostic row and must keep loading."""
+    rows = load_skeleton_table()
+    rice_crown = [r for r in rows if (r.species, r.root_type) == ("rice", "crown")]
+
+    assert len(rice_crown) == 2
+    assert all(row.age is not None for row in rice_crown)
+
+
+def test_the_table_records_which_rows_are_verified():
+    """The header always said so in prose; nothing downstream could read it."""
+    rows = {(r.species, r.root_type): r for r in load_skeleton_table()}
+
+    # Verified 2026-08-04 against the real WEEP artifacts that became the published
+    # collection.
+    assert rows[("soybean", "primary")].verified
+    assert rows[("soybean", "lateral")].verified
+    # Transcribed from the advisory doc table and not yet confirmed against an artifact.
+    assert not rows[("canola", "lateral")].verified
+    assert not rows[("arabidopsis", "primary")].verified
+
+
+def test_looking_up_an_unverified_skeleton_warns(caplog):
+    with caplog.at_level("WARNING"):
+        lookup_skeleton("canola", "lateral")
+
+    assert "NOT VERIFIED" in caplog.text
+    assert "canola" in caplog.text
+
+
+def test_looking_up_a_verified_skeleton_is_quiet(caplog):
+    with caplog.at_level("WARNING"):
+        lookup_skeleton("soybean", "primary")
+
+    assert "NOT VERIFIED" not in caplog.text
+
+
+# `yes` is deliberately absent: YAML parses it as a boolean, so it is a legitimate value.
+@pytest.mark.parametrize("bad", ["maybe", "1", "null"])
+def test_a_non_boolean_verified_flag_is_rejected(tmp_path, bad):
+    body = (
+        "skeletons:\n  - species: soybean\n    root_type: primary\n"
+        f"    node_count: 6\n    verified: {bad}\n"
+    )
+    with pytest.raises(ValueError, match="verified must be true or false"):
+        load_skeleton_table(write_table(tmp_path, body))
+
+
+@pytest.mark.parametrize(
+    "body,expected",
+    [
+        ("- a\n- b\n", "expected a mapping"),
+        ("skeletons: 5\n", "expected a list of rows"),
+        ("skeletons:\n  - just a string\n", "expected a mapping of keys"),
+    ],
+)
+def test_a_malformed_table_fails_as_a_message_not_an_attribute_error(
+    tmp_path, body, expected
+):
+    # `AttributeError` is not in the CLI's catch, so these used to reach the operator as
+    # tracebacks.
+    with pytest.raises(ValueError, match=expected):
+        load_skeleton_table(write_table(tmp_path, body))
+
+
+# --------------------------------------------------------------------------------------
 # Task 6.5 — verification against the published collections
 # --------------------------------------------------------------------------------------
 
@@ -344,3 +433,58 @@ def test_the_table_agrees_with_the_published_label_collections(tmp_path):
 
     assert checked, "no skeletons were read; the registry query found nothing"
     assert not mismatches, "\n".join(mismatches)
+
+
+# --------------------------------------------------------------------------------------
+# Blocking review of #40, second pass — the table is parsed once, not once per lookup
+# --------------------------------------------------------------------------------------
+
+
+def test_the_table_is_parsed_once_across_repeated_lookups(monkeypatch):
+    """Measured at ~6.5 ms a call, and `skeleton_for` calls it once per age.
+
+    The builder and the orchestrator each resolve skeletons, so a 10-age two-root-type
+    build re-read and re-validated the same committed file about forty times — roughly a
+    quarter of a second spent parsing something that cannot change mid-build.
+    """
+    from sleap_roots_training.labeling import skeletons as sk
+
+    sk._parse_table_cached.cache_clear()
+    parses = []
+    real_parse = sk._parse_table
+    monkeypatch.setattr(
+        sk, "_parse_table", lambda path: (parses.append(path), real_parse(path))[1]
+    )
+
+    for _ in range(10):
+        lookup_skeleton("soybean", "primary")
+
+    assert len(parses) == 1, f"parsed {len(parses)} times, expected once"
+
+
+def test_an_edited_table_is_re_read_rather_than_served_from_the_cache(tmp_path):
+    """Keying the cache on the path alone would make an in-place edit invisible.
+
+    That is a footgun aimed squarely at the operator correcting a node count — which the
+    table's own header says is expected for the three TRANSCRIBED, NOT VERIFIED crops — so
+    the key includes the file's size and mtime.
+    """
+    body = (
+        "skeletons:\n  - species: soybean\n    root_type: primary\n    node_count: 6\n"
+    )
+    path = write_table(tmp_path, body)
+    assert load_skeleton_table(path)[0].node_count == 6
+
+    # Corrected in place, at the same path.
+    path.write_text(body.replace("node_count: 6", "node_count: 8"), encoding="utf-8")
+
+    assert load_skeleton_table(path)[0].node_count == 8
+
+
+def test_the_cached_rows_cannot_be_mutated_by_a_caller():
+    """A shared cached value is only safe if nobody can write through it."""
+    rows = load_skeleton_table()
+
+    assert isinstance(rows, tuple)
+    with pytest.raises(Exception):
+        rows[0].node_count = 99

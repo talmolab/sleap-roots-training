@@ -54,9 +54,13 @@ here, so there is no manual concatenation step.
 
 Selection reads the QC-cleaned barcodes as the sampling pool (so poorly germinated plants are
 excluded), stratifies by `plant_age_days` × `accession_id`, and picks evenly-dispersed
-rotational views. It is deterministic **and monotone**: the same parameters select the same
-frames, and raising `--plants-per-group` or `--views-per-plant` yields a superset of the
-narrower selection. That is what makes step 4 below a real recovery path.
+rotational views, stepped uniformly around the rotation so every count covers the whole
+cylinder. It is deterministic: the same parameters select the same frames. Raising
+`--plants-per-group` yields a superset of the narrower selection; raising `--views-per-plant`
+re-spaces the views, so it adds frames without guaranteeing it keeps every old one. Either way
+a given curated filename always names the same view of the same plant, which is what makes
+step 4 below a real recovery path — a re-derived package can be merged with labels returned
+against the narrower one.
 
 **Write down the parameters you used.** `build` needs them, and records them in the package.
 
@@ -134,8 +138,12 @@ sleap-roots-training labeling select ... --plants-per-group 8 --views-per-plant 
 sleap-roots-training labeling build ... --version v001 --output-dir "<out>/soybean-weep-labeling-v001"
 ```
 
-Selection is monotone, so a widened re-run contains every frame the narrower one selected. The
-new package is a superset, not a different label set — which is the only reason this works.
+A widened re-run keeps every plant the narrower one selected, and every frame it keeps arrives
+under the same `output_filename` — the name embeds the *view*, not its position in the
+selection. So labels a labeler returned against the narrow package still attach to the right
+image in the wide one, which is the only reason this works. Widening `--views-per-plant` also
+re-spaces the views, so some narrow frames may not recur; they are not lost, they are simply
+not re-requested, and their names never get reused for different pixels.
 
 **Why not edit the published package.** The `.slp` embeds its images, and de-embedding to widen
 it does not round-trip: `save_slp` restores the original video only *if it is still available*.
@@ -154,16 +162,54 @@ If you ran the previous `select_samples.py` / `copy_selected_images.py` / `build
 / `generate_readme.py`, the behavior differences that affect you:
 
 - **A given seed selects different plants.** The draw is now a stable hash ordering rather than
-  `pandas.sample`, which is what makes widening monotone. Packages built before this change
-  cannot be reproduced by re-running with the same seed.
-- **Three views are `[1, 19, 37]`**, not `[1, 25, 49]`. Views are dispersed around the full
-  rotation; four views are unchanged.
+  `pandas.sample`, which is what makes widening the plant dimension monotone. Packages built
+  before this change cannot be reproduced by re-running with the same seed.
+- **View indices are unchanged.** Three views are `[1, 25, 49]` and four are `[1, 19, 37, 55]`,
+  the same uniform step the published collections were selected with, so new packages share
+  their view geometry.
+- **Curated filenames name the view, not its position**: `A3244_9DK8KJJEZR_age3_view025.jpg`
+  rather than `A3244_9DK8KJJEZR_age3_0.jpg`. The old name meant something different depending
+  on how many views the run asked for, so merging corrections from a re-derived package could
+  attach one view's root traces to another view's image.
 - **The `.slp` embeds its images.** Opening a package no longer depends on `images/` being beside
   it. `images/` still ships, for review and for the manifest's `output_filename` to resolve against.
-- **Failures are failures.** An unresolvable source image, a scan with no predictions, a duplicate
-  curated filename, a scan whose view count contradicts `--total-views`, and an empty selection
-  each stop the run. All of them previously warned and continued, producing a package that
-  reported success.
+- **Failures are failures.** An unresolvable source image, a scan with no predictions, a scan
+  whose predictions do not cover every selected view, a duplicate or case-colliding curated
+  filename, a curated filename that is not a plain filename, an absolute or `..`-bearing source
+  path, a scan whose view count contradicts `--total-views`, a null `accession_id` or
+  `plant_age_days`, and an empty selection each stop the run. All of them previously warned and
+  continued, or were not checked at all, producing a package that reported success.
+- **A frame the model found nothing in ships empty**, rather than vanishing. The labeler opens
+  it, confirms nothing is there, and that confirmation is ground truth — a true negative the
+  corpus previously had no way to record. A young plant with no lateral roots is no longer
+  indistinguishable from predictions that missed the view. The build still fails if a declared
+  root type is empty in *every* frame of every scan.
+- **`validate` opens the `.slp` files and counts their frames**, rather than comparing the
+  declared count against the manifest it was derived from. A package whose projects are shorter
+  than its manifest is rejected wherever it is validated, including one built by an older tool.
+- **`package_metadata.yaml` records a `provenance` block**: the `scans.csv` and manifest hashes,
+  the skeleton-table hash, the code version, and the model that produced the `v000` starting
+  points (labelers anchor on those, so the predicting model is a confounder in what comes back). The selection parameters alone only reproduce a
+  package against a byte-identical pool, and the usual reason to re-derive one is that new waves
+  have landed — so this is what lets you check you are re-deriving from the same thing. Packages
+  built before this exists read back fine, with `provenance` absent.
+- **`.DS_Store` no longer fails a package.** Operating-system sidecars in `images/` are ignored,
+  so opening a package on macOS before validating it does not reject it.
+- **Stratification no longer leaks across age groups.** A plant selected at one age used to drag
+  in all its other ages, over-representing the plants that survive to be scanned repeatedly —
+  survivorship correlates with vigor, so the sample skewed toward healthy plants. Groups smaller
+  than `--plants-per-group` are now reported rather than silently taken whole.
+- **Predictions whose skeleton does not match the package's are rejected.** The rebind is
+  positional, so a model emitting the node chain tip-first would have had every root's polarity
+  silently reversed. Only the node *count* was checked.
+- **A build that would not fit in memory fails first.** Embedding holds every frame in RAM before
+  writing, so a large enough package was killed by the OS mid-write — and a SIGKILL runs no
+  cleanup, leaving a partial package nothing sweeps. The ceiling is 2 GiB of curated images per
+  `.slp`, overridable with `SLEAP_ROOTS_LABELING_EMBED_CEILING_BYTES`.
+- **Counts are validated as counts.** `--plants-per-group 0` or `-1` used to select nothing, or
+  every plant but the last in each group, and exit 0.
+- **An incomplete `--accession-names` map fails at `select`**, not three stages later at `build`
+  where fixing it would rename every file in the package.
 - **The copy step takes `--scans-csv`**, not the experiment directory.
 - **The README is generated from `package_metadata.yaml`**, so it is no longer hand-edited per
   crop, and its counts cannot disagree with the manifest.

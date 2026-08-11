@@ -80,6 +80,10 @@ jobs:
       - name: Install dev dependencies
         run: uv sync --locked --group dev
 
+      # `--cov-fail-under=95` added in the blocking review of #40: coverage was collected
+      # and then thrown away, so a change could drop it arbitrarily without CI noticing.
+      # The suite measures 97% overall and the labeling package 98-100%, so this is a
+      # ratchet against regression rather than a target to reach.
       - name: Run pytest
         run: |
-          uv run pytest --cov=src/sleap_roots_training --cov-report=xml --durations=20 -m "not integration" tests/
+          uv run pytest --cov=src/sleap_roots_training --cov-report=xml --cov-fail-under=95 --durations=20 -m "not integration" tests/

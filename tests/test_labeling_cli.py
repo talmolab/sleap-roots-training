@@ -17,7 +17,7 @@ import shutil
 import pytest
 from click.testing import CliRunner
 
-from test_labeling_package import ACCESSIONS, TOTAL_VIEWS, download
+from conftest import ACCESSIONS, TOTAL_VIEWS, download
 from sleap_roots_training import cli
 from sleap_roots_training.labeling.metadata import PACKAGE_METADATA_FILENAME
 from sleap_roots_training.labeling.validate import validate_package
@@ -304,3 +304,40 @@ def test_every_labeling_command_is_discoverable(command):
 
     assert result.exit_code == 0
     assert command in result.output
+
+
+def test_a_bare_key_error_reaches_the_operator_as_a_message(tmp_path, monkeypatch):
+    """The backstop in ``_labeling_error``, which had no test.
+
+    Every stage validates its input columns up front now, so a missing column arrives as a
+    named ``ValueError`` — which is why this cannot be provoked through real input. But
+    every stage indexes a DataFrame somewhere, and a raw ``KeyError`` escaping the CLI is
+    exactly the traceback the wrapper exists to prevent: ``str(KeyError('x'))`` is the bare
+    quoted key ``"'x'"``, which alone tells the operator nothing.
+    """
+    from sleap_roots_training.labeling import select_samples
+
+    def raise_key_error(*args, **kwargs):
+        raise KeyError("plant_qr_code")
+
+    monkeypatch.setattr(select_samples, "select_samples", raise_key_error)
+    manifest_csv, scans_csv, _ = download(tmp_path)
+
+    result = invoke(
+        [
+            "select",
+            "--cleaned-csv",
+            str(manifest_csv),
+            "--scans-csv",
+            str(scans_csv),
+            "--output-csv",
+            str(tmp_path / "out.csv"),
+        ]
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "missing key" in result.output
+    assert "plant_qr_code" in result.output
+    # Not a traceback: the exception must have been converted, not propagated.
+    assert not isinstance(result.exception, KeyError)

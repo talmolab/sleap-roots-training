@@ -89,14 +89,25 @@ All notable changes to this project are documented here. The format is based on
   **embeds its images**, so a package no longer breaks when its source paths go away (six of the
   eight published collections carry `repaired_from: "v0"` because that happened); a given seed now
   **selects different plants**, because the draw is a stable hash ordering rather than
-  `pandas.sample` — which is what makes widening a selection produce a superset instead of a
-  different label set; three views are `[1, 19, 37]` rather than `[1, 25, 49]`; skeletons come from
-  a committed per-crop table and an uncovered crop **fails** instead of getting soybean's node
-  counts; and every silent failure is now a failure — an unresolvable source image, a duplicate
-  curated filename, a scan whose view count contradicts `--total-views`, a scan with no
-  predictions, and an empty selection each stop the run rather than warning and reporting success.
-  Adding frames to a published package is re-derive and republish, not edit in place; the reason is
-  in the guide.
+  `pandas.sample` — which is what makes widening the plant dimension produce a superset instead
+  of a different label set; view indices are unchanged (`[1, 25, 49]` for three), but curated
+  filenames now name the **view** rather than its position in the selection
+  (`..._age3_view025.jpg`, not `..._age3_0.jpg`), so a filename means the same image at every
+  selection width; skeletons come from a committed per-crop table and an uncovered crop **fails**
+  instead of getting soybean's node counts; and every silent failure is now a failure — an
+  unresolvable source image, an absolute or `..`-bearing source path, a duplicate or
+  case-colliding curated filename, a curated filename that is not a plain filename, a scan whose
+  view count contradicts `--total-views`, a scan with no predictions, a scan whose predictions do not cover every
+  selected view, a null `accession_id` or `plant_age_days`, and an empty
+  selection each stop the run rather than warning and reporting success. `labeling validate`
+  opens each `.slp` and counts its frames rather than checking the declared count against the
+  manifest it came from. A frame the model found nothing in ships **empty** rather than vanishing,
+  so a labeler can confirm a true negative — the corpus previously had no way to record one, and
+  genuine absence was indistinguishable from predictions that missed the view. `labeling validate` and ignores operating-system sidecars so a `.DS_Store` cannot fail a
+  correct package. `package_metadata.yaml` also records a `provenance` block — the input hashes,
+  the skeleton-table hash, and the code version — because the selection parameters alone only
+  reproduce a package against a byte-identical pool. Adding frames to a published package is
+  re-derive and republish, not edit in place; the reason is in the guide.
 - `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
   config-driven training-config schema + CLI. A config is `sleap-nn`'s native
   `data_config`/`model_config`/`trainer_config` **plus** a repo-owned `experiment` block

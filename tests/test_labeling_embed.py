@@ -20,7 +20,7 @@ import shutil
 import pytest
 import sleap_io as sio
 
-from test_labeling_build_package import METADATA, build_inputs, primary
+from conftest import METADATA, build_inputs, primary
 from sleap_roots_training.labeling.build_package import build_slp_project
 from sleap_roots_training.labeling.validate import (
     assert_slp_is_self_contained,

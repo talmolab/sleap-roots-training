@@ -265,12 +265,24 @@ def _labeling_error(error: Exception) -> click.ClickException:
     row, the path, or the parameter. Unwrapped they arrive as a traceback with that
     message buried in it.
 
+    ``KeyError`` is caught too, as a backstop (blocking review of #40). The stages now
+    validate their input columns up front, so a missing column arrives as a named
+    ``ValueError``; but every stage indexes a DataFrame somewhere, and a raw ``KeyError``
+    escaping here is precisely the traceback this function exists to prevent. Its ``str``
+    is a bare quoted key, so it is labeled rather than printed alone.
+
     Args:
         error: The stage's exception.
 
     Returns:
         The click exception to raise.
     """
+    if isinstance(error, KeyError):
+        return click.ClickException(
+            f"missing key {error} — the input is missing a column or field this stage "
+            "reads. Check that the CSV is the one this stage expects and that its header "
+            "has not been renamed."
+        )
     return click.ClickException(str(error))
 
 
@@ -331,12 +343,19 @@ def _parse_accessions(value: str) -> dict:
     type=click.Path(dir_okay=False, path_type=Path),
     help="Where to write `sample_manifest.csv`.",
 )
-@click.option("--plants-per-group", type=int, default=5, show_default=True)
-@click.option("--views-per-plant", type=int, default=3, show_default=True)
+# `IntRange(min=1)` rather than `int`: these count things, and a zero or negative
+# value used to reach `ordered[:n]` and silently select nothing, or "all but N"
+# plants per group, exiting 0 either way (blocking review of #40).
+@click.option(
+    "--plants-per-group", type=click.IntRange(min=1), default=5, show_default=True
+)
+@click.option(
+    "--views-per-plant", type=click.IntRange(min=1), default=3, show_default=True
+)
 @click.option("--seed", type=int, default=42, show_default=True)
 @click.option(
     "--total-views",
-    type=int,
+    type=click.IntRange(min=1),
     default=None,
     help="Rotational views per scan (default: the packaged assumption).",
 )
@@ -357,8 +376,10 @@ def labeling_select_command(
 ) -> None:
     """Select a stratified sample of frames and write the manifest.
 
-    Deterministic and monotone: the same inputs and parameters select the same frames, and
-    widening either count yields a superset of the narrower selection. Record the
+    Deterministic: the same inputs and parameters select the same frames. Widening
+    ``--plants-per-group`` yields a superset; widening ``--views-per-plant`` re-spaces the
+    views evenly, so it adds frames without keeping every old one — but a curated filename
+    always names the same view, so a re-derived package still merges. Record the
     parameters — ``build`` writes them into the package so it can be widened later.
     """
     from sleap_roots_training.labeling import select_samples
@@ -369,7 +390,7 @@ def labeling_select_command(
             Path(cleaned_csv),
             scans_csv,
             output_csv,
-            accession_names={int(k): v for k, v in names.items()} if names else None,
+            accession_names=names,
             plants_per_group=plants_per_group,
             views_per_plant=views_per_plant,
             seed=seed,
@@ -377,7 +398,7 @@ def labeling_select_command(
                 select_samples.TOTAL_VIEWS if total_views is None else total_views
             ),
         )
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, KeyError) as error:
         raise _labeling_error(error)
     click.echo(
         f"selected {len(manifest)} frame(s) across "
@@ -405,7 +426,12 @@ def labeling_select_command(
     type=click.Path(file_okay=False, path_type=Path),
     help="Destination `images/` directory.",
 )
-@click.option("--total-views", type=int, default=None, help="Views the scans hold.")
+@click.option(
+    "--total-views",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Views the scans hold.",
+)
 def labeling_copy_images_command(
     manifest: Path, scans_csv: Path, output_dir: Path, total_views: Optional[int]
 ) -> None:
@@ -425,7 +451,7 @@ def labeling_copy_images_command(
                 select_samples.TOTAL_VIEWS if total_views is None else total_views
             ),
         )
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, KeyError) as error:
         raise _labeling_error(error)
     click.echo(f"copied {copied} image(s) -> {output_dir}")
 
@@ -477,9 +503,9 @@ def labeling_copy_images_command(
     help="JSON map of accession id to name, or @path to a file holding one.",
 )
 @click.option("--seed", type=int, required=True, help="The seed selection ran with.")
-@click.option("--plants-per-group", type=int, required=True)
-@click.option("--views-per-plant", type=int, required=True)
-@click.option("--total-views", type=int, required=True)
+@click.option("--plants-per-group", type=click.IntRange(min=1), required=True)
+@click.option("--views-per-plant", type=click.IntRange(min=1), required=True)
+@click.option("--total-views", type=click.IntRange(min=1), required=True)
 @click.option("--version", default="v000", show_default=True)
 def labeling_build_command(
     manifest: Path,
@@ -538,18 +564,18 @@ def labeling_build_command(
             selection=selection,
             version=version,
         )
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, KeyError) as error:
         raise _labeling_error(error)
 
     from sleap_roots_training.labeling.metadata import read_package_metadata
-    from sleap_roots_training.labeling.validate import project_filename
+    from sleap_roots_training.labeling.layout import project_filename_for
 
     record = read_package_metadata(package_dir)
     click.echo(f"built labeling package: {package_dir}")
     click.echo(f"  {record.frame_count} frames, {len(record.accessions)} accession(s)")
     for root_type in record.metadata.root_types:
         click.echo(
-            f"  {project_filename(record, root_type)} "
+            f"  {project_filename_for(record, root_type)} "
             f"({len(record.skeletons[root_type])} nodes)"
         )
 
@@ -570,7 +596,7 @@ def labeling_validate_command(package_dir: Path) -> None:
 
     try:
         record = validate_package(package_dir)
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, KeyError) as error:
         raise _labeling_error(error)
     click.echo(
         f"OK: {package_dir} is a valid labeling package "

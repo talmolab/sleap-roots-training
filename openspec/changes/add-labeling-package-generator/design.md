@@ -294,7 +294,35 @@ external-reference `.slp` (155 kB) and **0.61x** the source JPEG bytes — sleap
 smaller than the originals — and it lands inside the 170 MB - 1.2 GB band the eight published
 collections occupy, which is the corroboration the task asked for.
 
-### The monotonicity guarantee starts here, not retroactively
+### F3 revisited — nesting the *views* was the wrong way to buy Decision 6
+
+Recorded during the blocking review of #40, after 2.7 had shipped.
+
+2.7 answered F3 in both dimensions the same way: make the selection nested, so a wider run's
+output is a superset. For plants that is free — a prefix of a stable hash order. For views it
+cost coverage. Greedy farthest-point dispersion on a circle is nested by construction but
+uniform only at powers of two, and the shipped default is not one: `views_per_plant=3` gave
+`[1, 19, 37]`, which is 0°, 90°, 180°. **Half the cylinder never contributed ground truth**, at
+the default, in every package the change would have produced — while `docs/labeling-packages.md`
+said views were "dispersed around the full rotation". It also broke view geometry against the
+eight published collections, which undercuts the "new packages extend the existing corpus"
+rationale the skeleton table is justified by.
+
+Worse, the nesting it bought did not actually deliver what Decision 6 needs. `output_filename`
+embedded `frame_index` — the frame's *position* in the selection — so the view *set* nested while
+the *positions* did not: `..._age3_1.jpg` was view 19 at `views_per_plant=3` and view 10 at 5.
+Filename is the only key a labeler's returned corrections carry, so the re-derive-and-republish
+path could attach view 19's root traces to view 10's pixels, silently, with nothing in
+`validate_package` able to detect it. The property Decision 6 rests on was never nesting. It is
+that **a frame keeps its identity across selections**.
+
+**Decision.** Name the view in `output_filename` (`..._age3_view025.jpg`), and take view indices
+back to the uniform `total_views // n` step. Monotonicity is taken from the plant dimension
+alone, where it is free. Non-nested view sets are then safe by construction: a view selected
+before keeps its name and its pixels, and a view selected for the first time arrives under a name
+that has never existed. This costs the literal superset property for `--views-per-plant` and buys
+back full rotational coverage, geometry shared with the published collections, and a merge key
+that cannot lie. The guide states the narrower guarantee rather than the superset one.
 
 Worth stating plainly because Decision 6 reads as though it applies to what already exists: 2.7
 changes *which* plants and views a given seed selects. Widening is monotone **from this port
@@ -393,6 +421,12 @@ dimensions. Since Decision 6 depends on it, this change must make widening monot
 deviation: a stable ordering over an explicit key with the wider run taking a prefix-superset of the
 narrower one, rather than a fresh `.sample()` draw per `n`. Sequenced after the characterization
 tests, so the current behavior is on record first.
+
+**Superseded in the view dimension by "F3 revisited" above (blocking review of #40).** The plant
+half stands as written. The view half does not: nesting the views cost full rotational coverage,
+and it was never the property Decision 6 needed. What replaced it is `output_filename` naming the
+*view* rather than its position, so a frame keeps its identity across selections whether or not the
+view sets nest. Read that section before treating this paragraph as current.
 
 ## Decision 6: Continue-labeling is re-derive + republish
 

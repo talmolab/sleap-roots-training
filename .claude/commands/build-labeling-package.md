@@ -129,7 +129,8 @@ sleap-roots-training labeling select \
 ```
 
 Reads the QC-cleaned barcodes as the sampling pool, stratifies by `plant_age_days` ×
-`accession_id`, and picks evenly-dispersed rotational views. Deterministic and monotone.
+`accession_id`, and picks rotational views stepped evenly around the full rotation.
+Deterministic; see the re-derivation section below for what widening does and does not keep.
 
 **Record the parameters.** Step 2 needs them and writes them into the package.
 
@@ -198,8 +199,12 @@ files, and that each `.slp` is self-contained. This is what `publish-labels` run
 
 Re-derive and republish — do **not** edit or de-embed the published artifact. Re-fetch with
 `bloomctl download --experiment-id <id>`, re-run `select` with larger counts and the **same
-seed**, and `build --version v001` into a new directory. Selection is monotone, so the wider
-run is a superset of the narrower one.
+seed**, and `build --version v001` into a new directory. A curated filename names the view,
+so any frame that appears in both packages is the same image in both, and labels returned
+against the narrower one still attach correctly. Widening `--plants-per-group` keeps every
+plant the narrower run selected; widening `--views-per-plant` re-spaces the views evenly, so
+some earlier frames may not recur — they are not lost, just not re-requested, and their names
+are never reused for different pixels.
 
 The reason editing is not an option: `save_slp` restores an embedded package's original video
 only *if it is still available*, so a package whose sources have gone unreachable is capped at

@@ -9,11 +9,13 @@ are recoverable only by opening its ``.slp``.
 from __future__ import annotations
 
 import pytest
+from omegaconf import OmegaConf
 
 from sleap_roots_training.labeling.metadata import (
     PACKAGE_METADATA_FILENAME,
     PackageMetadata,
     PackageRecord,
+    Provenance,
     SelectionParameters,
     read_package_metadata,
     write_package_metadata,
@@ -244,3 +246,103 @@ def test_accession_ids_are_recorded_as_strings(tmp_path):
 def test_the_record_is_frozen():
     with pytest.raises(Exception):
         record().frame_count = 1
+
+
+# --------------------------------------------------------------------------------------
+# Blocking review of #40 — a wrong-typed value fails as a message, not a traceback
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key,bad,described",
+    [
+        # `tuple("primary")` explodes a bare string into individual characters, so this
+        # used to be rejected one letter at a time.
+        ("root_types", "primary", "a list of root types"),
+        # `in` against an int raises TypeError, which the CLI does not catch.
+        ("selection", 5, "a mapping"),
+        # `.items()` on a list raises AttributeError, which the CLI does not catch either.
+        ("skeletons", [], "a mapping of root type to nodes"),
+        ("accessions", "A3244", "a mapping"),
+    ],
+)
+def test_a_wrong_typed_metadata_value_names_the_key_and_the_expected_shape(
+    tmp_path, key, bad, described
+):
+    write_package_metadata(record(), tmp_path)
+    path = tmp_path / PACKAGE_METADATA_FILENAME
+    data = OmegaConf.to_container(OmegaConf.load(str(path)), resolve=False)
+    data[key] = bad
+    path.write_text(OmegaConf.to_yaml(OmegaConf.create(data)), encoding="utf-8")
+
+    with pytest.raises(ValueError) as excinfo:
+        read_package_metadata(tmp_path)
+
+    message = str(excinfo.value)
+    assert key in message and described in message
+
+
+def test_a_metadata_file_that_is_not_a_mapping_is_rejected(tmp_path):
+    write_package_metadata(record(), tmp_path)
+    (tmp_path / PACKAGE_METADATA_FILENAME).write_text("- a\n- b\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="expected a mapping"):
+        read_package_metadata(tmp_path)
+
+
+# --------------------------------------------------------------------------------------
+# Blocking review of #40 — provenance: what the package was selected *from*
+# --------------------------------------------------------------------------------------
+
+HASH_A = "a" * 64
+HASH_B = "b" * 64
+
+
+def provenance(**overrides) -> Provenance:
+    fields = {
+        "scans_csv_sha256": HASH_A,
+        "manifest_sha256": HASH_B,
+        "skeleton_table_sha256": "c" * 64,
+        "code_version": "abc1234",
+    }
+    fields.update(overrides)
+    return Provenance(**fields)
+
+
+def test_provenance_round_trips_through_the_metadata_file(tmp_path):
+    write_package_metadata(record(provenance=provenance()), tmp_path)
+
+    read_back = read_package_metadata(tmp_path).provenance
+
+    assert read_back == provenance()
+
+
+def test_a_package_written_before_provenance_existed_still_reads(tmp_path):
+    """Absent means "not recorded" — which is the state that made those packages opaque.
+
+    Failing to read them would make the eight published collections unreadable by the tool
+    meant to judge them, which is the opposite of what validation is for.
+    """
+    write_package_metadata(record(), tmp_path)
+
+    assert read_package_metadata(tmp_path).provenance is None
+
+
+@pytest.mark.parametrize(
+    "field", ["scans_csv_sha256", "manifest_sha256", "skeleton_table_sha256"]
+)
+def test_a_provenance_hash_that_is_not_a_sha256_is_named(field):
+    with pytest.raises(ValueError, match=field):
+        provenance(**{field: "not-a-hash"})
+
+
+def test_a_partial_provenance_block_is_rejected(tmp_path):
+    """Worse than none: it reads as though the package can be checked when it cannot."""
+    write_package_metadata(record(provenance=provenance()), tmp_path)
+    path = tmp_path / PACKAGE_METADATA_FILENAME
+    data = OmegaConf.to_container(OmegaConf.load(str(path)), resolve=False)
+    del data["provenance"]["skeleton_table_sha256"]
+    path.write_text(OmegaConf.to_yaml(OmegaConf.create(data)), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="skeleton_table_sha256"):
+        read_package_metadata(tmp_path)

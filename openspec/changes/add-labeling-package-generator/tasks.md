@@ -487,9 +487,11 @@ the scripts do.
          missing source is now an exception. The vault script returned `None` and printed the
          summary; the counts are a return value because 3.4's rule acts on them and log-text
          matching would be a poor foundation for it.
-      8. **Preserved deliberately:** `shutil.copy2` still overwrites, which keeps re-running the
-         step idempotent. Only the *silent* half of that behavior was a defect, and 3.5 removes it
-         at its source rather than by refusing to overwrite.
+      8. **Preserved deliberately:** re-running the step stays idempotent. Only the *silent* half
+         of that behavior was a defect, and 3.5 removes it at its source rather than by refusing to
+         overwrite. **Refined by 9.7.4:** the destination is now *replaced* rather than written
+         into, so an earlier run's orphans cannot survive — and the move is two renames rather than
+         a delete-then-rename, so a crash cannot leave the destination gone.
 
       **Recorded from sections 4–5 (`build_slp_project.py`, 2026-08-04).** All caller-visible:
       1. **`embed=True`** — the change #26 exists for (5.2). The vault script wrote an
@@ -510,8 +512,12 @@ the scripts do.
       4. **Fail-loud, all-or-nothing build** — a missing curated image, a scan with no predictions
          at all, or a requested root type with no frames each fail the build, and `output_dir` is
          created only after both projects are assembled (4.4, 4.5, 4.7, F1). Replaces warn-per-scan-
-         and-write-anyway. **Preserved deliberately:** a scan predicted for only *some* requested
-         root types still contributes and warns — a model finding no laterals is a result.
+         and-write-anyway. **Superseded by 9.6.1 (blocking review of #40):** a scan predicted for
+         only *some* requested root types used to contribute and warn, on the reasoning that "a
+         model finding no laterals is a result". It is now fatal — the written `.slp` was silently
+         shorter than the manifest, and the dropped frames are the ones the model failed on. The
+         cost of that reversal is recorded there: genuine absence and a prediction file that misses
+         the selected views are still indistinguishable to this code.
       5. **Skeleton lookup fails for unported crops** — `skeleton_for(species, root_type)` raises
          outside the hardcoded soybean pair rather than handing another species soybean's node
          counts (4.6). Section 6.6 replaces it with the committed table.
@@ -721,8 +727,273 @@ the scripts do.
 
 - [x] 9.1 `uv run openspec validate add-labeling-package-generator --strict` — **valid.**
 - [x] 9.2 `uv run pytest`, `uv run black --check src tests`, `uv run ruff check src tests`
-      **Green: 414 passed, 2 skipped**; `black --check` and `ruff check` clean over 51 files;
-      `uv lock --check` clean.
+      **Green: 512 passed, 2 skipped, 1 pre-existing failure**; `ruff check src` clean;
+      `uv lock --check` clean. The failure is `test_scripts.py::test_dump_reads_good_npz_and_
+      reports_corrupt`, which fails identically on `main` and is unrelated to this change.
+      *(Recorded count corrected during the blocking review of #40: this line previously read
+      "414 passed, 2 skipped", which did not reproduce. Note `pytest -m "not integration"` — what
+      CI runs — gives 508 passed, 7 deselected, so a green CI is not a green suite.)*
+
+- [x] 9.6 **Blocking review of #40** — two `CHANGES_REQUESTED` reviews, ten distinct blocking
+      findings, all fixed here with a RED test each. Grouped by what they were:
+      1. **Silent data loss.** A scan whose predictions miss the selected views warned and
+         succeeded, so the written `.slp` was shorter than the manifest — and the dropped frames
+         are exactly the ones the model failed on, biasing every retrain round toward what it
+         already gets right. Now fatal (`build_package`), and `validate_package` opens each
+         project and counts its frames, which `frame_count` never was: it was set from
+         `len(manifest)` and compared against that same manifest copied into the package.
+      2. **The selector's own output was rejected.** The `views_per_plant` invariant grouped by
+         `plant_qr_code` when it is per *scan*, so every multi-age experiment failed with "these
+         parameters did not produce this manifest" when they had. Same wrong grouping in the
+         README renderer.
+      3. **Silent sampling bias.** `groupby` defaults to `dropna=True`, so a plant with a blank
+         `accession_id` — which the operator doc's own Phase 0 left-join produces — left the pool
+         with no error and no log line.
+      4. **Frame identity.** Recorded above as "F3 revisited" in design.md.
+      5. **Path safety.** `output_filename` reached `shutil.copy2` unvalidated and wrote outside
+         the staging directory, where the failure path's `rmtree` could not remove it; the
+         absolute-path guards used `PurePosixPath.is_absolute()`, which is `False` for a Windows
+         drive letter; `..` was not rejected on the read side.
+      6. **Empty and malformed input.** An empty selection reported success through two stages and
+         died in the third as `cannot convert float NaN to integer`; case-only filename collisions
+         passed a byte-exact uniqueness check and lost a frame on macOS; unvalidated columns
+         escaped the CLI's `except (OSError, ValueError)` as bare `KeyError` tracebacks.
+      7. **A test that verified nothing.** `test_an_absolute_source_path_is_rejected_rather_than_
+         mangled` passed because `match="absolute"` searched a message embedding `tmp_path`, whose
+         basename pytest derives from the test's own name — leaving *both* absolute-path guards
+         unreached by the entire suite. Fault injection now confirms 5 tests go red without them.
+         Two further uncovered guards (the rice age-straddle raise, the builder's column checks)
+         got tests too.
+
+- [x] 9.7 **Blocking review of #40, "Important" findings** — the second tier of the same two
+      reviews, all sixteen addressed with tests.
+      1. **Re-derivability (new `provenance` block).** The metadata recorded the parameters and
+         nothing identifying what they were applied *to*, and the prefix-of-a-stable-order rule
+         is only monotone against a byte-identical pool — verified: 10 plants at
+         `plants_per_group=3` seed 42 give `['P00','P08','P09']`, and adding 5 more give
+         `['P08','P09','P10']`, not a superset. `package_metadata.yaml` now carries the
+         `scans.csv` and manifest hashes, the skeleton-table hash, and the code version
+         (`registry/lineage`'s resolver). Optional on read, so the eight published collections
+         stay readable. This is also what finally **wires `skeleton_table_sha256`**, which was
+         dead code whose docstring claimed it was already wired.
+      2. **Skeleton table.** A pair carrying both an age-agnostic and an age-split row loaded
+         cleanly while `lookup_skeleton` returned the agnostic one before consulting the age,
+         making the split rows unreachable — now rejected at parse. Rows carry `verified:`, so
+         the header's VERIFIED / TRANSCRIBED-NOT-VERIFIED distinction is machine-readable and a
+         lookup against an unverified count warns. A node-count mismatch now names the species,
+         the skeleton, both counts, and the table, instead of numpy's `could not broadcast input
+         array from shape (6,) into shape (4,)`.
+      3. **`layout.py`.** The layout constants and `project_filename` lived in the *validator*,
+         so every writer imported the checker — which is how `project_filename` came to be
+         duplicated in `build_slp_project` a few lines from the docstring claiming it was
+         "stated once". Extracted; both defects fixed together.
+      4. **Delivery robustness.** `.DS_Store` in `images/` failed a correct package and blamed
+         the manifest (packages ship via Box and open on macOS); sidecars are filtered and the
+         set comparisons now run before the cardinality check, which also unshadows the
+         `unclaimed` branch that was unreachable in practice. The copy loop is transactional —
+         a mid-loop `ENOSPC` left a partial `images/` — and replaces rather than merges into
+         its destination, so an earlier run's orphans cannot survive. `package.py`'s
+         `staging.rename` moved inside the `try` (a failed rename orphaned a full package
+         permanently), no longer silently replaces an appearing destination, logs when cleanup
+         fails, and dropped the leading dot so a leak is visible to `ls`.
+      5. **Silent-bias and usability.** `--plants-per-group 0` / `-1` reached `ordered[:n]` and
+         silently selected nothing or "all but N"; all three count options are now
+         `click.IntRange(min=1)`. An incomplete `--accession-names` map was accepted at select
+         and rejected at build, where fixing it renames every file — now rejected at select, and
+         both entry points coerce keys the same way. An all-NaN predicted instance shipped as a
+         real label (the labeler opened a frame with an invisible instance); partially-NaN
+         instances are kept, since an occluded lateral root is real data and no fixture covered
+         it. `posix_path` is one shared function instead of two inlined copies.
+      6. **Malformed input.** `root_types: "primary"` was exploded into characters before
+         rejection; `selection: 5` raised `TypeError` and `skeletons: []` raised
+         `AttributeError`, neither caught by the CLI. All now name the key and the expected
+         shape. Same for a malformed skeleton table.
+      7. **The fences themselves.** The doc-drift guard covered only `required=True` options, so
+         a new optional one could go undocumented forever — and the interesting options here
+         (`--seed`, `--views-per-plant`, `--accession-names`) are all optional. The Decision-7
+         verification test was gated behind `pytest.mark.integration` *and* an env var nothing
+         set, so it never ran; `.github/workflows/verify-skeleton-table.yml` now runs it weekly
+         and on any push touching the table (**needs a `WANDB_API_KEY` repo secret** — it
+         reports a clear skip without one). Coverage was collected and discarded; CI now gates
+         at `--cov-fail-under=95` against a measured 97%. Six test-module-to-test-module imports
+         are gone: the shared builders live in `conftest.py`, so adding `tests/__init__.py` or
+         changing pytest's import mode no longer breaks four files at once.
+
+- [x] 9.8 **Second review pass — the five subagent reviewers re-run against 9.6/9.7.** Worth
+      recording separately because most of what it found was introduced *by* those fixes.
+      1. **The uniform view step did not cover the rotation.** `total_views // views_per_plant`
+         truncates, and the truncation lands entirely in the last arc: 25 views of 72 gave
+         `[1, 3 .. 49]` and never sampled 50-72; 37 left 175° unsampled. That is the exact
+         half-cylinder defect 9.7's "F3 revisited" reverted greedy dispersion to fix, reintroduced
+         at a different parameter — and the test guarding it parametrized
+         `[1,2,3,4,5,6,8,9,12,24,72]`, every value but 5 a divisor of 72, so it only ever ran where
+         the property held. Now `(index * total_views) // views_per_plant`, which holds every
+         circular gap to within one view; the test runs all 72 counts and asserts `max-min <= 1`
+         (the old tolerance, `TOTAL_VIEWS // count`, permitted a 24-view spread at n=3).
+      2. **`provenance.cleaned_csv_sha256` held the manifest's hash.** A published key that lies is
+         worse than the absent block it replaced — a consumer hashing their own `10_final_data.csv`
+         would get a guaranteed mismatch and conclude they had the wrong pool. Renamed to
+         `manifest_sha256`, and the QC pool is now recorded as an explicit known gap: `build` never
+         receives `--cleaned-csv`, so there is nothing there to hash.
+      3. **The copy step could `rmtree` an arbitrary path.** 9.7.4 made the destination replaced
+         rather than merged into, and `--output-dir` is a free path from the CLI, so a mistyped
+         value would delete that tree. It must now be absent, or hold nothing but curated images.
+         The move is also two renames instead of delete-then-rename, so a crash cannot leave the
+         destination gone and the finished copy under a temp name.
+      4. **Three stale guarantees and one dead branch.** `specs/labeling-package/spec.md` still
+         *required* the superset property 9.7 gave up — the normative delta, and the one document
+         #10 would treat as binding; it now states the filename-identity guarantee and a
+         full-rotation-coverage scenario instead. `labeling/__init__.py` and
+         `.claude/commands/build-labeling-package.md` (the checklist an operator actually follows)
+         both still promised it. The builder's "no labeled frames for root type X" raise became
+         unreachable when 9.6.1 promoted the per-scan check, and was removed rather than left to
+         read as coverage that is not there.
+      5. **Crash-safety code was untested, which is where it always hides.** `_move_into_place`'s
+         TOCTOU re-check, `_discard`'s "could not remove staging" log, `_replace_directory`'s
+         rollback, and `cli._labeling_error`'s `KeyError` backstop all had no test; fault injection
+         confirmed removing them changed nothing. All four now have one. `package.py` and
+         `build_package.py` are at 100% line coverage, the suite at 97.5%.
+      6. **`accession_id` was left raw while `plant_age_days` was cast**, so one null anywhere in
+         the column typed it `float64` and rendered `100.0_A2_age3_view001.jpg` into every curated
+         filename — the same one-bad-cell comparability break the age cast exists to prevent. One
+         `_accession_key` rule now normalizes for both the coverage check and the filename.
+
+- [x] 9.9 **A frame the model found nothing in ships empty** — closing the largest open item from
+      9.8, and reversing the part of 9.6.1 that overshot.
+
+      9.6.1 made a scan contributing no labels for a declared root type fatal, which was right for
+      the case it was written for and wrong for the case it could not distinguish. `if instances:`
+      gated whether a `LabeledFrame` was created at all, so a frame the model evaluated and found
+      nothing in produced *no frame object* — byte-identical, downstream, to a frame the prediction
+      file never covered. A 3 DAG soybean with genuinely no lateral roots therefore failed the
+      build exactly like predictions covering the wrong views, and the two recourses the error
+      named were "re-run prediction" or "drop the root type" — the second reintroducing, at package
+      granularity, the very bias the check exists to prevent. Laterals would get labeled only where
+      the model already finds them.
+
+      The distinction was available in the loop and thrown away: a matching `pred_lf` exists, or it
+      does not. Now:
+      * **matched, instances located** → frame with instances, as before;
+      * **matched, nothing located** → frame with `instances=[]`. The labeler opens it, confirms
+        the absence, and that confirmation is ground truth the corpus had no way to express.
+        `embed=True` embeds the pixels regardless, so the frame is openable;
+      * **no match** → still fatal, and the message now says what it actually detects
+        ("predictions do not cover every selected view") rather than "contributes no labels";
+      * **a declared root type empty in every frame of every scan** → fatal. This is what the
+        removed per-root-type guard was reaching for, and it is reachable again now that empty
+        frames are written.
+
+      This also closes the granularity mismatch 9.8 found between the two checks: the builder
+      tracked contribution per *scan* while `assert_project_holds_every_declared_frame` counts per
+      *frame*, so a scan whose model found laterals in one of three views passed the build and then
+      failed validation — after the whole staging directory had been assembled, with a message
+      blaming the model for what may be a plant with no laterals. Both are now "one frame per
+      manifest row, per declared root type", which is also what `spec.md` requires. The labeler-
+      facing README says an empty frame is deliberate and what to do with it, since a labeler who
+      assumes it is a bug will either skip it or invent a root.
+
+- [x] 9.10 **The four items 9.8 left open.**
+      1. **Predictions are checked for node *order*, not just count** (`rebuild_instance`). The
+         rebind is positional — point *i* becomes node *i* — so a model emitting the chain
+         tip-first was rebound to `r1..rN` base-first without complaint, reversing every root
+         angle and every base/tip anchoring in the ground truth that came back. The docstring had
+         promised "the same node names in the same order" the whole time; only the count was
+         enforced. Worth stating what makes this the worst of the four: the labeler sees plausible
+         points and corrects their *positions*, so the corruption survives labeling.
+      2. **Stratification no longer leaks across strata.** Per-group selections were unioned into
+         one flat set and then applied to the whole table by barcode, so a plant selected in
+         (age 3, accession A) pulled in every scan it had at every other age — whether or not
+         (age 7, accession A) selected it. A no-op when the plant set is identical at every age,
+         which is why every fixture in the suite missed it: each gave a barcode exactly one age.
+         The plants double-counted are the ones present in more groups, i.e. the survivors, and
+         survivorship correlates with vigor — so the label set skewed toward healthy plants while
+         the README and metadata reported the *requested* `plants_per_group`. Each group now keeps
+         only its own rows, and groups smaller than the request are logged rather than silently
+         taken whole. A longitudinal fixture (four plants at both ages, four more at one) covers
+         it, and fault injection confirms it goes red against the old behaviour.
+      3. **`provenance.prediction_models` records what seeded the starting points.** Labelers
+         anchor on the predictions — the README calls them starting points — so the predicting
+         model is a confounder in the ground truth, and two packages built from different models
+         were indistinguishable in the artifact. The builder's file choice (`sorted`, first match)
+         is now `prediction_file_for`, used by both the reader and the recorder, so provenance
+         cannot name a file the build did not read.
+      4. **An embed that will not fit in memory fails before the allocation.** `save_slp(embed=True)`
+         accumulates every encoded frame in RAM, measured at ~1:1 with the payload; the published
+         collections reach 1.2 GB and Decision 6 multiplies that. The kill is SIGKILL, so no
+         `except` runs, `package.py`'s staging cleanup never happens, and a full package's worth of
+         bytes is left behind — making the staging directory visible (9.7.4) helps a human *find*
+         that, not prevent it. `EMBED_PAYLOAD_CEILING_BYTES` defaults to 2 GiB, checked per project
+         before `output_dir` is created, overridable via `SLEAP_ROOTS_LABELING_EMBED_CEILING_BYTES`.
+
+      **Two of the three "still open" items recorded here were overstated, and the record is
+      corrected rather than quietly amended.**
+      * *"`lookup_skeleton` re-parsing is better fixed with a measurement in hand"* — the
+        measurement already existed (the review supplied ~6.5 ms/call), and the fix was two
+        lines. **Closed in 9.11.**
+      * *"the QC pool needs a contract change #10 should weigh in on"* — it does not.
+        `--cleaned-csv` is a `select`-only option today; adding it as an *optional* flag on
+        `build` plus an optional provenance field changes no contract and invalidates no existing
+        package. The real question is only whether `build` should re-read an input it does not
+        otherwise need — a judgment call, not a dependency. **Still open, now for the honest
+        reason.** Verifying the recorded `seed` has the same root cause: `build` cannot
+        reconstruct the QC-clean pool, so it cannot re-run `select_plants` to confirm it.
+
+      **Recorded here as "genuinely blocked", and that was wrong.** The claim was that
+      `bloom_experiment_id` could not be corroborated from the inputs at all. It can: the
+      pipeline's `sleap_traits_*.csv` carries `experiment_id` as a **per-row** column (10102496
+      across all 372 rows of the WEEP export, zero nulls) alongside `experiment_name`
+      (`WEEP_Soybean`) and per-row `scan_id`. That is not merely readable, it is *checkable* —
+      every `scan_id` in the manifest can be confirmed to belong to the declared experiment,
+      which is a stronger check than reading a constant. The operator doc's `head -2 scans.csv`
+      idiom (`build-labeling-package.md:76`) implies the same shape — a constant column readable
+      from the first data row — which is weak corroboration that line 76 describes something real
+      rather than guessing. The limit was asserted without looking at the file that had the
+      answer. **Closed by 9.12.**
+
+      A related claim in the same breath was also wrong and is worth correcting because it says
+      something false about Bloom: that scan `10103578` was "unrelated" to experiment `10102496`.
+      It is not — `10103578` appears in the WEEP export as both a `scan_id` and a `plant_id`
+      within experiment `10102496`. All 197 `plant_id`s and both `wave_id`s in that file are also
+      `scan_id`s, so **Bloom mints scans, plants and waves from one shared integer sequence**. The
+      point being made survives and gets sharper: adjacency between two Bloom ids carries no
+      information, and the same integer denotes different entity *types* depending on the column
+      it sits in — so an experiment id can never be derived from a scan id. "Unrelated" claimed
+      something different, and false.
+
+      **Scoped out to `add-labeling-experiment-verification`** rather than grown into this change:
+      reading a Bloom export is a new input and a new CLI surface, and this change is complete and
+      green across 26 review findings. The follow-up carries the correction, the per-scan
+      cross-check (stronger than reading a constant — it also catches a manifest assembled from two
+      experiments), and one finding worth flagging early: the export's `genotype` column is **not**
+      the accession name, so `--accession-names` remains the manual Bloom lookup design.md F2
+      describes. That guess is natural — it would have retired a `psql` call against a hardcoded
+      host with a password read from a `.env` — and was checked rather than assumed.
+
+      **A real design tension, not a wait:** the manifest is parsed at five sites in one build.
+      The stages take *paths* on purpose (task 3.6 keeps them separate modules that do not know
+      each other's internals); threading a loaded DataFrame through them couples the stages
+      exactly where the design holds them apart, to save re-reading a KB-scale CSV. Left as is
+      deliberately, and recorded so it stops resurfacing as an unexplained inefficiency.
+
+- [x] 9.11 **Memoized the skeleton table.** `load_skeleton_table` re-read and re-validated the
+      committed YAML on every call, and `skeleton_for` calls `lookup_skeleton` once per age from
+      both the builder and the orchestrator. Measured **257 ms -> 1.8 ms** across the ~40 calls a
+      10-age two-root-type build makes.
+
+      The cache key is the file's **content hash**, not its path and not `(mtime_ns, size)`. The
+      first attempt used the latter and was wrong in a way worth recording: the realistic edit to
+      this table is one digit of a `node_count`, which leaves the size unchanged, and filesystem
+      timestamp granularity is coarser than the gap between two writes in a script. It passed
+      run in isolation and failed in the full suite — the staleness test caught the fix's own
+      defect. Hashing a few KB costs microseconds against a 6.5 ms parse, so correctness was
+      close to free. Three tests pin it: parsed once across repeated lookups, re-read after an
+      in-place edit, and the cached rows immutable so no caller can write through a shared value.
+
+      **Not addressed at the time, all since closed:** the `save_slp(embed=True)` RSS ceiling,
+      cross-strata selection leakage, `rebuild_instance` checking node *count* but not *order*, and
+      the predicting model going unrecorded — **all four closed by 9.10**. Genuine absence vs. a
+      prediction file that misses the selected views is **closed by 9.9**. What remains open is
+      listed at the end of 9.10.
 - [x] 9.2a **Checked the validator against the real published package**, not only fixtures
       (`~/data/weep`, the 1 GB WEEP package section 5.4 used). Three things confirmed on real data:
       * `labeling validate` **rejects it**, naming `package_metadata.yaml` — correct, and the reason

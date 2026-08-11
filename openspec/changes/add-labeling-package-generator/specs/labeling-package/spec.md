@@ -99,18 +99,39 @@ at the frames embedded at repair time.
 
 Sample selection SHALL be deterministic: the same inputs and the same selection parameters SHALL
 yield the same frames, and the selected frames SHALL be recoverable from `sample_manifest.csv` alone.
-Determinism is what makes re-deriving a widened package a superset of the original rather than a
-different label set.
+
+A selected frame SHALL be identified by `output_filename` independently of the parameters that
+selected it: the same view of the same plant at the same age SHALL receive the same
+`output_filename` at every `views_per_plant`, and a view not previously selected SHALL receive a
+name no earlier selection used. This — not a superset of frames — is what makes a re-derived
+package safe to merge with labels returned against a narrower one, since `output_filename` is the
+only key a labeler's corrections carry.
+
+Widening `plants_per_group` SHALL yield a superset of the narrower selection's plants. Widening
+`views_per_plant` re-spaces the views evenly over the rotation and is NOT required to yield a
+superset; see design.md "F3 revisited" for why nesting the view dimension was given up.
 
 #### Scenario: Re-running selection reproduces the same frames
 
 - **WHEN** selection runs twice over the same inputs with the same parameters
 - **THEN** both runs select the same frames in the same order
 
-#### Scenario: A widened re-run is a superset
+#### Scenario: A curated filename names the same image at every width
 
-- **WHEN** selection re-runs over the same inputs with a larger requested frame count
-- **THEN** the resulting selection contains every frame the narrower run selected
+- **WHEN** selection re-runs over the same inputs with a different `views_per_plant`
+- **THEN** every `output_filename` present in both runs refers to the same view of the same plant,
+  and every newly selected view receives a name the narrower run did not use
+
+#### Scenario: A widened plant count is a superset
+
+- **WHEN** selection re-runs over the same inputs with a larger `plants_per_group`
+- **THEN** the resulting selection contains every plant the narrower run selected
+
+#### Scenario: Selected views cover the whole rotation
+
+- **WHEN** selection runs with any `views_per_plant` between 1 and `total_views`
+- **THEN** the selected views are spread around the full rotation, with no arc left unsampled
+  wider than the spacing between adjacent selected views
 
 ### Requirement: Build Fails Before Producing A Partial Package
 

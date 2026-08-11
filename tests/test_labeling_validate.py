@@ -22,11 +22,15 @@ import shutil
 import pytest
 import sleap_io as sio
 
-from conftest import write_jpeg
-from test_labeling_build_package import (
+from conftest import (
+    FRAME_COUNT,
     METADATA,
+    SKELETONS,
     build_inputs,
+    complete_package,
     manifest_rows,
+    package_record,
+    write_jpeg,
     write_manifest,
 )
 from sleap_roots_training.labeling import select_samples as ss
@@ -38,46 +42,6 @@ from sleap_roots_training.labeling.metadata import (
     write_package_metadata,
 )
 from sleap_roots_training.labeling.validate import validate_package
-
-#: The fixture's two scans x three views.
-FRAME_COUNT = 6
-
-SKELETONS = {
-    "primary": ("r1", "r2", "r3", "r4", "r5", "r6"),
-    "lateral": ("r1", "r2", "r3", "r4"),
-}
-
-
-def package_record(**overrides) -> PackageRecord:
-    """Build the record describing the fixture package, stating only the deviation."""
-    fields = {
-        "metadata": METADATA,
-        "bloom_experiment_id": 10102496,
-        "accessions": {"12742739": "A3244", "12742740": "WEEP-1-4"},
-        "selection": SelectionParameters(
-            seed=42, plants_per_group=5, views_per_plant=3, total_views=72
-        ),
-        "frame_count": FRAME_COUNT,
-        "skeletons": SKELETONS,
-        "version": "v000",
-    }
-    fields.update(overrides)
-    return PackageRecord(**fields)
-
-
-def complete_package(tmp_path, rows=None, record=None):
-    """Hand-assemble a package that passes: images, manifest, projects, metadata.
-
-    Mirrors what a correct build produces without going through one, so a validation test
-    that fails is a statement about the validator rather than about the builder.
-    """
-    manifest_csv, images_dir, predictions_dir, package_dir = build_inputs(
-        tmp_path, rows=rows
-    )
-    build_slp_project(manifest_csv, images_dir, predictions_dir, package_dir, METADATA)
-    shutil.copy2(manifest_csv, package_dir / "sample_manifest.csv")
-    write_package_metadata(record or package_record(), package_dir)
-    return package_dir
 
 
 def test_a_complete_package_validates(tmp_path):
@@ -164,6 +128,52 @@ def test_a_declared_frame_count_that_disagrees_reports_both_numbers(tmp_path):
     assert "99" in message and str(FRAME_COUNT) in message
 
 
+def test_a_project_shorter_than_the_declared_count_is_rejected(tmp_path):
+    """RED against the port: ``frame_count`` was only ever compared against itself.
+
+    The builder set ``frame_count=len(manifest)`` and the count check compared it against
+    the manifest *that same builder copied into the package* — the same number on both
+    sides, so for any builder-produced package it could never fail no matter how short the
+    ``.slp`` files were. Nothing in validation opened the projects to count frames.
+
+    A short project is the on-disk signature of frames dropped during the build, which are
+    the frames the model failed on. The package is hand-shortened here for the reason the
+    module docstring gives: the guarantee has to hold for a package built by an older tool
+    or assembled by a person, not only for one this repo just wrote.
+    """
+    package_dir = complete_package(tmp_path)
+    lateral = package_dir / "soybean_weep_lateral_labels.v000.slp"
+    labels = sio.load_slp(str(lateral))
+    labels.labeled_frames = labels.labeled_frames[:-1]
+    labels.update()
+    # Written beside the original and moved into place: re-embedding reads the frames back
+    # out of the file being replaced, so saving over it in place cannot work.
+    shortened = lateral.with_name("shortened.slp")
+    sio.save_slp(labels, str(shortened), embed=True, verbose=False)
+    shortened.replace(lateral)
+
+    with pytest.raises(ValueError, match="labeled frame") as excinfo:
+        validate_package(package_dir)
+
+    message = str(excinfo.value)
+    assert str(FRAME_COUNT) in message and str(FRAME_COUNT - 1) in message
+    assert "lateral" in message
+
+
+def test_a_complete_package_still_validates_after_the_frame_count_check(tmp_path):
+    # The positive control for the check above: it must not reject a correct package,
+    # where every declared root type's project carries one frame per manifest row.
+    package_dir = complete_package(tmp_path)
+
+    record = validate_package(package_dir)
+
+    for root_type in record.metadata.root_types:
+        labels = sio.load_slp(
+            str(package_dir / f"soybean_weep_{root_type}_labels.v000.slp")
+        )
+        assert len(labels.labeled_frames) == record.frame_count
+
+
 def test_a_curated_image_count_that_disagrees_reports_both_numbers(tmp_path):
     """The mismatch the README reported only as prose (F7), now an error.
 
@@ -178,8 +188,8 @@ def test_a_curated_image_count_that_disagrees_reports_both_numbers(tmp_path):
     with pytest.raises(ValueError) as excinfo:
         validate_package(package_dir)
 
-    message = str(excinfo.value)
-    assert str(FRAME_COUNT - 1) in message and str(FRAME_COUNT) in message
+    # The file, not just the two numbers: naming it is what makes the error actionable.
+    assert dropped.name in str(excinfo.value)
 
 
 def test_an_extra_curated_image_is_also_a_mismatch(tmp_path):
@@ -190,7 +200,27 @@ def test_an_extra_curated_image_is_also_a_mismatch(tmp_path):
     with pytest.raises(ValueError) as excinfo:
         validate_package(package_dir)
 
-    assert str(FRAME_COUNT + 1) in str(excinfo.value)
+    # This branch was unreachable while the cardinality check ran first: an unclaimed file
+    # always changes the count too, so the less useful of the two errors always won.
+    assert "not_in_the_manifest.jpg" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "sidecar", [".DS_Store", "Thumbs.db", "desktop.ini", "._A3244_9DK8KJJEZR.jpg"]
+)
+def test_an_operating_system_sidecar_does_not_fail_a_valid_package(tmp_path, sidecar):
+    """RED against the port: one Finder visit rejected a correct package.
+
+    Packages ship over Box and are opened on macOS, so a ``.DS_Store`` in ``images/`` is
+    routine. It used to fail validation with "images/ holds 7 file(s) but
+    sample_manifest.csv has 6 row(s)" — blaming the manifest for a file it has nothing to
+    do with. ``tests/test_registry_models.py`` already filters these names for the same
+    reason.
+    """
+    package_dir = complete_package(tmp_path)
+    (package_dir / "images" / sidecar).write_bytes(b"\x00")
+
+    assert validate_package(package_dir).frame_count == FRAME_COUNT
 
 
 def test_a_manifest_row_whose_image_is_absent_is_named(tmp_path):

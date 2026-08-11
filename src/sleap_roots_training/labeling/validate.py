@@ -21,21 +21,50 @@ from pathlib import Path
 import pandas as pd
 import sleap_io as sio
 
+from sleap_roots_training.labeling.layout import (
+    IMAGES_DIRNAME,
+    MANIFEST_FILENAME,
+    is_sidecar,
+    project_filename_for,
+)
 from sleap_roots_training.labeling.metadata import PackageRecord, read_package_metadata
 from sleap_roots_training.labeling.select_samples import (
     MANIFEST_COLUMNS,
     assert_unique_output_filenames,
 )
 
-#: The manifest's name inside a package. Part of Decision 3's layout contract.
-MANIFEST_FILENAME = "sample_manifest.csv"
+#: Re-exported so ``from ...validate import MANIFEST_FILENAME`` keeps working; the layout
+#: contract itself lives in :mod:`sleap_roots_training.labeling.layout`, which the writers
+#: import instead of importing the checker.
+__all__ = [
+    "IMAGES_DIRNAME",
+    "MANIFEST_FILENAME",
+    "assert_project_holds_every_declared_frame",
+    "assert_slp_is_self_contained",
+    "assert_counts_agree",
+    "project_filename_for",
+    "slp_is_self_contained",
+    "validate_package",
+]
 
-#: The curated images directory. Task 5.5 keeps it in the package: the spec's one-to-one
-#: requirement is checked against it, and ``output_filename`` resolves to nothing without it.
-IMAGES_DIRNAME = "images"
+
+def _load_project(slp_path: Path) -> sio.Labels:
+    """Load a project's metadata without opening its videos.
+
+    ``open_videos=False`` so an already-broken package is diagnosable rather than raising
+    on the very dependency being checked, and so validation reads metadata rather than
+    pixel data.
+
+    Args:
+        slp_path: Path to the ``.slp`` file.
+
+    Returns:
+        The loaded labels.
+    """
+    return sio.load_slp(str(slp_path), open_videos=False)
 
 
-def _external_references(slp_path: Path) -> list[str]:
+def _external_references(slp_path: Path, labels: sio.Labels | None = None) -> list[str]:
     """Return the external video paths a ``.slp`` depends on.
 
     A video whose frames are embedded records the ``.slp`` itself as its filename; the
@@ -44,13 +73,14 @@ def _external_references(slp_path: Path) -> list[str]:
 
     Args:
         slp_path: Path to the ``.slp`` file.
+        labels: The already-loaded project, when the caller has one. Passed so
+            :func:`validate_package` opens each file once rather than once per check.
 
     Returns:
         The external paths referenced, empty if the file is self-contained.
     """
-    # `open_videos=False` so an already-broken package is diagnosable rather than raising
-    # on the very dependency being checked.
-    labels = sio.load_slp(str(slp_path), open_videos=False)
+    if labels is None:
+        labels = _load_project(slp_path)
     external: list[str] = []
     for video in labels.videos:
         filenames = (
@@ -73,17 +103,20 @@ def slp_is_self_contained(slp_path: Path) -> bool:
     return not _external_references(slp_path)
 
 
-def assert_slp_is_self_contained(slp_path: Path) -> None:
+def assert_slp_is_self_contained(
+    slp_path: Path, labels: sio.Labels | None = None
+) -> None:
     """Fail if a ``.slp`` depends on images stored outside it.
 
     Args:
         slp_path: Path to the ``.slp`` file.
+        labels: The already-loaded project, when the caller has one.
 
     Raises:
         ValueError: If any video references an external path, naming the file and the
             paths it depends on.
     """
-    external = _external_references(slp_path)
+    external = _external_references(slp_path, labels)
     if not external:
         return
     listed = "\n  ".join(external[:10])
@@ -95,23 +128,6 @@ def assert_slp_is_self_contained(slp_path: Path) -> None:
         "permanently caps the label set at whatever was embedded at repair time. Rebuild "
         "it rather than publishing it."
     )
-
-
-def project_filename(record: PackageRecord, root_type: str) -> str:
-    """Return the ``.slp`` filename a package's root type is written under.
-
-    The builder's naming, stated once so validation looks for the same file the builder
-    wrote rather than for a glob that would accept a near-miss.
-
-    Args:
-        record: The package record.
-        root_type: The root type.
-
-    Returns:
-        The filename, e.g. ``soybean_weep_primary_labels.v000.slp``.
-    """
-    meta = record.metadata
-    return f"{meta.species}_{meta.experiment}_{root_type}_labels.{record.version}.slp"
 
 
 def _assert_layout(package_dir: Path, record: PackageRecord) -> dict[str, Path]:
@@ -142,7 +158,7 @@ def _assert_layout(package_dir: Path, record: PackageRecord) -> dict[str, Path]:
         )
     projects = {}
     for root_type in record.metadata.root_types:
-        path = package_dir / project_filename(record, root_type)
+        path = package_dir / project_filename_for(record, root_type)
         if not path.is_file():
             raise ValueError(
                 f"{package_dir} declares root type {root_type!r} but has no "
@@ -185,6 +201,17 @@ def assert_counts_agree(
     way ``assert_unique_output_filenames`` is shared between selection and the copy step
     (task 3.5) — two rules that agree today are two rules that can drift.
 
+    Operating-system sidecars are ignored (deviation, blocking review of #40). Packages are
+    delivered over Box and opened on macOS, so one Finder visit writes a ``.DS_Store`` into
+    ``images/`` — which used to fail the package with *"images/ holds 7 file(s) but
+    sample_manifest.csv has 6 row(s)"*, blaming the manifest for a file it has nothing to
+    do with, on a package that was entirely correct.
+
+    The set comparisons run **before** the cardinality check for the same reason. Naming
+    the offending files is strictly more useful than reporting two numbers, and while the
+    count was checked first the ``unclaimed`` branch below could not be reached at all: any
+    unclaimed file also changes the count.
+
     Args:
         package_dir: The package directory.
         manifest: The loaded manifest.
@@ -210,14 +237,12 @@ def assert_counts_agree(
         )
 
     images_dir = package_dir / IMAGES_DIRNAME
-    on_disk = {path.name for path in images_dir.iterdir() if path.is_file()}
+    on_disk = {
+        path.name
+        for path in images_dir.iterdir()
+        if path.is_file() and not is_sidecar(path.name)
+    }
     named = set(manifest["output_filename"])
-    if len(on_disk) != rows:
-        raise ValueError(
-            f"{IMAGES_DIRNAME}/ holds {len(on_disk)} file(s) but {MANIFEST_FILENAME} has "
-            f"{rows} row(s). Every row corresponds to exactly one curated image and every "
-            "curated image to exactly one row."
-        )
     absent = sorted(named - on_disk)
     if absent:
         listed = "\n  ".join(absent[:10])
@@ -232,12 +257,64 @@ def assert_counts_agree(
         more = f"\n  ... and {len(unclaimed) - 10} more" if len(unclaimed) > 10 else ""
         raise ValueError(
             f"{len(unclaimed)} file(s) in {IMAGES_DIRNAME}/ are named by no manifest row:"
-            f"\n  {listed}{more}"
+            f"\n  {listed}{more}\nEvery curated image corresponds to exactly one manifest "
+            "row. A file nothing names is either a leftover from an earlier run or a "
+            "manifest that was edited after the copy step."
+        )
+    # Reached only when the two sets are equal, so this catches the one thing they cannot:
+    # a manifest naming the same file twice, which `assert_unique_output_filenames` also
+    # rejects. Kept as a backstop rather than removed — the numbers must agree.
+    if len(on_disk) != rows:
+        raise ValueError(
+            f"{IMAGES_DIRNAME}/ holds {len(on_disk)} file(s) but {MANIFEST_FILENAME} has "
+            f"{rows} row(s). Every row corresponds to exactly one curated image and every "
+            "curated image to exactly one row."
         )
 
 
+def assert_project_holds_every_declared_frame(
+    labels: sio.Labels, slp_path: Path, root_type: str, frame_count: int
+) -> None:
+    """Fail if a project carries fewer labeled frames than the package declares.
+
+    Deviation (blocking review of #40). This is the check that makes ``frame_count`` mean
+    something. The builder set it to ``len(manifest)`` and :func:`assert_counts_agree`
+    compared it against the manifest *copied into the package by that same builder* — the
+    same number on both sides of the comparison, so for any builder-produced package that
+    check could never fail, however short the ``.slp`` files were.
+    :attr:`PackageRecord.frame_count`'s own docstring says it is "declared, so validation
+    can disagree with the manifest rather than trusting it", which is what this does and
+    that comparison did not.
+
+    It is also what the change's spec asks for — ``sample_manifest.csv`` has exactly one
+    data row per labeled frame — checked against the labels rather than against the
+    manifest's own row count.
+
+    Args:
+        labels: The loaded project.
+        slp_path: Its path, for the error message.
+        root_type: The root type it holds.
+        frame_count: The count the package declares.
+
+    Raises:
+        ValueError: If the project holds a different number of labeled frames.
+    """
+    actual = len(labels.labeled_frames)
+    if actual == frame_count:
+        return
+    verb = "only " if actual < frame_count else ""
+    raise ValueError(
+        f"package metadata declares frame_count={frame_count} but {slp_path.name} holds "
+        f"{verb}{actual} labeled frame(s) for root type {root_type!r}. Every manifest row "
+        "is one labeled frame in every declared root type's project. A short project "
+        "means frames were dropped during the build — most often because the prediction "
+        "files did not cover the selected views — and those are the frames the model "
+        "failed on, so the package would teach the next model what it already knows."
+    )
+
+
 def _assert_skeleton_matches_record(
-    slp_path: Path, root_type: str, recorded: tuple[str, ...]
+    labels: sio.Labels, slp_path: Path, root_type: str, recorded: tuple[str, ...]
 ) -> None:
     """Fail if the project's skeleton is not the one the metadata records.
 
@@ -248,14 +325,14 @@ def _assert_skeleton_matches_record(
     from, so this is the check that keeps it honest about the file beside it.
 
     Args:
-        slp_path: Path to the project file.
+        labels: The loaded project.
+        slp_path: Path to the project file, for the error message.
         root_type: The root type it holds.
         recorded: The node names the metadata records.
 
     Raises:
         ValueError: If the project has no skeleton, more than one, or a different one.
     """
-    labels = sio.load_slp(str(slp_path), open_videos=False)
     if len(labels.skeletons) != 1:
         raise ValueError(
             f"{slp_path.name} has {len(labels.skeletons)} skeletons, expected exactly one "
@@ -286,8 +363,9 @@ def validate_package(package_dir: Path) -> PackageRecord:
 
     Raises:
         FileNotFoundError: If the package metadata file is absent.
-        ValueError: If the layout, the manifest's columns, the counts, the skeletons, or
-            the embedding guarantee fail, naming the offending piece in each case.
+        ValueError: If the layout, the manifest's columns, the counts, the skeletons, the
+            declared frame count against each project, or the embedding guarantee fail,
+            naming the offending piece in each case.
     """
     package_dir = Path(package_dir)
     # Metadata first: it declares the root types, so it is what says which project files
@@ -301,6 +379,14 @@ def validate_package(package_dir: Path) -> PackageRecord:
     assert_counts_agree(package_dir, manifest, record)
 
     for root_type, path in projects.items():
-        _assert_skeleton_matches_record(path, root_type, record.skeletons[root_type])
-        assert_slp_is_self_contained(path)
+        # Opened once and shared across the three checks. Each used to load the file
+        # independently, so a two-root-type package read every .slp twice.
+        labels = _load_project(path)
+        _assert_skeleton_matches_record(
+            labels, path, root_type, record.skeletons[root_type]
+        )
+        assert_project_holds_every_declared_frame(
+            labels, path, root_type, record.frame_count
+        )
+        assert_slp_is_self_contained(path, labels)
     return record

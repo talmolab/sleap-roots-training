@@ -11,7 +11,9 @@ against correct data (F8) — stay readable after the fix lands.
 from __future__ import annotations
 
 import csv
+import shutil
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -123,22 +125,123 @@ def test_creates_the_destination_directory(tmp_path):
     assert images_dir.is_dir()
 
 
-def test_a_repeated_run_overwrites_rather_than_duplicating(tmp_path):
-    """`shutil.copy2` still overwrites, which keeps re-running the step idempotent.
+def test_a_repeated_run_replaces_the_previous_output(tmp_path):
+    """Re-running the step stays idempotent, and now clears an earlier run's leftovers.
 
-    Only the *silent* part of the vault behavior was a defect, and 3.5 removes it at its
-    source — two rows can no longer claim one name. Overwriting an earlier run's output
-    is the useful half and is preserved.
+    Overwriting is the useful half of the vault behavior and is preserved. What changes
+    (blocking review of #40) is that the destination is *replaced* rather than merged
+    into: a file an earlier run wrote under different parameters used to survive, and then
+    surfaced several stages later as a counts mismatch blaming the manifest.
     """
     bloomctl_scans, _ = build_download(tmp_path)
     manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
     images_dir = tmp_path / "package/images"
     images_dir.mkdir(parents=True)
     (images_dir / "A3244_9DK8KJJEZR_age3_0.jpg").write_bytes(b"stale")
+    (images_dir / "from_a_narrower_run.jpg").write_bytes(b"orphan")
 
     assert copy_selected_images(manifest, bloomctl_scans, images_dir) == 3
     assert (images_dir / "A3244_9DK8KJJEZR_age3_0.jpg").read_bytes() == b"jpeg-1"
+    assert not (images_dir / "from_a_narrower_run.jpg").exists()
     assert len(list(images_dir.iterdir())) == 3
+
+
+@pytest.mark.parametrize(
+    "leftover", ["notes.txt", "sleap_roots_training", "important.slp"]
+)
+def test_a_destination_holding_anything_but_images_is_refused(tmp_path, leftover):
+    """`--output-dir` is a free path, and the step now replaces its destination.
+
+    A mistyped value would otherwise hand an arbitrary directory tree to `shutil.rmtree`.
+    This module is careful about the same class on the read side (`_assert_contained_
+    relative`, `assert_unique_output_filenames`); the write side had no equivalent.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    images_dir = tmp_path / "somewhere_else"
+    images_dir.mkdir()
+    if leftover == "sleap_roots_training":
+        (images_dir / leftover).mkdir()
+    else:
+        (images_dir / leftover).write_text("not a curated frame")
+
+    with pytest.raises(ValueError, match="not curated images"):
+        copy_selected_images(manifest, bloomctl_scans, images_dir)
+
+    assert (images_dir / leftover).exists()
+
+
+def test_a_destination_that_is_a_file_is_refused(tmp_path):
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    not_a_dir = tmp_path / "images"
+    not_a_dir.write_text("this is a file")
+
+    with pytest.raises(ValueError, match="is not a directory"):
+        copy_selected_images(manifest, bloomctl_scans, not_a_dir)
+
+    assert not_a_dir.read_text() == "this is a file"
+
+
+def test_a_failed_move_restores_the_previous_images_directory(tmp_path):
+    """The rollback path, which is the whole reason the move is two renames.
+
+    Deleting the destination and then renaming is two syscalls; a crash between them
+    leaves the destination gone and the finished copy under a temporary name. Renaming the
+    old directory aside first means the destination only ever holds the old contents or
+    the new ones — including when the second rename fails.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    images_dir = tmp_path / "package/images"
+    images_dir.mkdir(parents=True)
+    (images_dir / "A3244_9DK8KJJEZR_age3_0.jpg").write_bytes(b"previous run")
+
+    real_rename = Path.rename
+
+    def fail_moving_staging_into_place(self, target):
+        # Only the staging -> destination move; the rollback that puts the old directory
+        # back is the behaviour under test and must be allowed through.
+        if ".partial-" in Path(self).name and Path(target) == images_dir:
+            raise OSError(39, "Directory not empty")
+        return real_rename(self, target)
+
+    with mock.patch.object(Path, "rename", fail_moving_staging_into_place):
+        with pytest.raises(OSError, match="Directory not empty"):
+            copy_selected_images(manifest, bloomctl_scans, images_dir)
+
+    assert (images_dir / "A3244_9DK8KJJEZR_age3_0.jpg").read_bytes() == b"previous run"
+    assert not list(tmp_path.glob("package/*.superseded-*"))
+
+
+def test_a_failed_copy_leaves_no_partial_images_directory(tmp_path):
+    """RED against the port: a mid-loop OSError left a partial `images/` behind.
+
+    ENOSPC, a Box or NFS mount dropping, a permissions change — any of them stopped the
+    loop with some files already written, contradicting this step's own all-or-nothing
+    docstring and the CLI help. The failure is injected at the last copy so the earlier
+    ones have genuinely happened.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    images_dir = tmp_path / "package/images"
+
+    real_copy2, calls = shutil.copy2, []
+
+    def failing_copy2(src, dst, **kwargs):
+        calls.append(dst)
+        if len(calls) == 3:
+            raise OSError(28, "No space left on device")
+        return real_copy2(src, dst, **kwargs)
+
+    with mock.patch.object(shutil, "copy2", failing_copy2):
+        with pytest.raises(OSError, match="No space left on device"):
+            copy_selected_images(manifest, bloomctl_scans, images_dir)
+
+    assert len(calls) == 3, "the failure must land mid-loop, not on the first copy"
+    assert not images_dir.exists()
+    # And no staging directory survives to be mistaken for one later.
+    assert not list((tmp_path / "package").glob("*partial*"))
 
 
 # --------------------------------------------------------------------------------------
@@ -222,20 +325,129 @@ def test_a_file_that_is_not_a_scans_csv_is_rejected_by_name(tmp_path):
         copy_selected_images(manifest, not_scans, tmp_path / "package/images")
 
 
-def test_an_absolute_source_path_is_rejected_rather_than_mangled(tmp_path):
+@pytest.mark.parametrize(
+    "scan_path",
+    [
+        "/mnt/hpi_dev/images/Wave1/Day3/QR",
+        # A Windows drive letter. `PurePosixPath("C:/...").is_absolute()` is False, so the
+        # guard this replaces let it through and joined it onto the base anyway. design.md
+        # F11 records that the real shipped WEEP manifest carried Windows paths.
+        "C:/hpi_dev/images/Wave1/Day3/QR",
+        "C:\\hpi_dev\\images\\Wave1\\Day3\\QR",
+    ],
+)
+def test_an_absolute_source_scan_path_is_rejected_rather_than_mangled(
+    tmp_path, scan_path
+):
     """Replaces the `lstrip("./")` character-strip.
 
     Task 0.9 established Bloom never emits an absolute path, so there is no shipped
     behavior to preserve — but the strip ate a leading separator rather than failing,
     which would have reported every row missing with nothing actually absent.
+
+    The `scans.csv` names the same absolute path so the manifest/scans cross-check passes
+    and this guard is the one that fires. Before the blocking review of #40 it was not:
+    the cross-check raised first, and the test passed only because `match="absolute"`
+    searched a message embedding `tmp_path`, whose basename pytest derives from the test's
+    own name.
     """
     bloomctl_scans, _ = build_download(tmp_path)
-    manifest = write_manifest(
-        tmp_path / "sample_manifest.csv", "/mnt/hpi_dev/images/Wave1/Day3/QR"
-    )
+    write_scans_csv(bloomctl_scans, scan_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", scan_path)
 
-    with pytest.raises(ValueError, match="absolute"):
+    with pytest.raises(
+        ValueError, match="must be relative to the scans.csv directory"
+    ) as excinfo:
         copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+    assert "source_scan_path" in str(excinfo.value)
+
+
+def test_an_absolute_source_image_is_rejected_even_when_its_scan_resolves(tmp_path):
+    # The second guard, on the per-row path rather than the scan directory. Reachable only
+    # once the scan directory itself resolves, so the manifest keeps a valid scan path and
+    # rewrites just `source_image`.
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    rows = list(csv.DictReader(manifest.open()))
+    for row in rows:
+        row["source_image"] = f"/etc/{Path(row['source_image']).name}"
+    with manifest.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(
+        ValueError, match="must be relative to the scans.csv directory"
+    ) as excinfo:
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+    assert "source_image" in str(excinfo.value)
+
+
+def test_a_traversing_source_image_cannot_read_a_file_from_outside_the_download(
+    tmp_path,
+):
+    """A manifest is an anticipated hand-edited input, and `..` reached anywhere on disk.
+
+    The file arrives in `images/` under a curated name, where nothing downstream can tell
+    it from a real scan image.
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    secret = tmp_path / "secret.jpg"
+    secret.write_bytes(b"not-a-scan")
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    rows = list(csv.DictReader(manifest.open()))
+    for row in rows:
+        row["source_image"] = "../../../secret.jpg"
+    with manifest.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match=r"climbs out of it with '\.\.'"):
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+    assert not (tmp_path / "package/images").exists()
+
+
+def test_an_empty_manifest_fails_instead_of_creating_an_empty_images_directory(
+    tmp_path,
+):
+    """RED against the port: this reported `copied 0 image(s)` and exited 0.
+
+    An empty `images/` is indistinguishable from a copy step that has not been run, so the
+    next stage cannot tell a finished package from an unstarted one (design.md F1).
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = tmp_path / "sample_manifest.csv"
+    with manifest.open("w", newline="") as fh:
+        csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS)).writeheader()
+
+    with pytest.raises(ValueError, match="has no rows"):
+        copy_selected_images(manifest, bloomctl_scans, tmp_path / "package/images")
+    assert not (tmp_path / "package/images").exists()
+
+
+def test_an_output_filename_that_escapes_the_images_directory_is_rejected(tmp_path):
+    """The write side of the same class: `output_filename` reached `shutil.copy2` raw.
+
+    Reproduced in review with `--accession-names '{"111": "../../pwn"}'`, which wrote two
+    JPEGs outside the staging directory — where the failure path's `rmtree` could not
+    remove them, defeating "nothing lands until everything passes".
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    manifest = write_manifest(tmp_path / "sample_manifest.csv", BLOOMCTL_SCAN_PATH)
+    rows = list(csv.DictReader(manifest.open()))
+    for row in rows:
+        row["output_filename"] = f"../../{row['output_filename']}"
+    with manifest.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    output_dir = tmp_path / "package/images"
+    with pytest.raises(ValueError, match="not plain filenames"):
+        copy_selected_images(manifest, bloomctl_scans, output_dir)
+    assert not output_dir.exists()
+    assert not list(tmp_path.glob("*.jpg"))
 
 
 def test_a_missing_scan_directory_names_the_path(tmp_path):

@@ -19,7 +19,9 @@ These are the **native** skeletons, not Tier 2.7's unified one; see the table's 
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Optional
@@ -29,6 +31,8 @@ from omegaconf import OmegaConf
 
 from sleap_roots_training.labeling.metadata import ROOT_TYPE_VOCAB
 from sleap_roots_training.registry.chooser import SPECIES_VOCAB, parse_age_window
+
+logger = logging.getLogger(__name__)
 
 _DATA_PACKAGE = "sleap_roots_training.labeling"
 _DATA_RESOURCE = "data/skeletons.yaml"
@@ -44,12 +48,20 @@ class SkeletonRow:
         age: The native chooser age comma-list this row applies to, or ``None`` for every
             age. Only rice splits by age.
         node_count: How many nodes a labeler places along the root.
+        verified: Whether this row's node count has been checked against a real artifact.
+            The table header has always distinguished VERIFIED from TRANSCRIBED, NOT
+            VERIFIED in prose, but the loader treated every row identically, so nothing
+            downstream could tell a confirmed count from a transcribed one (blocking review
+            of #40). A package built against an unverified count is not wrong, but a
+            corrected row later makes packages built before and after indistinguishable —
+            which is what recording the table hash alongside the package prevents.
     """
 
     species: str
     root_type: str
     age: Optional[str]
     node_count: int
+    verified: bool = False
 
     @property
     def age_window(self) -> Optional[tuple[int, int]]:
@@ -89,13 +101,24 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
     Raises:
         ValueError: If the file has no rows, a row is missing a required key, a species or
             root type is outside its vocabulary, a node count is not a positive integer,
-            an age list is not a contiguous window, or two rows describe the same
-            ``(species, root_type, age)``.
+            an age list is not a contiguous window, two rows describe the same
+            ``(species, root_type, age)``, or a pair carries both an age-agnostic row and
+            an age-split one.
     """
     # resolve=False for the same reason the selection matrix uses it: the table has no
     # interpolations, and a value containing `${...}` must not be treated as one.
     data = OmegaConf.to_container(OmegaConf.load(str(table_path)), resolve=False)
-    raw_rows = (data or {}).get("skeletons") or []
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{table_path}: top level is a {type(data).__name__}, expected a mapping with "
+            "a `skeletons:` key"
+        )
+    raw_rows = data.get("skeletons") or []
+    if not isinstance(raw_rows, list):
+        raise ValueError(
+            f"{table_path}: `skeletons:` is a {type(raw_rows).__name__}, expected a list "
+            "of rows"
+        )
     if not raw_rows:
         raise ValueError(
             f"{table_path}: no `skeletons:` rows found (check the top-level key)"
@@ -104,6 +127,11 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
     rows: list[SkeletonRow] = []
     seen: set[tuple[str, str, Optional[str]]] = set()
     for index, raw in enumerate(raw_rows):
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"row {index}: expected a mapping of keys, got a "
+                f"{type(raw).__name__}"
+            )
         for required in ("species", "root_type", "node_count"):
             if required not in raw:
                 raise ValueError(f"row {index}: missing required key {required!r}")
@@ -136,16 +164,81 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
                 f"{age!r}; a lookup would silently take the first"
             )
         seen.add(key)
+        verified = raw.get("verified", False)
+        if not isinstance(verified, bool):
+            raise ValueError(
+                f"row {index}: verified must be true or false, got {verified!r}"
+            )
         rows.append(
             SkeletonRow(
-                species=species, root_type=root_type, age=age, node_count=node_count
+                species=species,
+                root_type=root_type,
+                age=age,
+                node_count=node_count,
+                verified=verified,
             )
         )
+
+    # A pair with both an age-agnostic row and an age-split one loads cleanly under the
+    # per-key dedup above — the keys differ — but `lookup_skeleton` returns the agnostic
+    # row before it ever consults the age, so the age-split rows are unreachable. Both
+    # `(rice, crown, null)` and `(rice, crown, "6,7,8")` could sit in the table with the
+    # second silently doing nothing, which is the failure the dedup exists to prevent, one
+    # level up (blocking review of #40).
+    by_pair: dict[tuple[str, str], set[Optional[str]]] = {}
+    for row in rows:
+        by_pair.setdefault((row.species, row.root_type), set()).add(row.age)
+    for (species, root_type), ages in sorted(by_pair.items(), key=lambda item: item[0]):
+        if None in ages and len(ages) > 1:
+            split = sorted(age for age in ages if age is not None)
+            raise ValueError(
+                f"{species!r}/{root_type!r} has both an age-agnostic row (age: null) and "
+                f"age-split row(s) for {split}. A lookup takes the age-agnostic row "
+                "without ever consulting the age, so the age-split rows would never be "
+                "reached. Either split the pair completely, or drop the split rows."
+            )
     return tuple(rows)
+
+
+@lru_cache(maxsize=8)
+def _parse_table_cached(
+    table_path: Path, content_sha256: str
+) -> tuple[SkeletonRow, ...]:
+    """Parse a table, memoized on the file's identity *and* its exact contents.
+
+    ``content_sha256`` is unused in the body and is there purely to key the cache: an
+    edited table hashes differently and is re-parsed, so memoizing cannot serve a stale
+    answer. Keying on the path alone would make an in-place edit invisible until the
+    process restarted — a footgun aimed at exactly the operator correcting a node count,
+    which the table's own header says is expected for three of the five crops.
+
+    The first attempt keyed on ``(mtime_ns, size)``, which is cheaper and *wrong*: the
+    realistic edit is one digit of a ``node_count``, which leaves the size identical, and
+    filesystem timestamp granularity is coarser than the gap between two writes in a test
+    or a script. It passed in isolation and failed in the full suite. Hashing a few KB
+    costs microseconds against the ~6.5 ms parse-and-validate this avoids, so correctness
+    here is close to free.
+
+    Args:
+        table_path: Path to the table YAML.
+        content_sha256: The file's content hash, as the cache key.
+
+    Returns:
+        The parsed rows, in file order.
+    """
+    del content_sha256  # Cache key only.
+    return _parse_table(table_path)
 
 
 def load_skeleton_table(path: Optional[Path] = None) -> tuple[SkeletonRow, ...]:
     """Load and validate the skeleton table.
+
+    Memoized (blocking review of #40). Every call re-read and re-validated the YAML, at a
+    measured ~6.5 ms; :func:`~...build_package.skeleton_for` calls
+    :func:`lookup_skeleton` once per age, and is itself called once by the builder and
+    once by the orchestrator, so a 10-age two-root-type build spent roughly a quarter of a
+    second re-parsing a file that cannot change mid-build. The rows are frozen dataclasses
+    in a tuple, so callers cannot mutate the cached value.
 
     Args:
         path: Path to a table YAML; defaults to the packaged ``data/skeletons.yaml``.
@@ -157,11 +250,27 @@ def load_skeleton_table(path: Optional[Path] = None) -> tuple[SkeletonRow, ...]:
         ValueError: If the table fails validation; see :func:`_parse_table`.
     """
     if path is not None:
-        return _parse_table(Path(path))
+        return _load_fingerprinted(Path(path))
     # Read within the ``as_file`` context so a zip-imported resource stays valid.
     resource = files(_DATA_PACKAGE).joinpath(_DATA_RESOURCE)
     with as_file(resource) as resolved:
-        return _parse_table(Path(resolved))
+        return _load_fingerprinted(Path(resolved))
+
+
+def _load_fingerprinted(table_path: Path) -> tuple[SkeletonRow, ...]:
+    """Return the parsed table, re-parsing only when the file has changed.
+
+    Args:
+        table_path: Path to the table YAML.
+
+    Returns:
+        The parsed rows, in file order.
+
+    Raises:
+        FileNotFoundError: If the table does not exist.
+    """
+    digest = hashlib.sha256(table_path.read_bytes()).hexdigest()
+    return _parse_table_cached(table_path, digest)
 
 
 def skeleton_table_sha256(path: Optional[Path] = None) -> str:
@@ -181,6 +290,35 @@ def skeleton_table_sha256(path: Optional[Path] = None) -> str:
     resource = files(_DATA_PACKAGE).joinpath(_DATA_RESOURCE)
     with as_file(resource) as resolved:
         return hashlib.sha256(Path(resolved).read_bytes()).hexdigest()
+
+
+def _warn_if_unverified(row: SkeletonRow) -> SkeletonRow:
+    """Log a warning when a package is about to be built against a transcribed node count.
+
+    The table's header has always said which rows are VERIFIED and which are TRANSCRIBED,
+    NOT VERIFIED, but nothing acted on it (blocking review of #40). An unverified count is
+    not an error — it is the best information available, and refusing to build on it would
+    make three of the five crops unlabelable — but the operator should know before handing
+    a package to a labeler, because correcting the row afterwards invalidates the labels
+    rather than the package.
+
+    Args:
+        row: The matched row.
+
+    Returns:
+        The same row, unchanged.
+    """
+    if not row.verified:
+        logger.warning(
+            "Skeleton for (%s, %s) is %d nodes, TRANSCRIBED BUT NOT VERIFIED against a "
+            "real artifact. The package will record this table's SHA256, so it stays "
+            "distinguishable if the row is corrected — but confirm the count against Bloom "
+            "or existing labels before a labeler starts work.",
+            row.species,
+            row.root_type,
+            row.node_count,
+        )
+    return row
 
 
 def lookup_skeleton(
@@ -218,9 +356,11 @@ def lookup_skeleton(
             "than guessing a node count. Add a verified row before labeling this crop."
         )
 
+    # At most one, and never alongside an age-split row: `_parse_table` rejects both a
+    # duplicate key and a pair that mixes the two, so taking it here cannot shadow anything.
     agnostic = [row for row in candidates if row.age is None]
     if agnostic:
-        return agnostic[0]
+        return _warn_if_unverified(agnostic[0])
 
     windows = [(row, row.age_window) for row in candidates]
     if age is None:
@@ -231,7 +371,7 @@ def lookup_skeleton(
         )
     for row, (low, high) in windows:
         if low <= age <= high:
-            return row
+            return _warn_if_unverified(row)
     listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
     raise ValueError(
         f"({species!r}, {root_type!r}) has no skeleton for age {age} DAG; the table "

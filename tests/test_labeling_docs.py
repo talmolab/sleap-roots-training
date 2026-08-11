@@ -77,10 +77,24 @@ def test_every_documented_command_exists(doc, labeling_group):
         ), f"{doc.name} runs `labeling {tokens[0]}`, which is not a command"
 
 
+def _known_options(command) -> set[str]:
+    """Return every long option a command accepts."""
+    return {
+        opt for param in command.params for opt in param.opts if opt.startswith("--")
+    }
+
+
 @pytest.mark.parametrize("doc", [GUIDE, COMMAND_DOC], ids=["guide", "command"])
 def test_every_documented_option_exists(doc, labeling_group):
     """The drift that actually bites: an option renamed in `cli.py` and not here."""
     for tokens in documented_invocations(read(doc)):
+        # A renamed *subcommand* would make this a KeyError rather than a clean assertion,
+        # which is a rougher failure than the option case (blocking review of #40). The
+        # command-existence test above catches it first, but only when both run.
+        assert tokens[0] in labeling_group.commands, (
+            f"{doc.name} runs `labeling {tokens[0]}`, which is not a command "
+            f"(commands: {sorted(labeling_group.commands)})"
+        )
         command = labeling_group.commands[tokens[0]]
         known = {opt for param in command.params for opt in param.opts}
         for token in tokens[1:]:
@@ -106,6 +120,33 @@ def test_every_required_option_is_documented_at_least_once(labeling_group):
                 assert (
                     param.opts[0] in documented
                 ), f"`labeling {name}` requires {param.opts[0]}, which neither doc shows"
+
+
+def test_every_option_is_documented_at_least_once(labeling_group):
+    """Optional options too, not only required ones (blocking review of #40).
+
+    The fence only covered ``required=True``, so a new *optional* option could go
+    undocumented forever — and the interesting options here are optional by design:
+    ``--views-per-plant``, ``--seed``, and ``--total-views`` all change what ends up in the
+    package, and ``--accession-names`` changes every filename in it. There is no gap today;
+    this is what keeps it that way.
+    """
+    text = read(GUIDE) + read(COMMAND_DOC)
+    documented = {
+        token
+        for tokens in documented_invocations(text)
+        for token in tokens
+        if token.startswith("--")
+    }
+    undocumented = sorted(
+        f"labeling {name} {option}"
+        for name, command in labeling_group.commands.items()
+        for option in _known_options(command)
+        if option not in documented and option != "--help"
+    )
+    assert (
+        not undocumented
+    ), "these CLI options appear in neither doc:\n  " + "\n  ".join(undocumented)
 
 
 def test_the_guide_documents_the_package_layout():

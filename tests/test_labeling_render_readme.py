@@ -21,9 +21,13 @@ from pathlib import Path
 import pytest
 import sleap_io as sio
 
-from conftest import write_jpeg
-from test_labeling_build_package import manifest_rows
-from test_labeling_validate import complete_package, package_record
+from conftest import (
+    SCANS,
+    complete_package,
+    manifest_rows,
+    package_record,
+    write_jpeg,
+)
 from sleap_roots_training.labeling.metadata import (
     PackageMetadata,
     write_package_metadata,
@@ -187,12 +191,13 @@ def test_a_dropped_image_is_an_error_rather_than_a_smaller_number(tmp_path):
     discrepancy appeared at all.
     """
     package_dir = complete_package(tmp_path)
-    sorted((package_dir / "images").glob("*.jpg"))[0].unlink()
+    dropped = sorted((package_dir / "images").glob("*.jpg"))[0]
+    dropped.unlink()
 
     with pytest.raises(ValueError) as excinfo:
         render_readme(package_dir)
 
-    assert "5" in str(excinfo.value) and "6" in str(excinfo.value)
+    assert dropped.name in str(excinfo.value)
 
 
 def test_a_declared_frame_count_that_disagrees_is_an_error(tmp_path):
@@ -203,7 +208,7 @@ def test_a_declared_frame_count_that_disagrees_is_an_error(tmp_path):
         render_readme(package_dir)
 
 
-def test_unequal_views_per_plant_are_reported_as_a_range(tmp_path):
+def test_unequal_views_per_scan_are_reported_as_a_range(tmp_path):
     """Replaces ``len(rows) // plant_count``, which reported a number no plant had."""
     rows = [
         row
@@ -216,7 +221,39 @@ def test_unequal_views_per_plant_are_reported_as_a_range(tmp_path):
 
     readme = render(tmp_path, rows=rows, record=package_record(frame_count=5))
 
-    assert "- 2-3 rotational views per plant" in readme
+    assert "- 2-3 labeled views per scan" in readme
+
+
+def test_views_are_counted_per_scan_not_per_plant(tmp_path):
+    """RED against the port: a plant scanned at two ages inflated the reported range.
+
+    Views are a property of a scan. Grouping by ``plant_qr_code`` made a plain 3-view
+    package covering two ages claim "3-6 rotational views per plant" — a number no scan
+    has and no parameter asked for.
+    """
+    rows = [dict(row) for row in manifest_rows()]
+    # The same plant, scanned again at a later age: a second scan_id, same barcode. This
+    # is the normal shape of a longitudinal experiment, and the reason `output_filename`
+    # embeds the age at all.
+    for row in list(rows):
+        if row["scan_id"] == 1:
+            later = dict(row)
+            later["scan_id"] = 99
+            later["plant_age_days"] = 5
+            later["output_filename"] = later["output_filename"].replace("age3", "age5")
+            rows.append(later)
+    scans = SCANS + ((99, "9DK8KJJEZR", 5, 12742739, "A3244"),)
+
+    readme = render(
+        tmp_path,
+        rows=rows,
+        scans=scans,
+        record=package_record(frame_count=len(rows)),
+    )
+
+    # Three views per scan, not the six the plant carries across its two scans.
+    assert "- 3 labeled views per scan" in readme
+    assert "6" not in readme.split("labeled views per scan")[0].splitlines()[-1]
 
 
 # --------------------------------------------------------------------------------------
@@ -280,5 +317,5 @@ def test_an_extra_curated_image_is_an_error(tmp_path):
     package_dir = complete_package(tmp_path)
     write_jpeg(package_dir / "images" / "unclaimed.jpg")
 
-    with pytest.raises(ValueError, match="7"):
+    with pytest.raises(ValueError, match="unclaimed.jpg"):
         render_readme(package_dir)

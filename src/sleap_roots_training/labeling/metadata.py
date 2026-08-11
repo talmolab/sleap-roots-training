@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Mapping, Optional, Sequence
 
 from omegaconf import OmegaConf
 
@@ -41,6 +41,8 @@ _HEADER = (
     "#\n"
     "# The selection block is what makes the package re-derivable: the manifest records\n"
     "# which frames were chosen, and only this records the parameters that chose them.\n"
+    "# The provenance block records what they were chosen *from* -- the parameters are\n"
+    "# only reproducible against the same inputs, and new waves land between re-runs.\n"
 )
 
 #: Root types a labeling package can be built for. Matches the contract's ``RootType``
@@ -51,6 +53,9 @@ ROOT_TYPE_VOCAB = frozenset({"primary", "lateral", "crown"})
 #: shell or a filesystem treats specially is rejected at construction rather than
 #: producing a package nobody can name.
 _SLUG = re.compile(r"[a-z0-9]+(?:[-_][a-z0-9]+)*")
+
+#: A hex SHA256, which is what every provenance field holds.
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -170,6 +175,78 @@ class SelectionParameters:
 
 
 @dataclass(frozen=True)
+class Provenance:
+    """What a package was derived *from*, as opposed to what chose the frames.
+
+    New in the blocking review of #40. :class:`SelectionParameters` records the parameters,
+    which makes a package re-derivable only against a byte-identical pool — and the usual
+    reason to re-derive one months later is that new waves have landed. The prefix-of-a-
+    stable-order rule is not stable under a changed pool: ten plants at
+    ``plants_per_group=3`` and seed 42 give ``['P00', 'P08', 'P09']``, and adding five more
+    plants gives ``['P08', 'P09', 'P10']`` — not a superset. Monotonicity holds against the
+    same pool, and nothing in the artifact let you check you had the same pool.
+
+    ``registry/lineage`` already does git-SHA and tool-version stamping for models; this is
+    the labeling-package equivalent, kept to content hashes so it stays checkable without
+    the source machine.
+
+    Attributes:
+        scans_csv_sha256: SHA256 of the ``scans.csv`` the selection drew from.
+        manifest_sha256: SHA256 of the ``sample_manifest.csv`` the package was built from.
+            Pins the exact selection, and lets a consumer confirm the copy inside the
+            package is the one the ``.slp`` files were built against.
+
+            **The QC-cleaned pool is not recorded**, and it is the input that decides which
+            plants were *eligible* to be sampled — a re-run of ``sleap-roots-analyze`` with
+            different thresholds changes eligibility without touching ``scans.csv``. The
+            build stage never receives ``--cleaned-csv`` (only ``select`` does), so there
+            is nothing here to hash; closing that gap means threading the pool identity
+            from selection into the manifest or into the build. Recorded as a known gap
+            rather than papered over: this field was briefly named ``cleaned_csv_sha256``
+            while holding the manifest's hash, which is worse than an absent field because
+            a consumer checking their own QC table against it would get a guaranteed
+            mismatch and conclude they had the wrong pool.
+        skeleton_table_sha256: SHA256 of the committed skeleton table. The table is
+            advisory and partly unverified, and its own header says so, so when a row is
+            corrected this is what keeps packages built before and after distinguishable
+            rather than silently different.
+        code_version: The version or git SHA of the code that built the package.
+        prediction_models: The model identifiers whose predictions seeded the ``v000``
+            starting points, sorted and distinct. Labelers anchor on those starting
+            points — the README calls them that — so the predicting model is a
+            confounder in the ground truth that comes back, and two packages built from
+            different models were previously indistinguishable in the artifact. Empty
+            when the package predates this field or no prediction file was matched.
+    """
+
+    scans_csv_sha256: str
+    manifest_sha256: str
+    skeleton_table_sha256: str
+    code_version: str
+    prediction_models: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate the hashes, naming the offending one.
+
+        Raises:
+            ValueError: If a hash is not 64 hex characters, or the code version is empty.
+        """
+        for field in (
+            "scans_csv_sha256",
+            "manifest_sha256",
+            "skeleton_table_sha256",
+        ):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not _SHA256.fullmatch(value):
+                raise ValueError(
+                    f"provenance field {field!r} is {value!r}; it must be a 64-character "
+                    "hex SHA256"
+                )
+        if not self.code_version:
+            raise ValueError("provenance is missing required field 'code_version'")
+
+
+@dataclass(frozen=True)
 class PackageRecord:
     """Everything about a built package that is not in the manifest or the ``.slp``.
 
@@ -195,6 +272,10 @@ class PackageRecord:
             ``docs/roadmap.md:201`` records for the eight published collections.
         version: The package version string (``v000`` is predictions, per the labeling
             convention the README documents).
+        provenance: What the package was derived from — the input hashes, the skeleton
+            table hash, and the code version. Optional so a package written before the
+            blocking review of #40 still reads back; absent means "not recorded", which is
+            exactly the state that made those packages un-re-derivable.
     """
 
     metadata: PackageMetadata
@@ -204,6 +285,7 @@ class PackageRecord:
     frame_count: int
     skeletons: Mapping[str, Sequence[str]]
     version: str
+    provenance: Optional[Provenance] = None
 
     def __post_init__(self) -> None:
         """Validate the record, naming the offending field.
@@ -251,7 +333,7 @@ class PackageRecord:
 
     def to_container(self) -> dict:
         """Return the record as plain data, in the order the file is written."""
-        return {
+        container = {
             "species": self.metadata.species,
             "mode": self.metadata.mode,
             "experiment": self.metadata.experiment,
@@ -268,6 +350,15 @@ class PackageRecord:
             },
             "skeletons": {rt: list(nodes) for rt, nodes in self.skeletons.items()},
         }
+        if self.provenance is not None:
+            container["provenance"] = {
+                "scans_csv_sha256": self.provenance.scans_csv_sha256,
+                "manifest_sha256": self.provenance.manifest_sha256,
+                "skeleton_table_sha256": self.provenance.skeleton_table_sha256,
+                "code_version": self.provenance.code_version,
+                "prediction_models": list(self.provenance.prediction_models),
+            }
+        return container
 
 
 def write_package_metadata(record: PackageRecord, package_dir: Path) -> Path:
@@ -299,6 +390,76 @@ def _require(data: dict, key: str) -> object:
     return data[key]
 
 
+def _require_typed(data: dict, key: str, expected: type, described: str) -> object:
+    """Return ``data[key]``, failing if it is present but the wrong shape.
+
+    Deviation (blocking review of #40). ``_require`` only checked presence, so a
+    wrong-typed value was passed straight through to whatever consumed it and failed
+    somewhere unhelpful: ``root_types: "primary"`` was a string, which ``tuple()`` happily
+    exploded into ``('p', 'r', 'i', ...)`` before the vocabulary check rejected the letters
+    one by one; ``selection: 5`` raised ``TypeError`` from an ``in`` test; ``skeletons: []``
+    raised ``AttributeError`` from ``.items()``. None of ``TypeError`` or
+    ``AttributeError`` is caught by the CLI, so those two reached the operator as
+    tracebacks.
+
+    Args:
+        data: The parsed metadata mapping.
+        key: The key to read.
+        expected: The type the value must be.
+        described: How to describe the expected shape in the error.
+
+    Returns:
+        The value.
+
+    Raises:
+        ValueError: If the key is absent, null, or not of the expected type.
+    """
+    value = _require(data, key)
+    if not isinstance(value, expected):
+        raise ValueError(
+            f"{PACKAGE_METADATA_FILENAME} key {key!r} is a {type(value).__name__} "
+            f"({value!r}), expected {described}."
+        )
+    return value
+
+
+def _read_provenance(data: dict) -> Optional[Provenance]:
+    """Return the provenance block, or ``None`` when the package predates it.
+
+    Args:
+        data: The parsed metadata mapping.
+
+    Returns:
+        The parsed provenance, or ``None`` if the key is absent.
+
+    Raises:
+        ValueError: If the block is present but malformed.
+    """
+    if data.get("provenance") is None:
+        return None
+    block = _require_typed(data, "provenance", dict, "a mapping")
+    fields = (
+        "scans_csv_sha256",
+        "manifest_sha256",
+        "skeleton_table_sha256",
+        "code_version",
+    )
+    absent = [field for field in fields if field not in block]
+    if absent:
+        raise ValueError(
+            f"{PACKAGE_METADATA_FILENAME} provenance block is missing "
+            f"{', '.join(absent)}. A partial provenance record is worse than none: it "
+            "reads as though the package can be checked against its inputs when it cannot."
+        )
+    return Provenance(
+        **{field: str(block[field]) for field in fields},
+        # Absent on a package written before this field existed, which is not an error
+        # — it means the predicting model was not recorded, which is the state this
+        # field exists to end.
+        prediction_models=tuple(str(m) for m in block.get("prediction_models") or ()),
+    )
+
+
 def read_package_metadata(package_dir: Path) -> PackageRecord:
     """Read and validate the package metadata file from a package directory.
 
@@ -324,30 +485,42 @@ def read_package_metadata(package_dir: Path) -> PackageRecord:
             f"{path}: top level is a {type(data).__name__}, expected a mapping"
         )
 
-    selection_data = _require(data, "selection")
+    selection_data = _require_typed(data, "selection", dict, "a mapping")
     for key in ("seed", "plants_per_group", "views_per_plant", "total_views"):
         if key not in selection_data:
             raise ValueError(
                 f"{PACKAGE_METADATA_FILENAME} is missing required key 'selection.{key}'"
             )
-    return PackageRecord(
-        metadata=PackageMetadata(
-            species=_require(data, "species"),
-            mode=_require(data, "mode"),
-            experiment=_require(data, "experiment"),
-            root_types=tuple(_require(data, "root_types")),
-        ),
-        bloom_experiment_id=int(_require(data, "bloom_experiment_id")),
-        accessions=dict(_require(data, "accessions")),
-        selection=SelectionParameters(
-            seed=int(selection_data["seed"]),
-            plants_per_group=int(selection_data["plants_per_group"]),
-            views_per_plant=int(selection_data["views_per_plant"]),
-            total_views=int(selection_data["total_views"]),
-        ),
-        frame_count=int(_require(data, "frame_count")),
-        skeletons={
-            rt: tuple(nodes) for rt, nodes in _require(data, "skeletons").items()
-        },
-        version=str(_require(data, "version")),
+    skeletons = _require_typed(
+        data, "skeletons", dict, "a mapping of root type to nodes"
     )
+    try:
+        return PackageRecord(
+            metadata=PackageMetadata(
+                species=_require(data, "species"),
+                mode=_require(data, "mode"),
+                experiment=_require(data, "experiment"),
+                root_types=tuple(
+                    _require_typed(data, "root_types", list, "a list of root types")
+                ),
+            ),
+            bloom_experiment_id=int(_require(data, "bloom_experiment_id")),
+            accessions=dict(_require_typed(data, "accessions", dict, "a mapping")),
+            selection=SelectionParameters(
+                seed=int(selection_data["seed"]),
+                plants_per_group=int(selection_data["plants_per_group"]),
+                views_per_plant=int(selection_data["views_per_plant"]),
+                total_views=int(selection_data["total_views"]),
+            ),
+            frame_count=int(_require(data, "frame_count")),
+            skeletons={rt: tuple(nodes) for rt, nodes in skeletons.items()},
+            version=str(_require(data, "version")),
+            provenance=_read_provenance(data),
+        )
+    except (TypeError, AttributeError) as error:
+        # A value of the right container type but the wrong contents — `frame_count: "six"`,
+        # a node list holding a mapping. Re-raised as ValueError so it reaches the operator
+        # as a message rather than as a traceback past the CLI's catch.
+        raise ValueError(
+            f"{PACKAGE_METADATA_FILENAME} holds a value of the wrong type: {error}"
+        ) from error

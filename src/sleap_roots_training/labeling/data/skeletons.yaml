@@ -22,8 +22,13 @@
 #     a missing pair rather than defaulting: a wrong node count produces a labeling package
 #     that looks fine and cannot be combined with anything.
 #
+# Each row now carries `verified:` so this distinction is machine-readable rather than only
+# prose here. `lookup_skeleton` warns when a package is built against an unverified count,
+# and the package records this table's SHA256 — so when a row is corrected, packages built
+# before and after are distinguishable rather than silently different.
+#
 # The verification test against the eight published collections in
-# `wandb-registry-sleap-roots-labels` is what converts the rest from hypothesis to record.
+# `wandb-registry-sleap-roots-labels` is what flips the remaining rows to `verified: true`.
 # ---------------------------------------------------------------------------------------
 #
 # THESE ARE **NATIVE** SKELETONS, NOT THE UNIFIED ONE. This table is *descriptive*: what a
@@ -46,32 +51,38 @@ skeletons:
     root_type: primary
     age: null
     node_count: 6
+    verified: true
 
   - species: soybean
     root_type: lateral
     age: null
     node_count: 4
+    verified: true
 
   - species: canola
     root_type: primary
     age: null
     node_count: 6
+    verified: false
 
   # UNVERIFIED, and the table's one asymmetry: soybean and arabidopsis laterals are 4.
   - species: canola
     root_type: lateral
     age: null
     node_count: 3
+    verified: false
 
   - species: arabidopsis
     root_type: primary
     age: null
     node_count: 6
+    verified: false
 
   - species: arabidopsis
     root_type: lateral
     age: null
     node_count: 4
+    verified: false
 
   # Rice young (2-5 DAG): primary + crown. Matches the `model_selection.yaml` rice row
   # with age "2, 3, 4, 5" (primary + crown models, no lateral).
@@ -79,11 +90,13 @@ skeletons:
     root_type: primary
     age: "2, 3, 4, 5"
     node_count: 6
+    verified: false
 
   - species: rice
     root_type: crown
     age: "2, 3, 4, 5"
     node_count: 6
+    verified: false
 
   # Rice old (6-10 DAG): crown only. Matches the `model_selection.yaml` rice row with age
   # "6, 7, 8, 9, 10" (crown model only).
@@ -91,5 +104,6 @@ skeletons:
     root_type: crown
     age: "6, 7, 8, 9, 10"
     node_count: 6
+    verified: false
 
   # pennycress: intentionally absent — see the header.

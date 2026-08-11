@@ -49,7 +49,7 @@ labels can ever become.**
   vault script hardcodes soybean's 6-node primary / 4-node lateral while the workflow doc advertises
   `--crop` and a five-crop table, so this is new code with no original to port (design.md Decision
   7). The table holds **native** skeletons — deliberately not Tier 2.7's unified node count.
-- **Make a widened re-selection monotone.** The ported selection re-draws rather than extends, so a
+- **Make a widened re-selection safe to merge.** The ported selection re-draws rather than extends, so a
   wider run is not a superset of a narrower one — which the re-derive-and-republish recovery path
   below depends on (design.md F3). A recorded deviation, sequenced after the characterization tests.
 

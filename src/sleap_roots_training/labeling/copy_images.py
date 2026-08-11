@@ -18,13 +18,16 @@ from __future__ import annotations
 
 import logging
 import shutil
-from pathlib import Path, PurePosixPath
+import tempfile
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pandas as pd
 
+from sleap_roots_training.labeling.layout import is_sidecar
 from sleap_roots_training.labeling.select_samples import (
     TOTAL_VIEWS,
     assert_unique_output_filenames,
+    posix_path as _posix,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,17 +44,53 @@ REQUIRED_COLUMNS = (
 )
 
 
-def _posix(path: object) -> PurePosixPath:
-    """Normalize a manifest or ``scans.csv`` path to POSIX form.
+def _assert_contained_relative(
+    path: object, column: str, output_filename: object
+) -> PurePosixPath:
+    r"""Normalize a manifest path and fail unless it stays under the base directory.
+
+    Deviation (blocking review of #40). The guard this replaces normalized to
+    ``PurePosixPath`` and then asked ``.is_absolute()`` — which is ``False`` for
+    ``C:\data\scan1``, because a drive letter is only absolute to
+    ``PureWindowsPath``. A Windows absolute path therefore slipped past the rejection and
+    was joined onto the base anyway, resolving against something arbitrary while the
+    operator was told paths resolve "against the directory holding scans.csv". design.md
+    F11 records that the real shipped WEEP manifest carried Windows paths, so this
+    producer is observed rather than hypothetical.
+
+    ``..`` is rejected for the same reason the absolute case is: manifests are an
+    anticipated hand-edited and reused input (this module's own docstring), and a ``..``
+    segment reads a file from anywhere on the filesystem into the package under a curated
+    name, where nothing downstream can tell it apart from a real scan image.
 
     Args:
-        path: A path as written by either producer, possibly with backslash separators
-            from a Windows run or a ``./`` prefix from the legacy Bloom CLI.
+        path: The manifest cell's value.
+        column: The column it came from, for the error message.
+        output_filename: The row's curated name, for the error message.
 
     Returns:
-        The normalized relative path. ``PurePosixPath`` collapses a leading ``./``.
+        The normalized relative path.
+
+    Raises:
+        ValueError: If the path is absolute in either convention, or escapes the base.
     """
-    return PurePosixPath(str(path).replace("\\", "/"))
+    text = str(path).replace("\\", "/")
+    relative = PurePosixPath(text)
+    if relative.is_absolute() or PureWindowsPath(text).is_absolute():
+        raise ValueError(
+            f"{column} must be relative to the scans.csv directory, got the absolute "
+            f"path {text!r} for {output_filename!r}. Bloom does not emit absolute paths; "
+            "an absolute one means the manifest was hand-edited or rewritten, and it "
+            "would resolve against a directory this package knows nothing about."
+        )
+    if ".." in relative.parts:
+        raise ValueError(
+            f"{column} must stay under the scans.csv directory, got {text!r} for "
+            f"{output_filename!r}, which climbs out of it with '..'. A row that reaches "
+            "outside the download reads an arbitrary file into the package under a "
+            "curated name, where nothing downstream can tell it from a real scan image."
+        )
+    return relative
 
 
 def _assert_required_columns(manifest: pd.DataFrame) -> None:
@@ -126,16 +165,11 @@ def _scan_directory(base: Path, source_scan_path: object) -> Path:
         The scan directory.
 
     Raises:
-        ValueError: If ``source_scan_path`` is absolute.
+        ValueError: If ``source_scan_path`` is absolute or climbs out of ``base``.
     """
-    relative = _posix(source_scan_path)
-    if relative.is_absolute():
-        raise ValueError(
-            f"source_scan_path must be relative to the scans.csv directory, got the "
-            f"absolute path {str(relative)!r}. Bloom does not emit absolute paths; an "
-            "absolute one means the manifest was hand-edited or rewritten."
-        )
-    return base / relative
+    return base / _assert_contained_relative(
+        source_scan_path, "source_scan_path", source_scan_path
+    )
 
 
 def _assert_scan_holds_the_assumed_views(scan_dir: Path, total_views: int) -> None:
@@ -205,14 +239,22 @@ def copy_selected_images(
         The number of images copied, which equals the manifest row count.
 
     Raises:
-        ValueError: If the manifest lacks a required column, assigns one
+        ValueError: If the manifest is empty, lacks a required column, assigns one
             ``output_filename`` to two frames, names a scan ``scans.csv`` does not
-            describe, carries an absolute path, or points at a scan whose view count
-            contradicts ``total_views``.
+            describe, carries an absolute or ``..``-bearing path, points at a scan whose
+            view count contradicts ``total_views``, or if ``output_dir`` holds anything
+            this step did not write.
         FileNotFoundError: If any scan directory or source image does not exist.
     """
     manifest = pd.read_csv(manifest_csv)
     _assert_required_columns(manifest)
+    if manifest.empty:
+        raise ValueError(
+            f"{Path(manifest_csv).name} has no rows, so there is nothing to copy. "
+            "Creating an empty images/ and reporting success is design.md F1 — the next "
+            "stage cannot distinguish it from a copy that has not been run yet. Re-run "
+            "selection; a header-only manifest means its inputs did not overlap."
+        )
     assert_unique_output_filenames(manifest)
 
     base = Path(scans_csv).parent
@@ -228,12 +270,9 @@ def copy_selected_images(
     planned: list[tuple[Path, str]] = []
     unresolved: list[str] = []
     for row in manifest.itertuples():
-        source = _posix(row.source_image)
-        if source.is_absolute():
-            raise ValueError(
-                f"source_image must be relative to the scans.csv directory, got the "
-                f"absolute path {str(source)!r} for {row.output_filename!r}."
-            )
+        source = _assert_contained_relative(
+            row.source_image, "source_image", row.output_filename
+        )
         src = base / source
         if not src.exists():
             unresolved.append(f"{row.output_filename!r} -> {src}")
@@ -250,9 +289,129 @@ def copy_selected_images(
             f"that does not exist under {base}:\n  {listed}{more}"
         )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for src, output_filename in planned:
-        shutil.copy2(src, output_dir / output_filename)
+    # Deviation (blocking review of #40): the loop is transactional. It used to write
+    # straight into `output_dir`, so any mid-loop `OSError` — ENOSPC, a Box or NFS mount
+    # dropping, a permissions change — left a partial `images/` behind, contradicting this
+    # module's own all-or-nothing docstring and the CLI help. Re-running merged into it
+    # (`exist_ok=True`), so the orphans surfaced much later as a counts mismatch that
+    # blamed the manifest. Files land in a staging directory beside the destination — same
+    # filesystem, so the rename is atomic — and are moved into place only once every copy
+    # has succeeded.
+    # Re-running stays idempotent, and is now more so: the destination is *replaced*
+    # rather than merged into, so a file left by an earlier run with different parameters
+    # does not survive to surface later as a counts mismatch blaming the manifest.
+    output_dir = Path(output_dir)
+    _assert_safe_to_replace(output_dir, {name for _, name in planned})
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(dir=output_dir.parent, prefix=f"{output_dir.name}.partial-")
+    )
+    try:
+        staging.chmod(0o755)
+        for src, output_filename in planned:
+            shutil.copy2(src, staging / output_filename)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
+    _replace_directory(staging, output_dir)
     logger.info("Copied %d images to %s", len(planned), output_dir)
     return len(planned)
+
+
+def _assert_safe_to_replace(output_dir: Path, planned_names: set[str]) -> None:
+    """Fail unless replacing ``output_dir`` wholesale can only destroy this step's output.
+
+    Replacing the destination is what keeps a re-run from inheriting an earlier run's
+    orphans, but ``--output-dir`` is a free path from the CLI, so a mistyped or misaimed
+    value would otherwise hand an arbitrary directory tree to ``shutil.rmtree`` (blocking
+    review of #40, second pass). This module is scrupulous about exactly this class on the
+    read side — see :func:`_assert_contained_relative` and
+    ``assert_unique_output_filenames`` — and the write side had no equivalent.
+
+    A destination is safe when it does not exist, is empty, or looks like an images
+    directory: flat, and holding nothing but ``.jpg`` files and operating-system sidecars.
+    That still lets a re-run clear an earlier run's orphans — the whole point of replacing
+    rather than merging, and a file the previous parameters produced is not one this run
+    will write — while refusing to delete a directory holding anything that is not a
+    curated frame.
+
+    Args:
+        output_dir: The destination.
+        planned_names: The curated filenames this run will write. Any of these is safe by
+            definition; the check is about everything *else* in the directory.
+
+    Raises:
+        ValueError: If the destination holds anything that is not a curated image.
+    """
+    if not output_dir.exists():
+        return
+    if not output_dir.is_dir():
+        raise ValueError(
+            f"{output_dir} is not a directory. --output-dir names the images directory a "
+            "package's curated frames go in."
+        )
+
+    def is_curated(entry: Path) -> bool:
+        if not entry.is_file():
+            return False
+        return (
+            entry.name in planned_names
+            or is_sidecar(entry.name)
+            or entry.suffix.lower() == ".jpg"
+        )
+
+    unexpected = sorted(
+        entry.name for entry in output_dir.iterdir() if not is_curated(entry)
+    )
+    if unexpected:
+        listed = ", ".join(repr(name) for name in unexpected[:5])
+        more = f" ... and {len(unexpected) - 5} more" if len(unexpected) > 5 else ""
+        raise ValueError(
+            f"{output_dir} holds {len(unexpected)} entr(y/ies) that are not curated "
+            f"images: {listed}{more}. The copy step replaces its destination rather than "
+            "merging into it, so it refuses to delete a directory that holds anything "
+            "else — --output-dir is a free path, and a mistyped one would otherwise take "
+            "an arbitrary directory tree with it. Point it at the package's images "
+            "directory, or remove that directory by hand if you do mean to discard it."
+        )
+
+
+def _replace_directory(staging: Path, output_dir: Path) -> None:
+    """Move ``staging`` onto ``output_dir``, without a window where neither exists.
+
+    The obvious spelling — ``rmtree(output_dir)`` then ``rename`` — is two syscalls, and a
+    crash between them leaves the destination *deleted* while the finished copy sits beside
+    it under a temporary name. This module reasons about SIGKILL elsewhere (an OOM runs no
+    cleanup handler), so that window is not hypothetical, and losing an existing ``images/``
+    to a re-run that was going to replace it anyway is the worst possible outcome.
+
+    Renaming the old directory aside first means the destination is only ever the old
+    contents or the new ones. The stale copy is removed last, when nothing depends on it.
+
+    Args:
+        staging: The fully populated staging directory.
+        output_dir: Where it should end up.
+    """
+    if not output_dir.exists():
+        staging.rename(output_dir)
+        return
+    # `mkdtemp` reserves a name that is guaranteed free, then releases it: `Path.rename`
+    # will not overwrite an existing directory on Windows, so the target has to be absent.
+    superseded = Path(
+        tempfile.mkdtemp(dir=output_dir.parent, prefix=f"{output_dir.name}.superseded-")
+    )
+    superseded.rmdir()
+    output_dir.rename(superseded)
+    try:
+        staging.rename(output_dir)
+    except BaseException:
+        superseded.rename(output_dir)
+        raise
+    shutil.rmtree(superseded, ignore_errors=True)
+    if superseded.exists():
+        logger.warning(
+            "Could not remove the superseded images directory %s. It is a complete copy "
+            "of the previous run's output and nothing else will clean it up.",
+            superseded,
+        )
