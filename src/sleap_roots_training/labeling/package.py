@@ -30,6 +30,7 @@ from typing import Mapping, Sequence
 import pandas as pd
 
 from sleap_roots_training.labeling.build_package import (
+    assert_buildable_manifest,
     build_slp_project,
     prediction_models,
     skeleton_for,
@@ -206,6 +207,16 @@ def build_labeling_package(
         )
 
     manifest = pd.read_csv(manifest_csv)
+    # Before the selection cross-check, not after (suggestion, third review of #40). Both
+    # guards were individually right and their *order* was not: a manifest that was empty
+    # from the start -- reused from an earlier run, hand-written, or written by a tool that
+    # is not this selector -- reached `int(per_scan.max())` on an empty Series and died as
+    # `cannot convert float NaN to integer`. That is a real refusal arriving by accident,
+    # under a message naming nothing an operator can act on, while the check that says the
+    # useful thing sat one stage further down in `build_slp_project`. Selection and the
+    # copy step reject an empty selection at their own entrances; this is the third
+    # entrance, and the only one that does not go through either.
+    assert_buildable_manifest(manifest, manifest_csv)
     _assert_selection_could_have_produced(manifest, selection)
     ages = sorted({int(age) for age in manifest["plant_age_days"]})
     # Derived from the committed table rather than read back out of the .slp the builder

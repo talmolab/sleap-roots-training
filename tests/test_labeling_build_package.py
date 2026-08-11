@@ -570,6 +570,43 @@ def test_frame_position_comes_from_the_manifest_not_from_sorting_view_index(tmp_
     assert Path(labels.videos[0].source_video.filename[0]).name.endswith("_age3_0.jpg")
 
 
+def test_frame_position_ignores_view_order_when_frame_index_is_already_ascending(
+    tmp_path,
+):
+    """The mirror of the test above, and the case F3-revisited made worth pinning.
+
+    Suggestion, third review of #40. The 2.10 test varies ``frame_index`` while the views
+    stay ascending; this varies the *views* while ``frame_index`` is a plain ``0, 1, 2``.
+    Both derivations are then reading a well-formed manifest and disagreeing: sorting on
+    ``view_index`` would put view 1 at position 0, and reading ``frame_index`` puts view 49
+    there.
+
+    Worth a durable test rather than a note because F6 recorded that "the two derivations
+    agree today only because ``selected_views`` is ascending" — an incidental property of
+    the selector, which the review's own F3-revisited change then made *less* incidental:
+    ``output_filename`` names the view now, so a frame's identity no longer travels through
+    its position, and a manifest whose rows are not in view order stops being a thing only
+    a hand-edit could produce.
+    """
+    rows = list(manifest_rows(views=(49, 25, 1)))
+    assert [row["frame_index"] for row in rows[:3]] == [0, 1, 2]
+    manifest_csv, images_dir, predictions_dir, output_dir = build_inputs(
+        tmp_path, rows=rows
+    )
+
+    build_slp_project(manifest_csv, images_dir, predictions_dir, output_dir, METADATA)
+
+    labels = primary(output_dir)
+    by_position = {}
+    for lf in labels.labeled_frames:
+        by_position.setdefault(lf.frame_idx, set()).add(
+            float(lf.instances[0].points[0]["xy"][0])
+        )
+    # Position 0 is view 49 because the manifest says so, not view 1 because it sorts first.
+    assert by_position == {0: {49.0}, 1: {25.0}, 2: {1.0}}
+    assert Path(labels.videos[0].source_video.filename[0]).name.endswith("_age3_0.jpg")
+
+
 def test_a_non_contiguous_frame_index_fails_rather_than_mis_indexing(tmp_path):
     """``frame_index`` is a position into the scan's video, so it must be a rank from zero."""
     rows = list(manifest_rows(frame_indices=[0, 1, 7]))

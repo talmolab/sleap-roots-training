@@ -365,7 +365,7 @@ REQUIRED_COLUMNS = (
 )
 
 
-def _assert_buildable_manifest(manifest: pd.DataFrame, manifest_csv: Path) -> None:
+def assert_buildable_manifest(manifest: pd.DataFrame, manifest_csv: Path) -> None:
     """Fail if the manifest cannot be built from, before any file is opened.
 
     Deviation (blocking review of #40). Neither condition was checked. A renamed column
@@ -467,7 +467,7 @@ def build_slp_project(
             requested root type.
     """
     manifest = pd.read_csv(manifest_csv)
-    _assert_buildable_manifest(manifest, Path(manifest_csv))
+    assert_buildable_manifest(manifest, Path(manifest_csv))
     logger.info("Loaded manifest with %d rows", len(manifest))
 
     # Skeletons first: they depend only on the manifest's age column and the committed

@@ -111,6 +111,45 @@ def test_the_package_is_self_contained_once_the_download_is_gone(tmp_path):
 # --------------------------------------------------------------------------------------
 
 
+def test_a_manifest_that_was_empty_from_the_start_is_refused_by_name(tmp_path):
+    """The third way into an empty package, and the one that stayed accidental.
+
+    Selection and the copy step were both made to reject an empty selection, but neither
+    guards this entry: a manifest handed straight to `build_labeling_package` -- reused
+    from an earlier run, hand-written, or produced by a tool that is not this selector.
+    The orchestrator ran `_assert_selection_could_have_produced` before reaching
+    `build_slp_project`'s own good check, and `int(per_plant.max())` on an empty Series
+    raised `cannot convert float NaN to integer`: a real refusal reached by accident,
+    reported as a numpy message that names nothing an operator can act on.
+
+    Surfaced by the CLI-chain test this review suggested, which is exactly the seam a
+    per-stage test could not see -- both stages were individually correct.
+    """
+    _, scans_csv, predictions_dir = download(tmp_path)
+    empty_csv = tmp_path / "empty_manifest.csv"
+    with empty_csv.open("w", newline="") as fh:
+        csv.writer(fh).writerow(list(ss.MANIFEST_COLUMNS))
+    output_dir = tmp_path / "soybean-weep-labeling"
+
+    with pytest.raises(ValueError) as excinfo:
+        build_labeling_package(
+            empty_csv,
+            scans_csv,
+            predictions_dir,
+            output_dir,
+            METADATA,
+            bloom_experiment_id=10102496,
+            accessions=ACCESSIONS,
+            selection=SELECTION,
+        )
+
+    message = str(excinfo.value)
+    assert "no rows" in message
+    assert empty_csv.name in message
+    assert "NaN" not in message
+    assert not output_dir.exists()
+
+
 def test_a_failed_build_writes_no_package_directory(tmp_path):
     """Task 4.7's rule, raised to the package.
 

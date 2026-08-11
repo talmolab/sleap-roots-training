@@ -398,6 +398,56 @@ def test_a_drive_relative_source_scan_path_is_rejected_rather_than_anchoring(
     assert not (tmp_path / "package/images").exists()
 
 
+@pytest.mark.parametrize(
+    "scans_uses_backslashes, manifest_uses_backslashes",
+    [(True, True), (True, False), (False, True)],
+)
+def test_windows_paths_copy_end_to_end_through_a_real_scans_csv(
+    tmp_path, scans_uses_backslashes, manifest_uses_backslashes
+):
+    r"""design.md F11's producer, driven all the way through rather than asserted about.
+
+    Suggestion, third review of #40. The shared `posix_path` helper was covered by an
+    identity check (`ss.posix_path is _posix`) and unit calls -- which pin that the rule
+    exists and what it returns, but never that a `scans.csv` carrying `images\Wave1\...`
+    actually resolves to files on a POSIX box. That is the claim F11 makes, and this data
+    is real: the shipped WEEP manifest was written on the vault's Windows machine, and the
+    manifest travels inside the package (Decision 3), so it outlives the machine that
+    wrote it.
+
+    The mixed cases matter more than the matching one: normalization happens on both sides
+    of the manifest/`scans.csv` cross-check (`copy_images.py:162-165`), so a manifest
+    written on Windows against a `scans.csv` downloaded on Linux -- or the reverse -- has
+    to match. Only one side normalizing would report every scan "not described by".
+    """
+    bloomctl_scans, _ = build_download(tmp_path)
+    windows_path = BLOOMCTL_SCAN_PATH.replace("/", "\\")
+
+    write_scans_csv(
+        bloomctl_scans, windows_path if scans_uses_backslashes else BLOOMCTL_SCAN_PATH
+    )
+    manifest = write_manifest(
+        tmp_path / "sample_manifest.csv",
+        windows_path if manifest_uses_backslashes else BLOOMCTL_SCAN_PATH,
+    )
+    if manifest_uses_backslashes:
+        # `write_manifest` joins `source_image` with a forward slash, so rewrite it to the
+        # fully-Windows form a manifest written on that machine would actually carry.
+        rows = list(csv.DictReader(manifest.open()))
+        for row in rows:
+            row["source_image"] = row["source_image"].replace("/", "\\")
+        with manifest.open("w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(ss.MANIFEST_COLUMNS))
+            writer.writeheader()
+            writer.writerows(rows)
+    images_dir = tmp_path / "package/images"
+
+    assert copy_selected_images(manifest, bloomctl_scans, images_dir) == 3
+    # The bytes, not just the count: a resolution that landed on the wrong view would copy
+    # three files and still be a wrong package.
+    assert (images_dir / "A3244_9DK8KJJEZR_age3_1.jpg").read_bytes() == b"jpeg-25"
+
+
 def test_a_drive_relative_source_image_is_rejected_even_when_its_scan_resolves(
     tmp_path,
 ):

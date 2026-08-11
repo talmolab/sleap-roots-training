@@ -11,6 +11,7 @@ Mirrors ``tests/test_registry_cli.py``: every failure has to arrive as a clean
 
 from __future__ import annotations
 
+import csv
 import json
 import shutil
 
@@ -19,6 +20,7 @@ from click.testing import CliRunner
 
 from conftest import ACCESSIONS, TOTAL_VIEWS, download
 from sleap_roots_training import cli
+from sleap_roots_training.labeling import select_samples as ss
 from sleap_roots_training.labeling.metadata import PACKAGE_METADATA_FILENAME
 from sleap_roots_training.labeling.validate import validate_package
 
@@ -296,6 +298,100 @@ def test_copy_images_failure_is_a_clean_error(tmp_path):
     assert "Error:" in result.output
     assert not images_dir.exists()
     assert not isinstance(result.exception, (OSError, ValueError))
+
+
+# --------------------------------------------------------------------------------------
+# Blocking review of #40 — the empty-selection path, threaded through all three commands
+# --------------------------------------------------------------------------------------
+
+
+def test_a_zero_match_filter_stops_at_select_and_no_later_stage_can_be_reached(
+    tmp_path,
+):
+    """The empty-selection path as an operator meets it: three commands, in order.
+
+    Each stage's refusal is pinned at the function level already. What was missing is the
+    literal chain (suggestion, third review of #40): the guarantee this path actually needs
+    is that *nothing downstream ever runs*, and that is a property of the sequence rather
+    than of any one stage. The trigger is the one `docs/labeling-packages.md` encourages --
+    `--cleaned-csv` takes a glob, so a pattern matching the wrong wave yields a QC pool
+    sharing no barcode with `scans.csv`.
+
+    Before the review this chain ran to completion: `select` wrote a header-only manifest
+    and exited 0, `copy-images` created an empty `images/` and exited 0, and `build` failed
+    only by accident, on `cannot convert float NaN to integer`.
+    """
+    from test_labeling_select_samples import write_cleaned, write_scans
+
+    scans_csv = write_scans(tmp_path)
+    cleaned_csv = write_cleaned(tmp_path, barcodes=["NOT_A_BARCODE_IN_SCANS"])
+    # Not `sample_manifest.csv`: `build_args` calls `download()`, which writes the standard
+    # six-row fixture under that name and would quietly replace the empty manifest below.
+    output_csv = tmp_path / "empty_manifest.csv"
+
+    select = invoke(
+        [
+            "select",
+            "--cleaned-csv",
+            str(cleaned_csv),
+            "--scans-csv",
+            str(scans_csv),
+            "--output-csv",
+            str(output_csv),
+        ]
+    )
+
+    assert select.exit_code != 0
+    assert "Error:" in select.output
+    # The cause, not just a refusal: an operator who globbed the wrong wave needs to be
+    # told the pools do not overlap, since both files exist and neither is malformed.
+    assert "barcode" in select.output.lower()
+    # Nothing written, so stage two has no input to be handed by mistake.
+    assert not output_csv.exists()
+    assert not isinstance(select.exception, (OSError, ValueError, KeyError))
+
+    # The manifest an operator would hand-write after seeing an empty selection -- the
+    # third way in, and the one no stage used to reject.
+    with output_csv.open("w", newline="") as fh:
+        csv.writer(fh).writerow(list(ss.MANIFEST_COLUMNS))
+    images_dir = tmp_path / "package/images"
+
+    copy = invoke(
+        [
+            "copy-images",
+            "--manifest",
+            str(output_csv),
+            "--scans-csv",
+            str(scans_csv),
+            "--output-dir",
+            str(images_dir),
+            "--total-views",
+            str(TOTAL_VIEWS),
+        ]
+    )
+
+    assert copy.exit_code != 0
+    assert "Error:" in copy.output
+    assert not images_dir.exists(), "an empty images/ is the F1 failure, not a success"
+
+    package_dir = tmp_path / "soybean-weep-labeling"
+    build = invoke(
+        [
+            "build",
+            *build_args(
+                tmp_path,
+                **{"--manifest": str(output_csv), "--output-dir": str(package_dir)},
+            ),
+        ]
+    )
+
+    assert build.exit_code != 0
+    assert "Error:" in build.output
+    assert not package_dir.exists()
+    # Deliberate: `build` used to fail here through `int(per_plant.max())` on an empty
+    # Series, which is a real refusal reached by accident and reported as a numpy message.
+    assert "NaN" not in build.output
+    assert not isinstance(build.exception, (OSError, ValueError, KeyError))
 
 
 @pytest.mark.parametrize("command", ["select", "copy-images", "build", "validate"])

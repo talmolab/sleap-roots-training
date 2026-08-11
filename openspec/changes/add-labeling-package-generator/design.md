@@ -362,6 +362,30 @@ guard were written against a *definition* (absolute) when the hazard is a *behav
 gets discarded on join). The colon-in-a-directory-name case is pinned green alongside the
 rejections so the rule stays keyed on the drive and not on the character.
 
+### F1 revisited — the third entrance to an empty package was an ordering bug, not a missing check
+
+Recorded during the third review of #40, found by writing the CLI-chain test that review suggested.
+
+The second review closed two of the three ways into an empty package: `select_samples` rejects a
+QC pool sharing no barcode with `scans.csv`, and `copy_selected_images` rejects an empty manifest
+before it creates `images/`. The third — a manifest that was *already* empty when the build was
+handed it, reused from an earlier run, hand-written, or written by a tool that is not this
+selector — was reported fixed and was not. `build_slp_project` had the right check and the right
+message all along; `build_labeling_package` simply ran `_assert_selection_could_have_produced`
+first, and `int(per_scan.max())` on an empty Series raised `cannot convert float NaN to integer`.
+A real refusal, arriving by accident, under a message naming nothing an operator can act on.
+
+**Decision.** Call `assert_buildable_manifest` at the orchestrator's entrance, before the
+selection cross-check, and promote it from `_assert_buildable_manifest` rather than reaching into
+another module's privates — the same correction made to `registry.lineage.resolve_git_sha` in this
+round.
+
+Worth recording as a *method* point rather than just a fix. Both stages were individually correct
+and individually tested; the defect lived in their order, which is a property no per-stage test
+can see. That is exactly what the suggested end-to-end chain test was for, and it earned its place
+on the first run — the empty-selection path now has one test that threads `select` → `copy-images`
+→ `build` and asserts each refuses, rather than three tests that each pass alone.
+
 ## Decision 1: Port first, change second — characterization tests before behavior changes
 
 Sequence: bring each script in with its behavior preserved, pin that behavior in tests, *then* make
