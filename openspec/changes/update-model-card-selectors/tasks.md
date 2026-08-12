@@ -69,7 +69,11 @@ OpenSpec change.
   sdist and wheel hashes, so a yanked or deleted pre-release fails `uv sync --locked` on every CI leg,
   on the PR and on `main`, until the lock is regenerated.
 
-- [ ] 1.0 File the tracking issue/proposal in that repo and link it here (none exists yet). **Ours.**
+- [x] 1.0 Tracking issue filed: **talmolab/sleap-roots-contracts#31**. It carries the shape, the
+      do-not-add-a-tolerant-read decision with the four-state table, the release-and-do-not-yank note,
+      and the prerequisite that `tighten-model-card-validation` be archived there first so our delta is
+      authored against a base matching the shipped code. The full OpenSpec change in that repo is
+      still to be authored.
 
 ## 2. Consumer (`sleap-roots-predict`, separate repo)
 
@@ -83,8 +87,10 @@ Acceptance conditions, as above.
 - Implement the 0.7 decision on multiple matching cards.
 - Pin the new contracts version.
 
-- [ ] 2.0 File the tracking issue in that repo and link it here (none exists yet); cross-link
-      predict#14. **Ours.**
+- [x] 2.0 Tracking issue filed: **talmolab/sleap-roots-predict#34**, cross-linking predict#14 and
+      predict#32 (where the skip-with-warning behavior 2.5c relies on was decided). It records the two
+      behaviors the migration depends on, asks that the ambiguity raise not be relaxed as a side
+      effect, and states the two-sided deploy ordering.
 - [x] 2.5 **Resolved by Elizabeth on 2026-08-11**, read off predict's current code rather than left as
       a TODO. This was the load-bearing unknown and it changed the migration plan, so the answers are
       recorded here rather than only in the review thread:

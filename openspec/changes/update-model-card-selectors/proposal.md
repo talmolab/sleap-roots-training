@@ -112,11 +112,11 @@ changed the migration plan and are recorded in full in `tasks.md`.
   first; this repo cannot bump a pin that does not exist. Do **not** add a tolerant read for the legacy
   flat shape (see `design.md` "Reverse compatibility"). Ownership resolved 2026-08-12: it is this team's
   repo, so its change gets the same OpenSpec treatment as this one (proposal, design, tasks, spec delta,
-  adversarial review before implementation). Issue: *to be filed, task 1.0.*
+  adversarial review before implementation). Issue: **talmolab/sleap-roots-contracts#31**.
 - **`sleap-roots-predict`** — generalize `choose_models`, match age against the *matching* selector,
   pin the new contracts. Ordered on **deploy**, in both directions: not before this repo's re-seed is
   live and verified, and the old collections are not retired until after it is deployed. Merging and
-  pinning can happen at any time. Issue: *to be filed*; cross-link predict#14.
+  pinning can happen at any time. Issue: **talmolab/sleap-roots-predict#34**; cross-links predict#14 and predict#32.
 
 ## Impact
 
