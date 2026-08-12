@@ -9,9 +9,9 @@ single invocation on a host where the optional `train` extra is installed. `run`
 and SHALL fail fast with a clear error naming the `sleap-roots-training[train]` install when none of
 them yields it. `run` SHALL print the absolute path of the resolved executable before starting the
 backend. `run` SHALL invoke the backend as a subprocess and SHALL NOT import `sleap-nn`'s training
-entry points. `run` SHALL execute its steps in the order gate → validate → resolve destination →
-write artifacts → invoke, so that a failure at any step leaves nothing written and no subprocess
-started. Deep `sleap-nn` validation SHALL run only when `sleap_nn` is importable by the running
+entry points. `run` SHALL execute its steps in the order gate → validate → credential check →
+run-name and destination checks → run-directory refusal → write artifacts → invoke, so that a
+failure at any step leaves nothing written and no subprocess started. Deep `sleap-nn` validation SHALL run only when `sleap_nn` is importable by the running
 interpreter — which resolving the console script does not guarantee — and `run` SHALL report the
 same skip note `validate` reports when it is not, without treating the skip as a failure.
 
@@ -29,6 +29,12 @@ same skip note `validate` reports when it is not, without treating the skip as a
 - **WHEN** a `sleap-nn` console script exists both in the running interpreter's console-script
   directory and elsewhere on `PATH`
 - **THEN** `run` invokes the one from the interpreter's console-script directory
+
+#### Scenario: The interpreter's own directory is searched before PATH
+
+- **WHEN** no `sleap-nn` console script exists in the interpreter's console-script directory, but one
+  exists beside the interpreter itself and another exists on `PATH`
+- **THEN** `run` invokes the one beside the interpreter
 
 #### Scenario: PATH is the fallback, not the first choice
 
@@ -76,8 +82,9 @@ block. Neither SHALL be a temporary file, an in-memory pipe, or a file `run` del
 Both SHALL be written with LF (`\n`) line endings on every platform and SHALL be written atomically,
 so a failed write leaves no truncated artifact. `trainer_config.ckpt_dir` SHALL default to `"."`,
 matching the backend's own default. `run` SHALL require a usable `trainer_config.run_name` — a
-non-empty string that is not the literal `"None"`, is not absolute, and contains no path separator —
-and SHALL refuse otherwise, naming the field. `run` SHALL refuse to reuse a run directory that
+string that is non-empty after stripping surrounding whitespace, is not the literal `"None"` (which
+the backend itself treats as unset), is not absolute, and contains no path separator — and SHALL
+refuse otherwise, naming the field. `run` SHALL refuse to reuse a run directory that
 already holds evidence of a previous run (a `best.ckpt`, or the `training_config.yaml` the backend
 writes on completion), naming the directory and instructing the operator to choose a new
 `trainer_config.run_name`; no flag SHALL override this refusal. `--resolved-config PATH` SHALL
@@ -151,7 +158,8 @@ config itself.
 
 #### Scenario: A destination that would destroy input or is not a file is refused
 
-- **WHEN** `--resolved-config` names an existing directory, or names the input config itself
+- **WHEN** `--resolved-config` names an existing directory, or names the input config itself, or
+  resolves to a path inside the run directory that would collide with an artifact `run` writes
 - **THEN** the command exits non-zero naming the path (not a traceback)
 - **AND** the input config is left unchanged
 - **AND** the backend is not invoked

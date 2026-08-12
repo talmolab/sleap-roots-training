@@ -81,7 +81,19 @@ skipped; `run` echoes that skip note rather than claiming a deep validation it d
 ### D3 — Write the artifacts the backend cannot, into the run directory
 
 The backend already persists the resolved config twice (table above), so a third copy must justify
-itself. Two artifacts, each with a distinct reason:
+itself. **Decision: both artifacts are written** — this is settled here rather than left to review,
+because the spec's destination and refusal scenarios are built on it.
+
+The decisive argument is that the emitted config is not an optional keepsake: `run` invokes the
+backend as `sleap-nn train --config <path>`, so that file **must exist on disk** for the command to
+work at all. The only real question is where it lands and whether `run` deletes it afterwards, and
+#34 answers that explicitly ("rather than piping it to `sleap-nn train` purely in-memory/via a
+throwaway temp file"). Keeping it in the run directory therefore costs one already-required write
+and no extra machinery. The alternative considered and rejected — stage it outside the run directory
+and rely on the backend's `initial_config.yaml` — buys one fewer file in exchange for losing the
+pre-start guarantee below, and leaves the staged input orphaned somewhere less discoverable.
+
+Two artifacts, each with a distinct reason:
 
 - **`source_config.yaml`** — a verbatim copy of the input, carrying the `experiment` block
   (species / mode / root_type / dataset). Every config the backend sees has that block stripped by
@@ -92,7 +104,10 @@ itself. Two artifacts, each with a distinct reason:
   starts (sleap-nn writes its two only after trainer construction and only on `global_rank == 0`, so
   a run that dies on a bad `.slp` path or at model init otherwise leaves a directory with no config
   at all), and it is the **input**, whereas `training_config.yaml` is post-mutation (the backend
-  rewrites `run_name`, `in_channels`, `cache_img_path`, `wandb.current_run_id` into it).
+  rewrites `run_name`, `in_channels`, `cache_img_path`, `wandb.current_run_id` into it). Of these,
+  only the first is unique against `initial_config.yaml`, which is also a pre-mutation copy — the
+  honest weight of this artifact rests on pre-start existence plus the fact that it has to be
+  written anyway.
 
 The filename is settled, not open: `training_config.yaml` **must not** be used — the backend writes
 that exact name into the same directory and would silently overwrite ours at the end of every
@@ -174,8 +189,9 @@ while True:
 
 ### D6 — Step order is a contract, not an implementation detail
 
-`gate → validate → credential check → run-name / destination checks → run-directory refusal → write
-→ invoke`. Every cheap failure precedes every side effect: no backend, invalid config, missing W&B
+`gate → validate → credential check → run-name and destination checks → run-directory refusal →
+write artifacts → invoke` — the same seven steps, in the same words, as the spec requirement, so the
+two cannot drift. Every cheap failure precedes every side effect: no backend, invalid config, missing W&B
 credential, unusable `run_name`, or occupied run directory all fail with **nothing written and no
 subprocess started**. This is asserted in tests, not merely documented, because the failure it
 prevents — a stale artifact beside a run that never happened — is indistinguishable later from a
@@ -199,10 +215,20 @@ CI never selects the `train` extra, so the unit tests assert the contract throug
 private `_subprocess_run` wrapper: a wrapper launders the call, so asserting "no redirection kwargs"
 against it would prove nothing about what reaches `subprocess`.
 
-Two things the seams cannot prove — that streams really are inherited, and that a real signal maps
-correctly — are covered by a **stub console script** test: a `#!/bin/sh` script on a temp `PATH`,
-driven through the real `Popen` path, asserted with `capfd`. It needs neither the extra nor a `.slp`,
-so it runs in CI on Linux and macOS (skipped on Windows, where a shell stub is not executable).
+Two things the seams cannot prove — that streams really are inherited, and that exit statuses
+survive a real process — are covered by driving the real `Popen` path twice:
+
+- **Every platform, including Windows:** `run_backend` takes an argv, so a test can hand it
+  `[sys.executable, "-c", <script>]`. `sys.executable` is a real executable everywhere, so the
+  plumbing (inherited fds asserted with `capfd`, exit-status propagation, the interrupt wait loop)
+  is exercised on the Windows leg too — the OS the GPU box actually runs. This is why `build_argv`
+  is a separate pure function rather than something `run_backend` does internally.
+- **POSIX only:** a `#!/bin/sh` **stub console script** on a temp `PATH`, which additionally covers
+  resolution-through-`PATH` and the exact argv the backend receives, plus a `kill -9` self-signal
+  for the `128 + N` mapping. Skipped on Windows, where a shell stub is not executable and `.bat`
+  cannot be launched by `CreateProcess` without a shell.
+
+Neither needs the extra or a `.slp`, so both run in CI.
 
 An `.slp`-backed end-to-end test is **not** proposed: `.gitignore` blocks `*.slp` and `/data/`, and
 `openspec/project.md` makes W&B the system of record, so a committed fixture is prohibited — a test
@@ -262,14 +288,19 @@ them. The `emit` newline fix is independently revertible.
 
 ## Open Questions
 
-1. **Both artifacts, or only `source_config.yaml`?** Given the backend writes two configs of its own,
-   `resolved_config.yaml` rests on the two counts in D3. #34 asked for it explicitly, so it is
-   specified — but trimming to one file is a defensible call, and this is the issue author's to make.
-2. **Is the run-directory refusal too strict?** It is stricter than the backend's own trigger (D4),
-   on purpose. The cost is that reusing a name now requires deleting a directory by hand.
-3. **`run` vs `train` as the verb.** Recommendation: keep `run`. `sleap-roots-training train` and
+Question 1 of the first draft — "both artifacts, or only `source_config.yaml`?" — is **closed**, and
+the answer is in D3: the emitted config has to be written for the backend to be invoked at all, and
+#34 rules out a throwaway temp, so it stays in the run directory. It is a decision, not a deferral,
+because the destination and refusal scenarios are written on top of it.
+
+The remaining three change no spec text whichever way they go:
+
+1. **Is the run-directory refusal too strict?** It is stricter than the backend's own trigger (D4),
+   on purpose — a `save_ckpt: false` run leaves no `best.ckpt`, so the backend would silently reuse
+   the directory. The cost is that reusing a name means deleting a directory by hand.
+2. **`run` vs `train` as the verb.** Recommendation: keep `run`. `sleap-roots-training train` and
    `sleap-nn train` would be near-homographs in adjacent fenced blocks that take *different* inputs
    (source vs emitted), and getting them backwards reproduces the exact `ConfigKeyError` the guide
    already documents.
-4. **Refuse an in-config `wandb.api_key`, or mask it?** Refusal is specified (D9) because masking
+3. **Refuse an in-config `wandb.api_key`, or mask it?** Refusal is specified (D9) because masking
    breaks byte-identity with `emit`. Masking only in `source_config.yaml` is the alternative.

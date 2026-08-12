@@ -75,15 +75,18 @@ box. `run` is a shortcut for when all three would run on one host.
 
 ## Open Questions For Review
 
-Four decisions worth an explicit call before implementation — full context in `design.md`:
+The "one artifact or two" question is **closed** — see `design.md` D3. The emitted config must be on
+disk for `sleap-nn train --config` to be invoked at all, and #34 explicitly rules out a throwaway
+temp file, so it stays in the run directory beside `source_config.yaml`. That was spec-shaping, so it
+is decided here rather than deferred.
 
-1. **Are both artifacts wanted, or only `source_config.yaml`?** Given the backend writes two configs
-   of its own, `resolved_config.yaml` earns its place only on the two counts in D3. #34 asked for it
-   explicitly, so it is specified — but trimming to one file is a reasonable call.
-2. **Is refusing a reused run directory too strict**, given the backend would happily suffix?
-3. **Is `run` the right verb** next to `sleap-nn train`? (Recommendation: yes — `train` would create
+Three questions remain, none of which change spec text whichever way they go — full context in
+`design.md`:
+
+1. **Is refusing a reused run directory too strict**, given the backend would happily suffix?
+2. **Is `run` the right verb** next to `sleap-nn train`? (Recommendation: yes — `train` would create
    two near-identical invocations taking *different* inputs.)
-4. **Is refusing an in-config `wandb.api_key` acceptable**, or should `run` mask it instead?
+3. **Is refusing an in-config `wandb.api_key` acceptable**, or should `run` mask it instead?
 
 ## Impact
 
@@ -97,19 +100,25 @@ Four decisions worth an explicit call before implementation — full context in 
     gains the LF-newline requirement on emitted files).
 - **Affected code:** `src/sleap_roots_training/backend.py` (new — resolve the executable, stage the
   artifacts, build the argv, run the backend, translate its status); `src/sleap_roots_training/cli.py`
-  (new `run` subcommand; one-line `newline="\n"` fix to `emit`; group docstring); `tests/conftest.py`
-  (fixture support for pointing `ckpt_dir` at `tmp_path`); `tests/test_backend_invoke.py` and
-  `tests/test_cli_run.py` (new); `docs/training.md`, `tests/test_training_docs.py`,
-  `docs/CHANGELOG.md`, `README.md`, `openspec/project.md`. `src/sleap_roots_training/config.py` is
-  unchanged.
+  (new `run` subcommand; one-line `newline="\n"` fix to `emit`; group docstring);
+  `tests/test_backend_invoke.py` and `tests/test_cli_run.py` (new); `docs/training.md`,
+  `tests/test_training_docs.py`, `docs/CHANGELOG.md`, `README.md`, `openspec/project.md`.
+  `src/sleap_roots_training/config.py` is unchanged, and so is `tests/conftest.py` — its existing
+  `write_config(overrides=...)` factory already covers pointing `ckpt_dir` at `tmp_path`.
 - **Not affected:** `pyproject.toml` (no new dependency — `subprocess`, `shutil`, `sysconfig` are
-  stdlib; the `train` extra is unchanged; `uv_build` picks up a new module with no configuration),
+  stdlib; the `train` extra is unchanged; and `uv_build` needs no configuration for a new module —
+  verified against the built wheel, which already ships a *non*-Python file,
+  `registry/data/model_selection.yaml`, with no `[tool.uv.build-backend]` section present),
   `.github/workflows/ci.yml` (`src/sleap_roots_training/**`, `tests/**`, `docs/**` are already in
   the paths filter — note `README.md` is *not*, so it must land in the same commit as the `docs/`
   changes to get CI), `docs/training-backend.md` (documents the raw Tier-0.5 sample config, which
   has no `experiment` block and so is not a `run` input), `docs/roadmap.md` (no tier or open
-  decision becomes false), and the six `examples/*.yaml` headers (they document the *cross-machine*
-  path, which is exactly the case `run` does not serve).
+  decision becomes false), and the six `examples/*.yaml` headers. That last one is a **judgment
+  call, not an oversight**: those headers document the *cross-machine* path, which is exactly the
+  case `run` does not serve, so adding it would put six copies of a co-installed-only shortcut on
+  the configs most likely to be copied to another host. Adding one line to
+  `examples/arabidopsis_primary_cylinder.yaml` alone — the file the guide tells users to copy — is
+  the reasonable middle ground if reviewers want `run` discoverable from an example.
 - **Breaking changes:** none to any documented contract. The one behavior change is `emit -o`'s line
   endings on Windows (CRLF → LF), called out above and in the CHANGELOG entry.
 - **Concurrent work:** `update-model-card-selectors` (#39) is in flight on branch
