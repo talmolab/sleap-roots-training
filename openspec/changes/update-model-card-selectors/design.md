@@ -137,7 +137,9 @@ The 13 already-published artifacts carry the **old flat** metadata (`species`, `
 validating**, so a consumer upgraded past the contract bump cannot read the current production
 registry. Ordering therefore matters more than usual:
 
-1. `sleap-roots-contracts`: add `Selector`, change `ModelCard`, release a new pre-release version.
+1. `sleap-roots-contracts`: add `Selector`, change `ModelCard`, release `0.1.0a8` (authored in
+   talmolab/sleap-roots-contracts#32; `0.1.0a7` is already on PyPI, so this cannot ride an unreleased
+   version the way `tighten-model-card-validation` did).
 2. This repo: bump the pin, rewrite expansion/metadata/publishing, re-seed the registry so all 8
    collections carry new-shape cards.
 3. `sleap-roots-predict`: generalize `choose_models` to "any selector matches", pin the new contracts,

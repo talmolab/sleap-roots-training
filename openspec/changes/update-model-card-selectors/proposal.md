@@ -108,11 +108,12 @@ there (filing the two tracking issues, 1.0 / 2.0). Task 2.5, reading predict's l
 load-bearing unknown and Elizabeth resolved it on 2026-08-11 against predict's actual code; its answers
 changed the migration plan and are recorded in full in `tasks.md`.
 
-- **`sleap-roots-contracts`** — add `Selector`, reshape `ModelCard`, release a pre-release. Must land
+- **`sleap-roots-contracts`** — add `Selector`, reshape `ModelCard`, release **`0.1.0a8`**. Must land
   first; this repo cannot bump a pin that does not exist. Do **not** add a tolerant read for the legacy
   flat shape (see `design.md` "Reverse compatibility"). Ownership resolved 2026-08-12: it is this team's
   repo, so its change gets the same OpenSpec treatment as this one (proposal, design, tasks, spec delta,
-  adversarial review before implementation). Issue: **talmolab/sleap-roots-contracts#31**.
+  adversarial review before implementation). Issue: **talmolab/sleap-roots-contracts#31**; the OpenSpec
+  change is authored and open as **talmolab/sleap-roots-contracts#32** (proposal only, no code yet).
 - **`sleap-roots-predict`** — generalize `choose_models`, match age against the *matching* selector,
   pin the new contracts. Ordered on **deploy**, in both directions: not before this repo's re-seed is
   live and verified, and the old collections are not retired until after it is deployed. Merging and

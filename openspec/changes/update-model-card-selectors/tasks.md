@@ -65,15 +65,35 @@ OpenSpec change.
 - **Do not** add a tolerant read that lifts a legacy flat card into a single selector. Decided in 0.3.
   It is not merely unnecessary, it is actively harmful: it keeps the old cards valid for an upgraded
   consumer and so creates the ambiguous match `choose_models` raises on (0.7).
-- Release a new pre-release version, and **do not yank it**: `uv.lock` pins contracts from PyPI with
+- Release **`0.1.0a8`**, and **do not yank it**: `uv.lock` pins contracts from PyPI with
   sdist and wheel hashes, so a yanked or deleted pre-release fails `uv sync --locked` on every CI leg,
-  on the PR and on `main`, until the lock is regenerated.
+  on the PR and on `main`, until the lock is regenerated. (`0.1.0a8` and not a6/a7: both are already on
+  PyPI, so unlike `tighten-model-card-validation` this cannot ride an unreleased version.)
 
 - [x] 1.0 Tracking issue filed: **talmolab/sleap-roots-contracts#31**. It carries the shape, the
-      do-not-add-a-tolerant-read decision with the four-state table, the release-and-do-not-yank note,
+      do-not-add-a-tolerant-read decision with the state table, the release-and-do-not-yank note,
       and the prerequisite that `tighten-model-card-validation` be archived there first so our delta is
-      authored against a base matching the shipped code. The full OpenSpec change in that repo is
-      still to be authored.
+      authored against a base matching the shipped code.
+- [x] 1.0b OpenSpec change authored and open as **talmolab/sleap-roots-contracts#32** (0.5's
+      "link it back here as 1.0"). Proposal only — no code — pending review. Four things from it that
+      are inputs to §3 rather than restatements of §1:
+
+      **(a)** `Selector` is `frozen` and sets `extra="ignore"`. `frozen` is what 3.2 already relies on
+      for hashable de-duplication; `extra="ignore"` means a *stray extra* key in an emitted selector is
+      silently dropped rather than rejected, so 3.3's "emit exactly these four keys" discipline is
+      ours to keep — the contract will not fail the seed for us. A *missing* key still fails.
+      **(b)** Target version is **`0.1.0a8`**, so 3.1 has a concrete pin.
+      **(c)** The non-empty `selectors` check is a `BeforeValidator`, not `Field(min_length=1)`:
+      measured, `min_length` reports a spurious `too_short` next to the real error whenever a card's
+      only selector is invalid. Our spec's "A card with no selectors is rejected" scenario holds either
+      way, but any test asserting an exact error *list* should expect one error, not two.
+      **(d)** Card-level `species`/`mode`/`age_min`/`age_max` are gone from `ModelCard.model_fields`
+      entirely, which is what makes `tests/test_registry_chooser.py:180`'s
+      `ModelCard.model_fields["species"]` raise `KeyError` — the reason 0.3 says no pin-only commit is
+      green.
+
+      Not yet settled there and worth watching, since both were unstated in #31: (a)'s two config
+      choices are flagged as open questions on #32 for Elizabeth.
 
 ## 2. Consumer (`sleap-roots-predict`, separate repo)
 
@@ -138,7 +158,8 @@ incidental catch that covers it today. 3.4 no longer waits on a decision: the fo
 spec (0.2, 0.6). Expect the full suite to be red from 3.1 until the last test
 lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite runs.
 
-- [ ] 3.1 Bump the `sleap-roots-contracts` pin (`pyproject.toml`, `uv.lock` together).
+- [ ] 3.1 Bump the `sleap-roots-contracts` pin to **`==0.1.0a8`** (`pyproject.toml`, `uv.lock`
+      together). Blocked until that version is actually published to PyPI, not merely merged.
 - [ ] 3.2 Rewrite `expand_rows_to_cards` to group by `(source_model_id, root_type)` and attach one
       selector per contributing row, **de-duplicated** and sorted on an explicit key
       (`key=lambda s: (s.species, s.mode, s.age_min, s.age_max)`) — a frozen pydantic `Selector` is
