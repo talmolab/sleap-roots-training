@@ -453,13 +453,21 @@ that `validate_artifact_name` catches. `validate_artifact_name` and `INVALID_ART
 constructor rejects — a slug that only strips `/` would pass such a check and then abort the live
 seed on the first card. The id SHALL also respect the 128-character `NAME_MAXLEN` bound.
 
-The scheme SHOULD be stable against a metadata-only edit, so that adding a selector to an existing
-card does not rename a live production collection.
+The scheme SHALL be stable against a metadata-only edit, so that adding a selector to an existing card
+does not rename a live production collection.
 
-The concrete formula is the subject of decision 0.2 in `tasks.md` (recommendation: derive from
-`source_model_id`); this requirement fixes the properties any chosen formula must satisfy. *(This
-paragraph is replaced by the agreed formula in task 0.6, before this change is archived — it must not
-reach the permanent spec as a pointer into `changes/archive/`.)*
+The formula SHALL be: take the card's `source_model_id` and replace each `/` and each `=` with `-`,
+changing nothing else. Case, dots, underscores and existing hyphens are preserved. So
+`rice/younger/crown/220821_163331.multi_instance.n=867` becomes
+`rice-younger-crown-220821_163331.multi_instance.n-867`. Deriving the id from the physical model rather
+than from a selection context is what satisfies the stability property above: adding a selector to a
+card does not change which weights the card describes.
+
+This mapping is **not injective in principle** — two `source_model_id`s differing only by `/` against
+`=` in one position would collapse onto a single id — so it does not remove the need for the
+duplicate-id fail-fast guard, which is what turns such a collision into a failed seed rather than a
+silent overwrite. Verified against the committed matrix: the 8 model ids yield 8 distinct ids, every one
+accepted by the `wandb.Artifact` constructor, the longest 72 characters against the 128 bound.
 
 #### Scenario: Collection ids are legal wandb artifact names
 

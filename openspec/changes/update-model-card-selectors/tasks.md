@@ -10,91 +10,47 @@ The items in those groups that genuinely are ours stay checkboxes. See `proposal
 cross-references stay stable, **not** by execution order. Each group states its own execution order,
 and in both cases the tests are authored and confirmed red before the implementation tasks.
 
-## 0. Decisions required before implementation (blocking)
+## 0. Decisions — all resolved by Elizabeth on 2026-08-12
 
-- [ ] 0.1 Approve the bundled-selector shape (`Selector`, `ModelCard.selectors`, scalar `root_type`).
-- [ ] 0.2 Decide the **collection-id scheme** (`design.md` "Open question"). Recommendation: derive
-      from `source_model_id`. This renames all 13 live production collections. **This decision is a
-      hard input to everything below** — it sets the orphan count (0.4, §6.2), whether the re-seed is
-      additive or in-place (§6.1), whether old-pinned consumers keep a working fallback
-      (`design.md` "Reverse compatibility"), and the ordering inside §3. Whatever is chosen, the id
-      must be constructible as a `wandb.Artifact` name: every `source_model_id` contains both `/` and
-      `=`, and both are illegal (see 3.14).
-      **One cost of the rename that was invisible until 2.5e:** `registry_id` is an input to
-      `compute_idempotency_key` in `sleap-roots-contracts`, which hashes
-      `(registry_id, version, weights_checksum)` for Bloom. Renaming every collection therefore changes
-      every downstream idempotency key **even though `weights_checksum` is unchanged**, so Bloom will
-      not recognize a post-rename run as identical to a pre-rename one for the same scan, weights and
-      params. That is redundant recompute, not a correctness bug, and it is a one-time step change
-      rather than ongoing churn — but it is a real cost and it should be accepted knowingly rather than
-      discovered later. It also does not favour an alternative: any scheme that lets one card carry
-      several species has to rename these ids.
-- [ ] 0.3 Decide the **migration strategy**: flag day vs tolerant read. **Recommendation reversed on
-      2026-08-11: do NOT add the tolerant read.** Earlier drafts recommended it so an upgraded consumer
-      could never find the registry unreadable. Elizabeth's resolution of 2.5 shows that reasoning was
-      backwards: predict **skips** a card it cannot validate, with a warning, isolated per artifact
-      (2.5c), and `choose_models` **raises** when more than one card matches (2.5d). Work the four
-      states through and the tolerant read is the only one that breaks:
+Recorded here rather than left in the PR thread, per this repo's precedent for breaking changes.
 
-      | consumer contract | old 13 flat cards | new 8 selector cards | matches per context | outcome |
-      |---|---|---|---|---|
-      | old pin | valid, listed | fail on 4 missing required fields, skipped | 1 | works |
-      | new pin **with** tolerant read | lifted to one selector, valid, listed | valid, listed | **2** | **raises** |
-      | new pin **without** tolerant read | `selectors` missing, skipped | valid, listed | 1 | works |
-
-      So skip-with-warning already provides the graceful degradation the tolerant read was meant to
-      provide, in **both** directions, and adding the tolerant read is what manufactures an ambiguity
-      outage during the additive window. Dropping it also deletes task 1.3 from the contracts change
-      and permanently removes the "two valid cards for one context" state rather than merely surviving
-      it. The cost is an ordering constraint, recorded in 0.7 and §6. Still coupled to 0.7, and it
-      still decides whether §3 is one commit or two.
-- [ ] 0.4 Decide the disposition of the collections **orphaned** by the collapse. The count follows
-      from 0.2: **all 13 under option 1** (every id changes, so the re-seed is purely additive and
-      nothing is overwritten), 5 only under option 3, which `design.md` rejects.
-      Recommendation: **explicitly retire them** (drop the `production` alias) as the final step,
-      *after* the 8 new collections verify **and** the upgraded `sleap-roots-predict` is confirmed
-      deployed. Leaving them forever is not neutral — once the schema tightens, predict's registry
-      lister is believed to skip old-shape collections with only a logged warning, so those models
-      stop being selectable **silently**. But retiring them *early* is worse: under option 1 those 13
-      collections are the only thing an un-upgraded consumer can still read, so the alias drop, not
-      the re-seed, is the compatibility cliff.
-- [ ] 0.5 Confirm cross-repo ownership and sequencing with the `sleap-roots-contracts` owner
-      (unassigned as of this proposal — group 1 blocks everything else).
-- [ ] 0.6 Once 0.2/0.3/0.4/0.7 are agreed, **fold the decisions back into `design.md`** and update
-      this file — including writing the literal id formula into the Collection Identifier Scheme
-      requirement in the delta spec **and deleting its pending-decision paragraph**, which otherwise
-      archives into the permanent spec as a TODO pointing at a file that has moved into
-      `changes/archive/`. Sweep the delta spec for *any* remaining pointer at `design.md`, `tasks.md`,
-      or a decision number for the same reason — normative text must stand alone once archived.
-- [ ] 0.7 **Answered by 2.5d, not open: `choose_models` raises today.** It collects matches and does
-      `if len(matches) > 1: raise ValueError("Ambiguous model selection...")`, and generalizing the
-      match predicate to selectors (task 2.1) does not change that outer structure. So what remains to
-      decide is not predict's behavior but **which migration shape** to adopt given it, because an
-      earlier draft of this task said outright that §6.1–6.3 presuppose a non-raising outcome.
-      Three shapes were on the table; only one survives contact with 2.5:
-
-      1. **Drop the tolerant read (0.3) and keep the additive window. Recommended.** Without the
-         tolerant read the old flat cards fail validation for an upgraded consumer and are skipped
-         (2.5c), so only the new card matches and the ambiguity never arises. Both consumer
-         generations work simultaneously during the window, each reading the collections it can parse.
-         The cost is an **ordering constraint**: the re-seed must land **before** the upgraded predict
-         is deployed, or that consumer skips all 13 old collections, finds nothing, and has no model
-         to select. That failure is loud, immediate, and reversible by rolling back predict's deploy,
-         and it destroys nothing in the registry.
-      2. **Keep the tolerant read and make task 2.1 dedupe matches with an identical
-         `weights_checksum` instead of raising.** Robust to deploy ordering, since both cards point at
-         the same weights. But it needs a contracts change *and* a predict behavior change to ship
-         before the window, and it weakens a guard worth keeping: ambiguous selection should be loud
-         in general, not just during this migration.
-      3. **Interleave publish-then-retire per collection.** Guarantees no ambiguity, but drops the
-         production alias off each old collection as its replacement lands, so an un-upgraded consumer
-         loses each model one at a time. Strictly worse than 1, since it surrenders the fallback that
-         0.4 exists to protect.
-- [ ] 0.8 Confirm the cross-repo **deploy** order that shape 1 requires, which is not the order
-      `design.md` originally stated. It is contracts, then this repo's re-seed, then predict's deploy,
-      then retirement. Predict may merge and pin whenever, but must not deploy until the 8 new
-      collections are live and verified. This is a coordination commitment rather than a technical
-      guarantee, so it needs an owner.
+- [x] 0.1 Bundled-selector shape (`Selector`, `ModelCard.selectors`, scalar `root_type`). **Approved.**
+- [x] 0.2 Collection-id scheme: **derive from `source_model_id`. Approved**, including the Bloom
+      idempotency-key reset it causes (2.5e). Rationale given: the Bloom pipeline is not in production
+      yet, so a one-time redundant-recompute cost is a non-issue now. The literal formula is written
+      into the Collection Identifier Scheme requirement in the delta spec: replace each `/` and each
+      `=` in `source_model_id` with `-`, change nothing else. Verified against the committed matrix —
+      8 distinct ids, all accepted by the `wandb.Artifact` constructor, longest 72 chars against the
+      128 bound. This renames all 13 live production collections.
+- [x] 0.3 Migration strategy: **no tolerant read. Approved**, together with the re-seed-before-
+      predict-deploy ordering it requires. See `design.md` "Reverse compatibility" for the four-state
+      argument: predict skips a card it cannot validate (2.5c) and raises on more than one match
+      (2.5d), so skip-with-warning already gives graceful degradation in both directions and a
+      tolerant read would instead manufacture an ambiguous match inside the migration window.
+- [x] 0.4 Disposition of the 13 orphaned collections: **retire them. Approved**, gated on the new
+      collections verifying **and** predict's upgrade being confirmed deployed, not merely merged.
+- [x] 0.5 Contracts ownership: **resolved, there is no external owner to find.**
+      `sleap-roots-contracts` is this team's repo. Filing its proposal is 1.0 and is mine.
+- [x] 0.6 Fold the decisions back into `design.md`, this file, and the delta spec. **Done in this
+      commit**, including writing the literal id formula into the Collection Identifier Scheme
+      requirement and deleting its pending-decision paragraph, so nothing archives into the permanent
+      spec as a pointer into `changes/archive/`.
+- [x] 0.7 Behavior on more than one matching production card: **answered by 2.5d — `choose_models`
+      raises today** (`if len(matches) > 1: raise ValueError("Ambiguous model selection...")`), and
+      task 2.1 changes only the match predicate, not that structure. Approving 0.3 resolves the shape
+      question that followed from it: the additive window is kept and the ambiguity is removed by not
+      adding the tolerant read, rather than by interleaving publish-and-retire per collection or by
+      relaxing the raise. The alternative left on the record, in case deploy-order discipline is later
+      judged too fragile: keep a tolerant read and have task 2.1 dedupe matches sharing a
+      `weights_checksum` instead of raising. That is robust to deploy order but needs a change in two
+      repos before the window and relaxes a guard worth keeping.
+- [ ] 0.8 **Own the deploy-order commitment** (assigned to me): this repo's re-seed must be live and
+      verified **before** the upgraded `sleap-roots-predict` is deployed. Predict may merge and pin at
+      any time; only the deploy is ordered. This is the price of dropping the tolerant read and it is a
+      coordination commitment rather than something the code enforces, which is why it stays open until
+      the rollout is actually sequenced. If it slips, the upgraded consumer skips all 13 old collections,
+      finds nothing, and cannot select a model — loud and immediate, destroys nothing, and undone by
+      rolling back the deploy.
 
 ## 1. Contracts (`sleap-roots-contracts`, separate repo — must land first)
 
@@ -106,10 +62,9 @@ OpenSpec change.
 - Change `ModelCard` to `root_type` + `selectors: tuple[Selector, ...]`; reject an empty `selectors`.
   Keep `sleap_nn_version` a scalar card-level field — it describes the weights, not a selection
   context.
-- **Do not** add a tolerant read that lifts a legacy flat card into a single selector, unless 0.3 is
-  decided against the recommendation. It is not merely unnecessary now, it is actively harmful: it
-  keeps the old cards valid for an upgraded consumer and so creates the ambiguous match that
-  `choose_models` raises on (0.3, 0.7). Dropping it also removes work from this repo's change.
+- **Do not** add a tolerant read that lifts a legacy flat card into a single selector. Decided in 0.3.
+  It is not merely unnecessary, it is actively harmful: it keeps the old cards valid for an upgraded
+  consumer and so creates the ambiguous match `choose_models` raises on (0.7).
 - Release a new pre-release version, and **do not yank it**: `uv.lock` pins contracts from PyPI with
   sdist and wheel hashes, so a yanked or deleted pre-release fails `uv sync --locked` on every CI leg,
   on the PR and on `main`, until the lock is regenerated.
@@ -163,19 +118,18 @@ files, not nine. An earlier draft claimed a split "would redden `main`" — it w
 squash-merges and Actions builds the push tip, so no intermediate commit is ever built on `main`. The
 residual cost of a red intermediate commit is `git bisect` and `git blame`, not CI.
 
-- Under **0.3 = no tolerant read** (now the recommendation): **one commit**. The moment the pin moves,
-  the new `ModelCard` rejects the flat mapping `card_to_metadata` still emits, so every test that
-  validates card metadata against the real contract goes red and `cards.py` has to move with the pin.
-- Under **0.3 = tolerant read** (no longer recommended, kept because the decision is not signed off):
-  commit A = 3.1 plus the contract-facing test adjustments (chooser, smoke, and the `.species`/`.mode`
-  attribute assertions in `test_registry_cards.py`) — verified green, because all 13 *unchanged* flat
-  cards still validate against a tolerant-read `ModelCard`. Commit B = 3.2–3.5 plus the rest.
+**0.3 settled this: one commit.** With no tolerant read, the moment the pin moves the new `ModelCard`
+rejects the flat mapping `card_to_metadata` still emits, so every test that validates card metadata
+against the real contract goes red and `cards.py` has to move with the pin. (Had the tolerant read been
+chosen, 3.1 plus the contract-facing test adjustments would have been a green standalone commit, since
+all 13 unchanged flat cards validate against a tolerant-read `ModelCard`. It was not, so that split is
+moot.)
 
 **Ordering inside the group:** 3.5 must land **with or before** 3.2 — 3.2's `(source_model_id,
 root_type)` grouping key silently tolerates a model in two slots by emitting two cards, which is
 exactly what 3.5 forbids. Likewise 3.5b must land **with or before** 3.4, since 3.4 is what removes the
-incidental catch that covers it today. And 3.4 depends on 0.6, not just 0.2: the formula belongs in the
-delta spec before it is implemented. Expect the full suite to be red from 3.1 until the last test
+incidental catch that covers it today. 3.4 no longer waits on a decision: the formula is in the delta
+spec (0.2, 0.6). Expect the full suite to be red from 3.1 until the last test
 lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite runs.
 
 - [ ] 3.1 Bump the `sleap-roots-contracts` pin (`pyproject.toml`, `uv.lock` together).
@@ -190,8 +144,11 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       instances: `wandb.Artifact(metadata=...)` runs the mapping through `validate_metadata`, which
       coerces rather than rejects, degrading a pydantic model to its `repr` string and a `NamedTuple`
       to a positional list — publishing unreadable metadata with a zero exit code.
-- [ ] 3.4 Implement the chosen `collection_id` scheme in the one existing function, so publish,
-      `--only`, and `--verify` cannot disagree; keep the duplicate-id fail-fast guard.
+- [ ] 3.4 Implement the `collection_id` scheme in the one existing function, so publish, `--only`, and
+      `--verify` cannot disagree; keep the duplicate-id fail-fast guard. The formula is settled (0.2) and
+      written into the delta spec: replace each `/` and each `=` in `source_model_id` with `-`, change
+      nothing else. Keep the guard even though the 8 committed ids are verified distinct, because the
+      mapping is not injective in principle.
 - [ ] 3.5 Assert every physical model resolves to exactly one `root_type`, failing the seed loudly if
       a future matrix edit breaks that assumption (the whole design rests on it).
 - [ ] 3.5b Add the **selector-collision** guard: two different `source_model_id`s of the same
@@ -551,8 +508,9 @@ which is why it stays gated on confirmed deployment.
       silent absence of warnings would mean the cards are being filtered somewhere earlier than
       believed. Only then re-seed the remaining 7. A live wandb re-seed is not `git revert`-able.
 - [ ] 6.2 Run a **full** `--verify` (never a canary run — orphan reporting is suppressed under
-      `--only`) and confirm the orphan report matches the 0.2 decision: **13 collections under option
-      1**, 5 under option 3. Read the expected count off the decision; do not hardcode one. While
+      `--only`) and confirm the orphan report names exactly **13** collections. That is now fixed rather
+      than conditional: 0.2 chose the `source_model_id`-derived scheme, so every existing id changes and
+      the re-seed is purely additive. While
       here, record the registry's actual storage figures for the 13 collections, so `proposal.md` can
       stop hedging about whether the duplication ever cost real bytes.
 - [ ] 6.3 Execute the 0.4 decision — gated on confirmed **deployment** of the upgraded

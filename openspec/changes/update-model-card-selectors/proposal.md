@@ -110,8 +110,9 @@ changed the migration plan and are recorded in full in `tasks.md`.
 
 - **`sleap-roots-contracts`** — add `Selector`, reshape `ModelCard`, release a pre-release. Must land
   first; this repo cannot bump a pin that does not exist. Do **not** add a tolerant read for the legacy
-  flat shape (see `design.md` "Reverse compatibility"). Owner unassigned as of this proposal
-  (`tasks.md` 0.5). Issue: *to be filed.*
+  flat shape (see `design.md` "Reverse compatibility"). Ownership resolved 2026-08-12: it is this team's
+  repo, so its change gets the same OpenSpec treatment as this one (proposal, design, tasks, spec delta,
+  adversarial review before implementation). Issue: *to be filed, task 1.0.*
 - **`sleap-roots-predict`** — generalize `choose_models`, match age against the *matching* selector,
   pin the new contracts. Ordered on **deploy**, in both directions: not before this repo's re-seed is
   live and verified, and the old collections are not retired until after it is deployed. Merging and

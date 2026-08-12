@@ -42,9 +42,13 @@ selector values themselves, so the order survives a different matrix row order a
 a real change rather than an ordering artifact. It is explicitly **not** a digest-stability measure
 (metadata is not in the artifact digest — see Risks).
 
-## Open question: the collection id
+## Decided: the collection id
 
-**This is the sharpest unresolved design point and needs a decision before implementation.**
+**Approved 2026-08-12: option 1, derive from `source_model_id`.** The formula is in the delta spec's
+Collection Identifier Scheme requirement: replace each `/` and each `=` with `-`, change nothing else.
+Verified against the committed matrix — 8 distinct ids, all accepted by the `wandb.Artifact`
+constructor, longest 72 characters against the 128 bound. The candidates and the reasoning are kept
+below because this renames 13 live production identifiers and the record should outlive the decision.
 
 `collection_id` is currently `f"{species}-{mode_slug}-{root_type}"` plus the age window, e.g.
 `canola-cylinder-primary-age2-13`. Those strings are **live production registry identifiers**. With
@@ -63,9 +67,10 @@ Candidates:
 3. **Canonical selector.** Pick one selector (first row) to name the collection. Stable-ish but
    arbitrary, and misleading: `canola-...` naming a card that also serves arabidopsis.
 
-**Recommendation: option 1.** The card's identity is now the physical model, so the id should track
-the model, and it is the only option where adding a species to an existing card does not rename a
-live collection. Needs sign-off, since it renames all 13 production collections.
+**Why option 1.** The card's identity is now the physical model, so the id should track the model, and
+it is the only option where adding a species to an existing card does not rename a live collection. The
+accepted cost is renaming all 13 production collections, and with it the Bloom idempotency-key reset in
+Risks below.
 
 **Three constraints on option 1 that are easy to miss.**
 
@@ -152,7 +157,7 @@ registry. Ordering therefore matters more than usual:
 Every acceptance gate that names a number therefore reads it off the 0.2 decision (`tasks.md` §6.2)
 rather than hardcoding it, and the delta spec's orphan scenario carries no literal count.
 
-**On step 4, the recommendation is to explicitly retire the orphans** (drop the `production` alias)
+**Step 4 is decided: retire the orphans** (drop the `production` alias)
 after the 8 new collections verify **and** the upgraded consumer is confirmed deployed. Leaving them
 in place indefinitely is *not* the neutral option it looks like: once the schema tightens, predict's
 registry lister is believed to skip an old-shape collection with only a logged warning, so those
@@ -175,8 +180,9 @@ Two viable transition strategies, to be chosen with the contracts owner:
   card into a single-selector card), letting predict upgrade before the re-seed and removing the
   flag-day window. More code, but no moment where the live registry is unreadable.
 
-**Recommendation, reversed on 2026-08-11: no tolerant read.** The argument above is wrong, and it was
-wrong because it reasoned about the contract in isolation instead of about the consumer that reads it.
+**Decided 2026-08-12: no tolerant read.** The recommendation reversed on 2026-08-11 and was then
+approved. The argument above is wrong, and it was wrong because it reasoned about the contract in
+isolation instead of about the consumer that reads it.
 Elizabeth resolved task 2.5 against predict's actual code and two facts settle it: predict **skips** a
 card it cannot validate, with a warning, isolated per artifact, without aborting the listing; and
 `choose_models` **raises** when more than one card matches a context.
@@ -276,20 +282,17 @@ rather than per-commit. The constraint is real for two other reasons.
   that subscript raises `KeyError` — so the pin bump cannot be green without touching tests, whatever
   else it is bundled with.
 
-**How far that atomicity extends depends on decision 0.3.** The two reasons above force
+**0.3 settled how far that atomicity extends: it is one commit.** The two reasons above force
 `pyproject.toml` + `uv.lock` + the contract-facing test assertions together, three or four files rather
-than nine. Whether more comes with them turns on 0.3, and the recommendation there reversed on
-2026-08-11:
+than nine. With no tolerant read, the rest comes too: the instant the pin moves, the new `ModelCard`
+rejects the flat mapping `card_to_metadata` still emits, so every test that validates card metadata
+against the real contract goes red and `cards.py` has to move with the pin.
 
-- Under **no tolerant read** (now recommended), it is **one commit**. The instant the pin moves, the new
-  `ModelCard` rejects the flat mapping `card_to_metadata` still emits, so every test that validates
-  card metadata against the real contract goes red and `cards.py` has to move with the pin.
-- Under **tolerant read** (no longer recommended), the pin bump can stand alone and green: verified that
-  all 13 *unchanged* flat cards still validate against a tolerant-read `ModelCard`, so `cards.py` need
-  not move in the same commit, and the expansion, metadata and id rewrite is a second commit.
-
-An earlier draft asserted the split unconditionally while recommending the tolerant read, which was the
-wrong pairing in both directions. `tasks.md` §3 carries both branches.
+Worth recording that this was contingent, because an earlier draft asserted the split unconditionally
+*while* recommending the tolerant read, which was the wrong pairing in both directions. Under a tolerant
+read the pin bump would have stood alone and green — verified, since all 13 unchanged flat cards validate
+against a tolerant-read `ModelCard` — and the expansion, metadata and id rewrite would have been a second
+commit. That branch is now closed.
 
 **The publish tests belong in that same commit, and this was proven rather than reasoned.** Changing
 the collection-id scheme in isolation and running the suite produces **11 failures, 9 of them in
@@ -363,7 +366,9 @@ two commits per 0.3), PR 2 = §4, PR 3 = §5 docs (rebased last), PR 4 = §6 mig
   causing Bloom double-counting — and concluded the pinned archive form keeps `weights_checksum`
   stable. That conclusion still holds and is simply not sufficient, because `weights_checksum` is only
   one of three inputs to the key. It also does not argue for a different id scheme: any scheme that
-  lets one card carry several species has to rename these ids. Accept it knowingly (`tasks.md` 0.2).
+  lets one card carry several species has to rename these ids. Accepted knowingly on 2026-08-12 (`tasks.md` 0.2), on the grounds that the Bloom pipeline is not in
+production yet, so a one-time redundant recompute costs nothing now. Revisit if that changes before
+the re-seed runs.
 - **Age-window semantics unchanged.** A card serving canola (2–13) and pennycress (2–14) advertises
   neither window globally. `choose_models` must match the age against the *matching selector*, not
   against a card-level min/max, or canola silently gains a year of coverage.
