@@ -89,15 +89,37 @@ def test_version_caps_exclude_unverified_mask_line():
     ), f"sleap-io must reject 0.8.0 (mask line): {io}"
 
 
+def _base_requirements() -> list[Requirement]:
+    return [
+        Requirement(entry) for entry in _load_pyproject()["project"]["dependencies"]
+    ]
+
+
 def test_base_install_stays_lean():
-    base = {
-        canonicalize_name(Requirement(entry).name)
-        for entry in _load_pyproject()["project"]["dependencies"]
-    }
-    for backend in BACKENDS:
+    # sleap-io is deliberately excluded from this check: design.md Decision 4 (#26) promotes
+    # it to a core dependency so a default install can build labeling packages. The heavy,
+    # platform-specific backends stay extra-only, which is what "lean" protects.
+    base = {canonicalize_name(req.name) for req in _base_requirements()}
+    for backend in ("sleap-nn", "torch"):
         assert (
             canonicalize_name(backend) not in base
         ), f"{backend} must not be a base dependency (train extra only)"
+
+
+def test_sleap_io_is_a_core_dependency_on_the_same_capped_line():
+    # Declared in both `dependencies` and the `train` extra on purpose: uv intersects them,
+    # so widening the core pin alone cannot drag the backend onto the unverified mask line.
+    # This test is what makes the duplication load-bearing instead of drift.
+    base = {canonicalize_name(req.name): req.specifier for req in _base_requirements()}
+    spec = base.get(canonicalize_name("sleap-io"))
+    assert spec is not None, (
+        "sleap-io must be a core dependency (design.md Decision 4) so a default install "
+        "can build labeling packages without the train extra"
+    )
+    assert spec.contains(Version("0.7.1")), f"core sleap-io must admit 0.7.1: {spec}"
+    assert not spec.contains(
+        Version("0.8.0")
+    ), f"core sleap-io must reject 0.8.0 (mask line): {spec}"
 
 
 def test_torch_has_release_floor():

@@ -4167,6 +4167,8 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "omegaconf" },
+    { name = "pandas" },
+    { name = "sleap-io" },
     { name = "sleap-roots-contracts" },
     { name = "wandb" },
 ]
@@ -4192,6 +4194,8 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
+    { name = "pandas", specifier = ">=2.2.0,<4.0.0" },
+    { name = "sleap-io", specifier = ">=0.7.1,<0.8.0" },
     { name = "sleap-io", marker = "extra == 'train'", specifier = ">=0.7.1,<0.8.0" },
     { name = "sleap-nn", marker = "extra == 'train'", specifier = ">=0.2.0,<0.3.0" },
     { name = "sleap-roots-contracts", specifier = "==0.1.0a6" },

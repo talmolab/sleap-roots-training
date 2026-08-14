@@ -45,12 +45,17 @@ def _pkg_version(name: str) -> str:
         return "unknown"
 
 
-def _resolve_git_sha() -> str:
+def resolve_git_sha() -> str:
     """Resolve this repo's git SHA robustly; never raise.
 
     Order: explicit ``SLEAP_ROOTS_TRAINING_GIT_SHA`` override, then ``git rev-parse``
     against a ``.git`` anchored at the package (suffixing ``+dirty`` when the tree is
     dirty), then the package version, then ``"unknown"``.
+
+    Public because a package's provenance stamps the same code version a model's lineage
+    does (third blocking review of #40): :mod:`~sleap_roots_training.labeling.package` was
+    importing this under its former private name, so a refactor here would have broken it
+    without looking like a breaking change from this module's side.
 
     Returns:
         The resolved SHA string (or fallback sentinel).
@@ -94,7 +99,7 @@ def build_lineage(matrix_sha256: str) -> dict:
     Returns:
         A flat lineage mapping suitable for ``wandb.init(config=...)``.
     """
-    git_sha = _resolve_git_sha()
+    git_sha = resolve_git_sha()
     return {
         "git_sha": git_sha,
         "git_dirty": git_sha.endswith("+dirty"),
