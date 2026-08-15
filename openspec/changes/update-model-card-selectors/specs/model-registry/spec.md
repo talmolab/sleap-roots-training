@@ -31,8 +31,8 @@ Each card SHALL produce a metadata mapping containing **exactly** the selection 
 consumer reads — a scalar `root_type` (one of `"primary"`, `"lateral"`, `"crown"`) and a non-empty
 `selectors` list, where each selector carries `species` (str), `mode` (a member of the contract-owned
 `Mode` vocabulary, stored raw with its space preserved and never the hyphenated collection-id slug),
-`age_min` (int ≥ 0), and `age_max` (int ≥ 0) — plus a non-contract `source_model_id` for
-traceability. It SHALL NOT include the wandb-intrinsic keys `registry_id`, `version`, or
+`age_min` (int ≥ 0), and `age_max` (int ≥ 0), and **exactly** those four keys and nothing else —
+plus a non-contract `source_model_id` for traceability. It SHALL NOT include the wandb-intrinsic keys `registry_id`, `version`, or
 `weights_checksum`, and SHALL NOT carry card-level `species`, `mode`, `age_min`, or `age_max` fields,
 since a card may serve several selection contexts. This mapping is the **complete** stored artifact
 metadata (producer lineage lives in the run config, not per-artifact — see Seed Run Lineage). The
@@ -87,6 +87,14 @@ production alias dropped until that consumer's upgrade is confirmed deployed.
 
 - **WHEN** a metadata mapping carries an empty `selectors` list
 - **THEN** validation against the `ModelCard` contract fails
+
+#### Scenario: Each selector carries exactly the four contract keys
+
+- **WHEN** a card's metadata mapping is constructed
+- **THEN** every selector in `selectors` has the exact key set `{species, mode, age_min, age_max}`
+- **AND** no selector carries a `sleap_nn_version`, a `root_type`, a `source_model_id`, or any other
+  extra key, because the contract's `Selector` is `extra="ignore"` and would silently drop one rather
+  than reject it — so a stray key is a producer bug the producer has to catch
 
 #### Scenario: Metadata survives wandb's own coercion unchanged
 

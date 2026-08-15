@@ -269,6 +269,15 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
 - [ ] 3.23 New test: `card_to_metadata` emits an **exact** key set of
       `{root_type, selectors, source_model_id}` and no card-level `species`/`mode`/`age_min`/`age_max`.
       Re-key `test_card_to_metadata_exact_keys_and_raw_mode` (`tests/test_registry_cards.py:95-112`).
+- [ ] 3.23b New test: **each selector dict emits exactly `{species, mode, age_min, age_max}`** and
+      nothing else — assert the key set of every selector on every card, not just one sample. Asked for
+      by Elizabeth on review of `0be3277`, and it exists because of a contracts-side decision: `Selector`
+      is `extra="ignore"` (approved on contracts#32), so a stray key inside a selector dict is silently
+      **dropped** by `ModelCard` validation rather than rejected. That means the contract cannot catch a
+      typo'd or leftover selector key for us, and no existing task covers it — 3.23 locks only the
+      *card-level* key set, and 3.22 checks one specific absence (`sleap_nn_version`), not a general
+      no-extras guard one level down. A *missing* key still fails loudly on the contract side, so this
+      guards the extras direction only.
 - [ ] 3.24 New test: the one-scheme invariant. Patch **both** `publish.collection_id` and
       `cards.collection_id` — `publish.py:16-20` does `from ...cards import collection_id`, so patching
       only the `cards` attribute leaves the publish path on the real function while `cli.py:109,114,115`
