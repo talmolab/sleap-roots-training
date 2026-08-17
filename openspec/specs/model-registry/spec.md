@@ -1,7 +1,22 @@
 # model-registry Specification
 
 ## Purpose
-TBD - created by archiving change seed-production-model-registry. Update Purpose after archive.
+
+Turn the committed production model selection matrix into the set of `production`-aliased
+model artifacts that `sleap-roots-predict` selects from, and keep the two in agreement over
+time.
+
+This capability owns the producer half of the model-selection contract: expanding the matrix
+into one `ModelCard` per **physical model**, stamping each with the selection metadata a
+consumer matches on, publishing it to a wandb registry collection under a deterministic
+collection id, and verifying after the fact that the live registry still says what the matrix
+says. It deliberately does **not** own selection itself — which card wins for a given
+(species, mode, age) request is the consumer's rule, and this capability's job is to make sure
+exactly one card can answer.
+
+Its guarantees are re-runnability and legibility rather than throughput: seeding is idempotent
+and resumable, every published id is derivable offline from the matrix alone, and a drift
+between the matrix and the registry is reportable without a publish.
 ## Requirements
 ### Requirement: Production Model Selection Matrix
 

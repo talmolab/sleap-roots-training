@@ -447,17 +447,17 @@ about +21 — re-locate them by content, not by number. It also adds a third aud
 recommendation (`**For registry operators:**` is still the accurate audience). Rebase §3/§4 on `main`
 after that branch merges, and resolve `uv.lock` by re-running `uv lock`, never by hand-merging hunks.
 
-- [ ] 5.1 `README.md:99-101` "Notes for downstream consumers" states the **opposite** of the new
+- [x] 5.1 `README.md:99-101` "Notes for downstream consumers" states the **opposite** of the new
       design ("one artifact per species (distinct `registry_id`s) ... predict-side dedupe by
       `weights_checksum` is a follow-up"). Rewrite it, and add that age is read off the **matching
       selector**, never a card-level min/max.
-- [ ] 5.2 `README.md:34-35` ("each stamped with **flat** `ModelCard` selection metadata") and
+- [x] 5.2 `README.md:34-35` ("each stamped with **flat** `ModelCard` selection metadata") and
       `README.md:74-79` "Rerun contract", which advertises `--force` as the way to move an alias — now
       explicitly not sufficient evidence of a metadata refresh (§4.5). The canary section at
       `README.md:81-85` needs the `--verify --only` orphan-suppression note, and may optionally state
       the count ("seeds the remaining 7 of 8" — the line currently gives no number). It does **not**
       need an id update, since it uses the `<collection_id>` placeholder.
-- [ ] 5.3 `docs/roadmap.md`: `:93-94` (13 `production` cards), `:102` (#3 "→ 15 cards", per-row math),
+- [x] 5.3 `docs/roadmap.md`: `:93-94` (13 `production` cards), `:102` (#3 "→ 15 cards", per-row math),
       `:182-183` ("already carries 13 `production`-aliased collections"), `:191-208` (the whole
       "Shared/generalist models have no way to be represented once" bullet — note `:191-193` is the
       present-tense framing an earlier draft's `:194-207` range missed), `:229` (which reads "not the
@@ -466,16 +466,16 @@ after that branch merges, and resolve `uv.lock` by re-running `uv lock`, never b
       model), and `:558-562` in the live "Open roadmap decisions" section, which is the actual
       "implementation still to be proposed" line. Collapse `:191-208` to the direction plus a pointer
       to #39 and this change rather than re-deriving the matrix math a fourth time.
-- [ ] 5.4 `docs/roadmap.md:805-806` carries the age-window slip corrected in `proposal.md` — but it
+- [x] 5.4 `docs/roadmap.md:805-806` carries the age-window slip corrected in `proposal.md` — but it
       sits inside the **dated append-only** revision log (`:796`, under the reconciliations section
       whose own rule at `:648-650` says editing prior dated entries contradicts append-only). Follow
       this repo's established pattern for correcting written prose: a dated inline marker
       (`**Correction (2026-08-xx):**`, as at `docs/roadmap.md:161-167` and `docs/CHANGELOG.md:66`), or
       append the correction in the new revision entry. Do **not** silently rewrite the dated bullet.
-- [ ] 5.5 `openspec/specs/model-registry/spec.md:3-4` still holds the literal `TBD - created by
+- [x] 5.5 `openspec/specs/model-registry/spec.md:3-4` still holds the literal `TBD - created by
       archiving change seed-production-model-registry` placeholder. Write a real Purpose while this
       change is touching the capability.
-- [ ] 5.6 `docs/CHANGELOG.md` under `[Unreleased]`. Amend in place — nothing here has shipped
+- [x] 5.6 `docs/CHANGELOG.md` under `[Unreleased]`. Amend in place — nothing here has shipped
       (`0.0.1a0`), so a reader of the next release must not see "added flat metadata" followed by
       "removed flat metadata" for a shape they never saw. Specifically: `:99-103` ("flat `ModelCard`
       selection metadata"), `:104-107` ("7 rows → 13 cards over 8 SHA256-pinned models" → 8 cards, one
@@ -488,7 +488,7 @@ after that branch merges, and resolve `uv.lock` by re-running `uv lock`, never b
       exists at `:36`; `**For config authors:**` (`:24`) is the only other, and both sit in one entry —
       a formatting habit rather than a deep convention, so reuse it because it is the accurate
       audience. Do **not** invent `**For downstream consumers:**`; it appears nowhere in the file.
-- [ ] 5.7 Full suite, `black --check`, `ruff check` green.
+- [x] 5.7 Full suite, `black --check`, `ruff check` green.
 
 ## 6. Migration — gated, and a separate PR after this change archives
 
