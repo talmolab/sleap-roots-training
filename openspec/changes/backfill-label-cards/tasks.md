@@ -1,8 +1,7 @@
 ## 0. Pre-implementation decisions (gate: all resolved before §1)
 
-- [ ] 0.1 Verify `LabelCard` schema in `sleap-roots-contracts` 0.1.0a6 permits `null` for
-      `bloom_experiment_id`, `accessions`, and skeleton/node-count fields. If not, determine
-      whether a contracts bump is needed before this work can proceed.
+- [x] 0.1 ~~Verify `LabelCard` schema permits `null` for provenance fields~~ — **resolved:**
+      `LabelCard` allows `null`. No contracts bump needed.
 - [x] 0.2 ~~Decide disposition of medicago~~ — **resolved:** `medicago` is in scope, added to
       `SPECIES_VOCAB` alongside `wheat` and `sorghum`.
 - [ ] 0.3 Confirm `wheat`, `sorghum`, and `medicago` should be added to `SPECIES_VOCAB` (all

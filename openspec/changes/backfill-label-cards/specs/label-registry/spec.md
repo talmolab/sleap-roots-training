@@ -78,15 +78,15 @@ change.
 
 ### Requirement: Label Species Vocabulary
 
-The label-side species vocabulary SHALL include all species with published label data in the
-`sleap-roots-labels` registry, which is a superset of the model-side species vocabulary. Species
-added for labels only (those without trained models) SHALL be documented as label-only.
+The species vocabulary SHALL include all species with published label data in the
+`sleap-roots-labels` registry, including `wheat`, `sorghum`, and `medicago` alongside the
+existing species.
 
-#### Scenario: Label-only species is accepted
+#### Scenario: Species with published labels is accepted
 
-- **WHEN** a label collection exists for a species not in the model-side vocabulary (e.g. `wheat`,
-  `sorghum`)
-- **THEN** the species validates against the label vocabulary
+- **WHEN** a label collection exists for a species with published label data (e.g. `wheat`,
+  `sorghum`, `medicago`)
+- **THEN** the species validates against the vocabulary
 - **AND** a `LabelCard` can be constructed for that species
 
 ### Requirement: Label Registry Seeding CLI

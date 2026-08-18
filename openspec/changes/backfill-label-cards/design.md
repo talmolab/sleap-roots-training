@@ -83,8 +83,7 @@ Examples:
 
 `medicago` (from the plate medicago collection), `wheat`, and `sorghum` (from other collections)
 are not in `SPECIES_VOCAB`. All three are added to `SPECIES_VOCAB` — they are real species with
-published label data. `medicago` is confirmed in scope. This is the labels-side vocabulary — the
-model-side vocabulary is a subset (only species with trained models).
+published label data. `medicago` is confirmed in scope.
 
 ### D6: Canary-first migration, matching `seed-registry --only` precedent
 
@@ -105,9 +104,9 @@ then migrate the rest. Same pattern `seed-registry --only` established for model
 
 ## Open Questions
 
-- **Q1:** Does the `LabelCard` contract in `sleap-roots-contracts` 0.1.0a6 allow `null` for
-  `bloom_experiment_id`, `accessions`, and node-count fields, or does the schema need a bump?
-  (Must verify before implementation.)
+- ~~**Q1:** Does the `LabelCard` contract in `sleap-roots-contracts` 0.1.0a6 allow `null` for
+  `bloom_experiment_id`, `accessions`, and node-count fields, or does the schema need a bump?~~
+  **Resolved:** `LabelCard` allows `null` for provenance fields. No contracts bump needed.
 - ~~**Q2:** The medicago plate collection — is `medicago` a species this project will support
   long-term, or should it be excluded from the backfill and tracked separately?~~
   **Resolved:** `medicago` is in scope. Added to `SPECIES_VOCAB` alongside `wheat` and `sorghum`.
