@@ -15,7 +15,6 @@ Usage (on the GPU box, from the repo dir):
 from __future__ import annotations
 
 import sys
-import zipfile
 from pathlib import Path
 
 
@@ -70,15 +69,36 @@ def dump(run: str) -> bool:
         return False
     import numpy as np  # lazy: needed only once we actually have a file to load
 
+    # Read the whole file inside the guard, then format outside it. Two reasons the split is
+    # load-bearing rather than stylistic:
+    #
+    # 1. `np.load` returns a *lazy* NpzFile — members are decompressed and unpickled on
+    #    __getitem__, not at load. Reading `data[key]` is therefore still I/O against an
+    #    untrusted file, and a guard wrapped around `np.load` alone would leave the likelier
+    #    corruption (a well-formed archive holding a truncated pickle, i.e. an interrupted
+    #    write) completely unhandled.
+    # 2. `_emit` is *our* code. Keeping it outside means a bug in our formatting crashes
+    #    loudly instead of being reported to the operator as `CORRUPT (<path>)`, which would
+    #    send them to investigate a data file that is perfectly fine.
+    #
+    # `except Exception` rather than a type list on purpose. The previous list
+    # (OSError/ValueError/EOFError/BadZipFile) was tracking numpy's *undocumented* error
+    # surface and silently fell behind it: numpy >= 2 raises `pickle.UnpicklingError`, which
+    # subclasses none of them, so the handler stopped firing and a single corrupt file aborted
+    # the whole batch. A closed list cannot be kept correct against a dependency that never
+    # promised these types; the region below reads an untrusted file and must survive anything
+    # it does. The type name is printed, so nothing is hidden by catching broadly.
     try:
         data = np.load(path, allow_pickle=True)
-        print(f"=== {run} ===  (keys: {list(data.files)})")
-        for key in data.files:
-            _emit(key, data[key])
-    except (OSError, ValueError, EOFError, zipfile.BadZipFile) as exc:
+        values = [(key, data[key]) for key in data.files]
+    except Exception as exc:
         # a truncated/corrupt npz must not abort the rest of the batch
         print(f"=== {run} ===\n   CORRUPT ({path}): {type(exc).__name__}: {exc}")
         return False
+
+    print(f"=== {run} ===  (keys: {[key for key, _ in values]})")
+    for key, value in values:
+        _emit(key, value)
     return True
 
 
