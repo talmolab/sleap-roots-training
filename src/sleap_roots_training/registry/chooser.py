@@ -35,8 +35,15 @@ def _vocab_from_contract_literal(
     Raises:
         RuntimeError: If ``alias`` is not a ``Literal`` of strings.
     """
-    vocab = frozenset(get_args(alias))
-    if not vocab or not all(isinstance(member, str) for member in vocab):
+    # Validate the raw tuple, and only build the frozenset once its members are known to
+    # be strings. Hashing comes first otherwise, and `Annotated`'s metadata slot accepts
+    # any object — `Annotated[Literal[...], {"deprecated": True}]` is legal and its dict
+    # is unhashable, so `frozenset(get_args(alias))` raises `TypeError: unhashable type`
+    # from *inside* this guard, naming neither the alias nor the constant. That is the
+    # same class of failure as the `sorted()` one noted below: an error raised while
+    # reporting an error, which buries the diagnosis.
+    args = get_args(alias)
+    if not args or not all(isinstance(member, str) for member in args):
         # `typing.get_args()` does not raise on a shape it cannot destructure; it
         # degrades, in two different directions, and neither one is an error until much
         # later:
@@ -60,9 +67,9 @@ def _vocab_from_contract_literal(
             f"{name} did not yield a vocabulary of strings via typing.get_args(); "
             f"{vocab_name} cannot be derived from it. {name.rsplit('.', 1)[-1]} is "
             f"probably no longer a plain Literal. Got: {alias!r} -> "
-            f"{[repr(arg) for arg in get_args(alias)]}"
+            f"{[repr(arg) for arg in args]}"
         )
-    return vocab
+    return frozenset(args)
 
 
 #: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned

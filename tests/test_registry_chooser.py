@@ -265,6 +265,14 @@ _MODE_RESHAPES = {
     "annotated": "Mode = Annotated[Literal['cylinder', 'plate'], Field()]\n",
     "optional": "Mode = Optional[Literal['cylinder', 'plate']]\n",
     "union": "Mode = Union[Literal['cylinder'], Literal['plate']]\n",
+    # `Annotated`'s metadata slot takes *any* object, not just a hashable one. This shape
+    # is what made the guard build its frozenset before type-checking a fault: hashing an
+    # unhashable member raises TypeError from inside the guard, so the import dies without
+    # naming the alias or the constant -- the same "error while reporting the error" the
+    # `sorted()` note in `chooser` warns about.
+    "unhashable_annotated": (
+        "Mode = Annotated[Literal['cylinder', 'plate'], {'deprecated': True}]\n"
+    ),
 }
 
 #: The same five reshapes for `RootType`, which `chooser` now also derives a vocabulary
@@ -277,6 +285,9 @@ _ROOT_TYPE_RESHAPES = {
     "annotated": "RootType = Annotated[Literal['primary', 'lateral'], Field()]\n",
     "optional": "RootType = Optional[Literal['primary', 'lateral']]\n",
     "union": "RootType = Union[Literal['primary'], Literal['lateral']]\n",
+    "unhashable_annotated": (
+        "RootType = Annotated[Literal['primary', 'lateral'], {'deprecated': True}]\n"
+    ),
 }
 
 #: The healthy shape of each alias. One reshape is injected at a time, against a valid

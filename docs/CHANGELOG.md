@@ -75,9 +75,11 @@ All notable changes to this project are documented here. The format is based on
   lazy-import convention this repo uses for `wandb` and `sleap-nn`.
 - **Collapsed the local root-type vocabulary into the contract-owned `RootType`**, finishing what
   the `Mode` collapse above deliberately left (#38). `chooser.ROOT_TYPE_VOCAB` is now derived from
-  `sleap_roots_contracts.RootType`, and the three hand-written copies of `{"primary", "lateral",
-  "crown"}` — in `config.py`, in `labeling/metadata.py`, and (as a set) in `registry/cards.py`'s
-  `_ROOT_SLOTS` — are gone. The old guard compared two of those copies *to each other*, which could
+  `sleap_roots_contracts.RootType`, retiring the two hand-written copies of `{"primary", "lateral",
+  "crown"}` that existed only as membership sets — in `config.py` and in `labeling/metadata.py`.
+  Exactly one spelled-out copy remains, `registry/cards.py`'s ordered `_ROOT_SLOTS`, kept
+  deliberately and for its *ordering* rather than its membership (see below). The old guard compared
+  the two retired copies *to each other*, which could
   only ever catch one of them going stale; identity against the contract is asserted at each
   consumer instead. **Nothing accepted or published changes:** `get_args(RootType)` on the pinned
   `0.1.0a6` is set-identical to the vocabulary it replaces, so no config, package, or card that

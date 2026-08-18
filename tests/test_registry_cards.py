@@ -385,15 +385,30 @@ def test_root_slot_order_is_owned_here_not_by_the_contract():
     assert cards._ROOT_SLOTS == _EXPECTED_ROOT_SLOTS
 
 
-def test_cards_are_emitted_in_root_slot_order():
+def test_cards_are_emitted_in_row_then_root_slot_order():
     # The assertion above only pins the constant; this pins what the constant is *for*.
     # Nothing else in the suite constrains cross-root emission order -- the shape tests
     # use a set, `sorted()`, and `Counter` -- so without this, `expand_rows_to_cards`
     # could stop honoring `_ROOT_SLOTS` (say, by iterating the `model_ids` dict built
     # from a reordered source) and the order pinned above would mean nothing.
-    row = _row("rice", "cylinder", "2, 3", primary="r/p", lateral="r/l", crown="r/c")
-    result = cards.expand_rows_to_cards([row])
-    assert tuple(c.root_type for c in result) == _EXPECTED_ROOT_SLOTS
+    #
+    # Two rows, not one, because the documented contract is "row-then-root-slot order"
+    # (see `expand_rows_to_cards`) and a one-row fixture pins only half of it: transpose
+    # the loop nesting -- slots outermost, rows innermost, emitting every primary card
+    # before any lateral -- and a single-row assertion still passes unchanged.
+    rows = [
+        _row("rice", "cylinder", "2, 3", primary="r/p", lateral="r/l", crown="r/c"),
+        _row("soybean", "cylinder", "2, 3", primary="s/p", lateral="s/l", crown="s/c"),
+    ]
+    result = cards.expand_rows_to_cards(rows)
+    assert [(c.species, c.root_type) for c in result] == [
+        ("rice", "primary"),
+        ("rice", "lateral"),
+        ("rice", "crown"),
+        ("soybean", "primary"),
+        ("soybean", "lateral"),
+        ("soybean", "crown"),
+    ]
 
 
 # --- 3.20: every accepted mode still round-trips through the real ModelCard ---
