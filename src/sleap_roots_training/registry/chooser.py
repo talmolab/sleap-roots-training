@@ -16,7 +16,54 @@ from pathlib import Path
 from typing import Optional, get_args
 
 from omegaconf import OmegaConf
-from sleap_roots_contracts import Mode
+from sleap_roots_contracts import Mode, RootType
+
+
+def _vocab_from_contract_literal(
+    alias: object, name: str, vocab_name: str
+) -> frozenset[str]:
+    """Derive a string vocabulary from a contract-owned ``Literal``, or refuse to import.
+
+    Args:
+        alias: The contract alias to destructure, e.g. ``sleap_roots_contracts.Mode``.
+        name: Its dotted name, used in the error so the reader knows what to go look at.
+        vocab_name: The constant being derived, likewise for the error.
+
+    Returns:
+        The alias's members as a frozenset of strings.
+
+    Raises:
+        RuntimeError: If ``alias`` is not a ``Literal`` of strings.
+    """
+    vocab = frozenset(get_args(alias))
+    if not vocab or not all(isinstance(member, str) for member in vocab):
+        # `typing.get_args()` does not raise on a shape it cannot destructure; it
+        # degrades, in two different directions, and neither one is an error until much
+        # later:
+        #
+        #   Enum / plain str alias         -> ()                        -> empty vocabulary
+        #   Annotated[Literal[...], Field] -> (Literal[...], FieldInfo)  -> typing objects
+        #   Optional[Literal[...]]         -> (Literal[...], NoneType)   -> typing objects
+        #   Union[Literal[...], Literal[]] -> (Literal[...], Literal[])  -> typing objects
+        #
+        # Only the first is empty, so an emptiness check alone misses the other three —
+        # and `Annotated[..., Field(...)]` is idiomatic for a pydantic-first contracts
+        # package. In all four, no real member is in the vocabulary and the
+        # `frozenset[str]` annotation on the constant becomes a runtime falsehood. Left
+        # to surface on its own it does so inside the *error-reporting* path (`sorted()`
+        # over mixed types) and at pytest collection time, far from the cause. So fail
+        # here, at the seam, naming what changed.
+        #
+        # Deliberately no `sorted()` on the members below: they are exactly the values
+        # whose type is in question, and sorting them is what crashes while reporting.
+        raise RuntimeError(
+            f"{name} did not yield a vocabulary of strings via typing.get_args(); "
+            f"{vocab_name} cannot be derived from it. {name.rsplit('.', 1)[-1]} is "
+            f"probably no longer a plain Literal. Got: {alias!r} -> "
+            f"{[repr(arg) for arg in get_args(alias)]}"
+        )
+    return vocab
+
 
 #: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned
 #: here, not by the contract: a ``Selector``'s ``species`` is a free ``str``, so there
@@ -29,31 +76,23 @@ SPECIES_VOCAB: frozenset[str] = frozenset(
 #: ``sleap_roots_contracts.Mode`` rather than restated here. ``ModelCard.mode`` matches
 #: this vocabulary exactly (no case or whitespace normalization), so a mode this loader
 #: accepts is a mode the consumer can match — by construction, not by reconciliation.
-MODE_VOCAB: frozenset[str] = frozenset(get_args(Mode))
-
-if not MODE_VOCAB or not all(isinstance(mode, str) for mode in MODE_VOCAB):
-    # `typing.get_args()` does not raise on a shape it cannot destructure; it degrades,
-    # in two different directions, and neither one is an error until much later:
-    #
-    #   Mode = Enum / plain str alias  -> ()                       -> empty vocabulary
-    #   Annotated[Literal[...], Field] -> (Literal[...], FieldInfo) -> typing objects
-    #   Optional[Literal[...]]         -> (Literal[...], NoneType)  -> typing objects
-    #   Union[Literal[...], Literal[]] -> (Literal[...], Literal[]) -> typing objects
-    #
-    # Only the first is empty, so an emptiness check alone misses the other three — and
-    # `Annotated[..., Field(...)]` is idiomatic for a pydantic-first contracts package.
-    # In all four, no real mode is in `MODE_VOCAB` and the `frozenset[str]` annotation
-    # above becomes a runtime falsehood. Left to surface on its own it does so inside
-    # the *error-reporting* path (`sorted()` over mixed types) and at pytest collection
-    # time, far from the cause. So fail here, at the seam, naming what changed.
-    #
-    # Deliberately no `sorted()` on the members below: they are exactly the values whose
-    # type is in question, and sorting them is what crashes while reporting.
-    raise RuntimeError(
-        "sleap_roots_contracts.Mode did not yield a vocabulary of strings via "
-        "typing.get_args(); MODE_VOCAB cannot be derived from it. Mode is probably no "
-        f"longer a plain Literal. Got: {Mode!r} -> {[repr(a) for a in get_args(Mode)]}"
-    )
+MODE_VOCAB: frozenset[str] = _vocab_from_contract_literal(
+    Mode, "sleap_roots_contracts.Mode", "MODE_VOCAB"
+)
+#: Canonical root-type vocabulary, derived from the contract-owned
+#: ``sleap_roots_contracts.RootType`` for the same reason as ``MODE_VOCAB``. It backs the
+#: ``experiment.root_type`` check in ``config``, the ``root_types`` check on a labeling
+#: package's metadata, and the skeleton table — all three of which previously kept their
+#: own hand-written copy of these three strings.
+#:
+#: Membership only. ``registry/cards.py`` deliberately keeps its own ordered ``_ROOT_SLOTS``
+#: rather than deriving one from this: reordering a ``Literal``'s members is a no-op for a
+#: type annotation, so deriving card *emission* order from the contract would let an
+#: upstream no-op silently reorder published cards. Order is a presentation decision this
+#: repo owns; membership is not.
+ROOT_TYPE_VOCAB: frozenset[str] = _vocab_from_contract_literal(
+    RootType, "sleap_roots_contracts.RootType", "ROOT_TYPE_VOCAB"
+)
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"

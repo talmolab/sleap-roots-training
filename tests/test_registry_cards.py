@@ -354,6 +354,48 @@ def test_mode_is_stored_raw_not_slugged():
     assert "multiplant-cylinder" not in modes
 
 
+# --- root slots: membership is the contract's, order is ours ---------------------------
+
+#: The slot order spelled out, for the same reason `_EXPECTED_MODES` below is. This is the
+#: independent witness for the *ordering* half of the split: `_ROOT_SLOTS` is no longer
+#: derived from anything, so what needs pinning is that a future "just use `get_args`"
+#: edit cannot slip through unnoticed.
+_EXPECTED_ROOT_SLOTS = ("primary", "lateral", "crown")
+
+
+def test_root_slot_membership_is_the_contract_vocabulary():
+    # Membership has one owner -- `sleap_roots_contracts.RootType`, via
+    # `chooser.ROOT_TYPE_VOCAB`. Adding a fourth root type upstream without adding a slot
+    # here means every card for it is silently never emitted, which is exactly the drift
+    # that made three hand-maintained copies of this vocabulary a problem.
+    assert frozenset(cards._ROOT_SLOTS) == chooser.ROOT_TYPE_VOCAB
+    assert len(cards._ROOT_SLOTS) == len(chooser.ROOT_TYPE_VOCAB)  # no duplicate slot
+
+
+def test_root_slot_order_is_owned_here_not_by_the_contract():
+    """The deliberate half of the split: ordering is a presentation decision, not a contract.
+
+    ``_ROOT_SLOTS`` is *not* ``get_args(RootType)``. Reordering a ``Literal``'s members is
+    a no-op for a type annotation, so upstream is free to do it in a patch release -- and
+    if slot order were derived from it, that no-op would quietly reorder every card
+    ``expand_rows_to_cards`` emits, and with it the ``seed-registry`` plan an operator
+    reads before confirming a publish. Card order is this repo's to choose, so it is
+    pinned here rather than inherited.
+    """
+    assert cards._ROOT_SLOTS == _EXPECTED_ROOT_SLOTS
+
+
+def test_cards_are_emitted_in_root_slot_order():
+    # The assertion above only pins the constant; this pins what the constant is *for*.
+    # Nothing else in the suite constrains cross-root emission order -- the shape tests
+    # use a set, `sorted()`, and `Counter` -- so without this, `expand_rows_to_cards`
+    # could stop honoring `_ROOT_SLOTS` (say, by iterating the `model_ids` dict built
+    # from a reordered source) and the order pinned above would mean nothing.
+    row = _row("rice", "cylinder", "2, 3", primary="r/p", lateral="r/l", crown="r/c")
+    result = cards.expand_rows_to_cards([row])
+    assert tuple(c.root_type for c in result) == _EXPECTED_ROOT_SLOTS
+
+
 # --- 3.20: every accepted mode still round-trips through the real ModelCard ---
 
 #: The vocabulary spelled out, NOT `sorted(chooser.MODE_VOCAB)`. Parametrizing over the

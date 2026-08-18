@@ -23,11 +23,11 @@ from pathlib import Path
 from omegaconf import MISSING, DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
-from sleap_roots_training.registry.chooser import MODE_VOCAB, SPECIES_VOCAB
-
-#: Root-type vocabulary. A local copy mirroring ``registry/cards.py``'s ``_ROOT_SLOTS``
-#: (not an import — that attribute is private and carries no stability contract).
-ROOT_TYPE_VOCAB = frozenset({"primary", "lateral", "crown"})
+from sleap_roots_training.registry.chooser import (
+    MODE_VOCAB,
+    ROOT_TYPE_VOCAB,
+    SPECIES_VOCAB,
+)
 
 #: Similarity floor for the "did you mean" hint on an out-of-vocabulary value. Named and
 #: passed explicitly rather than left to ``difflib``'s implicit ``0.6``, because ``cyl``

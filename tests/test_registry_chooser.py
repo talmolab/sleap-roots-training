@@ -165,6 +165,38 @@ def test_mode_vocab_is_non_empty():
     assert all(isinstance(mode, str) for mode in chooser.MODE_VOCAB)
 
 
+def test_root_type_vocab_is_the_contract_vocabulary_unforked():
+    # The same single-owner rule as `MODE_VOCAB`, for the vocabulary that had *three*
+    # local copies before this: `config.ROOT_TYPE_VOCAB`, `labeling/metadata`'s
+    # `ROOT_TYPE_VOCAB`, and -- as a set -- `cards._ROOT_SLOTS`. Three hand-maintained
+    # mirrors of one contract literal are three chances to drift, and the guard that
+    # existed only compared two of them to *each other*, which passes just as happily
+    # when both are wrong.
+    from typing import get_args
+
+    from sleap_roots_contracts import RootType
+
+    assert chooser.ROOT_TYPE_VOCAB == frozenset(get_args(RootType))
+    # The independent witness, for the reason spelled out in the `Mode` test above: the
+    # assertion on the line before re-derives the set exactly the way production does, so
+    # it passes when `get_args()` returns `()` on both sides. Only a spelled-out literal
+    # catches an upstream *narrowing*. `crown` is the member at risk -- it reaches the
+    # committed matrix on rice rows only, and `examples/` uses `primary`, so a narrowing
+    # that dropped it would leave the authoring surfaces green. Editing this literal is
+    # where a human confirms a vocabulary change is intended; do not "simplify" it into
+    # another re-derivation. Its counterpart is `_EXPECTED_ROOT_SLOTS` in
+    # `test_registry_cards.py` -- keep the two in sync.
+    assert chooser.ROOT_TYPE_VOCAB == {"primary", "lateral", "crown"}
+
+
+def test_root_type_vocab_is_non_empty():
+    # Defence in depth, and as honest about it as its `MODE_VOCAB` twin: this cannot fail
+    # while it runs, because `chooser` raises at import for the shapes it names. It is
+    # kept so that deleting the import guard leaves something behind.
+    assert chooser.ROOT_TYPE_VOCAB
+    assert all(isinstance(root_type, str) for root_type in chooser.ROOT_TYPE_VOCAB)
+
+
 def test_species_vocab_stays_local():
     # The mirror of the above: a *selector's* species is a free `str`, so there is no
     # contract-side species vocabulary to defer to. Guards against a future reader
@@ -235,16 +267,38 @@ _MODE_RESHAPES = {
     "union": "Mode = Union[Literal['cylinder'], Literal['plate']]\n",
 }
 
+#: The same five reshapes for `RootType`, which `chooser` now also derives a vocabulary
+#: from. Kept as a separate table rather than generated from `_MODE_RESHAPES` by string
+#: substitution: the members differ, and a generated table would silently stop covering a
+#: shape the moment the two aliases diverge upstream.
+_ROOT_TYPE_RESHAPES = {
+    "enum": "class RootType(str, Enum):\n    PRIMARY = 'primary'\n",
+    "str_alias": "RootType = str\n",
+    "annotated": "RootType = Annotated[Literal['primary', 'lateral'], Field()]\n",
+    "optional": "RootType = Optional[Literal['primary', 'lateral']]\n",
+    "union": "RootType = Union[Literal['primary'], Literal['lateral']]\n",
+}
 
-def _import_chooser_with_stub_contracts(tmp_path, mode_source):
-    """Import ``chooser`` in a subprocess whose ``sleap_roots_contracts.Mode`` is stubbed."""
+#: The healthy shape of each alias. One reshape is injected at a time, against a valid
+#: counterpart, so a failure names which alias the guard caught -- a stub that reshaped
+#: both would pass the assertions for the wrong reason.
+_VALID_MODE = "Mode = Literal['cylinder', 'multiplant cylinder', 'plate']\n"
+_VALID_ROOT_TYPE = "RootType = Literal['primary', 'lateral', 'crown']\n"
+
+
+def _import_chooser_with_stub_contracts(
+    tmp_path, *, mode_source=_VALID_MODE, root_type_source=_VALID_ROOT_TYPE
+):
+    """Import ``chooser`` in a subprocess against a stubbed ``sleap_roots_contracts``."""
     import os
     import subprocess
     import sys
 
     stub = tmp_path / "sleap_roots_contracts"
     stub.mkdir()
-    (stub / "__init__.py").write_text(_STUB_HEADER + mode_source, encoding="utf-8")
+    (stub / "__init__.py").write_text(
+        _STUB_HEADER + mode_source + root_type_source, encoding="utf-8"
+    )
 
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
@@ -264,7 +318,9 @@ def test_chooser_refuses_to_import_when_mode_is_not_a_literal_of_strings(
 ):
     # The whole point of the guard is that it fails *at the seam*, naming what changed,
     # instead of letting every real mode start getting rejected somewhere downstream.
-    result = _import_chooser_with_stub_contracts(tmp_path, _MODE_RESHAPES[shape])
+    result = _import_chooser_with_stub_contracts(
+        tmp_path, mode_source=_MODE_RESHAPES[shape]
+    )
 
     assert result.returncode != 0, f"{shape}: chooser imported anyway\n{result.stdout}"
     assert "RuntimeError" in result.stderr
@@ -275,12 +331,31 @@ def test_chooser_refuses_to_import_when_mode_is_not_a_literal_of_strings(
     assert "TypeError" not in result.stderr
 
 
-def test_chooser_imports_cleanly_when_mode_is_a_plain_literal(tmp_path):
+@pytest.mark.parametrize("shape", sorted(_ROOT_TYPE_RESHAPES))
+def test_chooser_refuses_to_import_when_root_type_is_not_a_literal_of_strings(
+    shape, tmp_path
+):
+    # `ROOT_TYPE_VOCAB` is derived the same way as `MODE_VOCAB` and degrades the same
+    # way, so it carries the same guard -- and that guard needs its own fault injection,
+    # not inherited confidence from the `Mode` case. A single shared helper covering both
+    # aliases can still be wired up for only one of them.
+    result = _import_chooser_with_stub_contracts(
+        tmp_path, root_type_source=_ROOT_TYPE_RESHAPES[shape]
+    )
+
+    assert result.returncode != 0, f"{shape}: chooser imported anyway\n{result.stdout}"
+    assert "RuntimeError" in result.stderr
+    # Naming the *right* alias is the point: an error blaming `Mode` for a reshaped
+    # `RootType` sends the reader to the wrong upstream symbol.
+    assert "sleap_roots_contracts.RootType" in result.stderr
+    assert "sleap_roots_contracts.Mode" not in result.stderr
+    assert "TypeError" not in result.stderr
+
+
+def test_chooser_imports_cleanly_when_both_aliases_are_plain_literals(tmp_path):
     # The negative control: the guard must discriminate, not just fail. Without this,
     # a guard of `if True:` would pass every assertion above.
-    result = _import_chooser_with_stub_contracts(
-        tmp_path, "Mode = Literal['cylinder', 'multiplant cylinder', 'plate']\n"
-    )
+    result = _import_chooser_with_stub_contracts(tmp_path)
     assert result.returncode == 0, result.stderr
 
 

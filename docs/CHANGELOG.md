@@ -73,6 +73,35 @@ All notable changes to this project are documented here. The format is based on
   an earlier draft of this entry said ~183 ms, which was `chooser`'s total import cost rather than
   what this change adds). Immaterial next to a training run, but noted because it departs from the
   lazy-import convention this repo uses for `wandb` and `sleap-nn`.
+- **Collapsed the local root-type vocabulary into the contract-owned `RootType`**, finishing what
+  the `Mode` collapse above deliberately left (#38). `chooser.ROOT_TYPE_VOCAB` is now derived from
+  `sleap_roots_contracts.RootType`, and the three hand-written copies of `{"primary", "lateral",
+  "crown"}` — in `config.py`, in `labeling/metadata.py`, and (as a set) in `registry/cards.py`'s
+  `_ROOT_SLOTS` — are gone. The old guard compared two of those copies *to each other*, which could
+  only ever catch one of them going stale; identity against the contract is asserted at each
+  consumer instead. **Nothing accepted or published changes:** `get_args(RootType)` on the pinned
+  `0.1.0a6` is set-identical to the vocabulary it replaces, so no config, package, or card that
+  validated before stops validating. Carries the same import guard as `MODE_VOCAB` — a `RootType`
+  that stops being a plain `Literal` raises at import naming `RootType`, rather than degrading to
+  "nothing is valid" — with its own fault injection over all five reshapes.
+
+  **`registry/cards.py` keeps its own `_ROOT_SLOTS`, on purpose.** Membership is the contract's;
+  *ordering* is not. `_ROOT_SLOTS` is an ordered tuple whose order decides which order
+  `expand_rows_to_cards` emits cards in, and so the order an operator reads them in the
+  `seed-registry` plan. Reordering a `Literal`'s members is a no-op for a type annotation and could
+  land upstream in a patch release; deriving slot order from the contract would turn that no-op into
+  a silent reordering of every published card. The tuple is now pinned by a test, as is the emission
+  order it governs — nothing in the suite constrained cross-root card order before (the card tests
+  use a set, `sorted()`, and `Counter`), so `expand_rows_to_cards` could have stopped honoring it
+  unnoticed.
+
+  **For config authors and package builders:** as with `mode`, the contract now governs two
+  user-facing fields it did not before — `experiment.root_type` in a training config, and
+  `root_types` in a labeling package's `package_metadata.yaml`. A future `sleap-roots-contracts`
+  release that *narrows* `RootType` would therefore reject a value you have already written. `crown`
+  is the member with the thinnest coverage in CI — it reaches the committed selection matrix on rice
+  rows only — so the spelled-out literal witnesses in `test_registry_chooser.py` and
+  `test_registry_cards.py` are what catch a narrowing at bump time rather than in your config.
 - The wandb credential guard (`seed-registry --execute` / `--verify`) now accepts a resolvable
   wandb credential — `WANDB_API_KEY` **or** a netrc entry for `api.wandb.ai` written by
   `wandb login` — instead of requiring `WANDB_API_KEY`. The netrc file is located the way wandb

@@ -23,7 +23,15 @@ from sleap_roots_contracts import Selector
 
 from sleap_roots_training.registry.chooser import SelectionRow, parse_age_window
 
-#: The three root types, in the order their slots appear on a selection row.
+#: The three root types, in the order their slots appear on a selection row — which is
+#: also the order ``expand_rows_to_cards`` emits cards in, and so the order an operator
+#: reads them in the ``seed-registry`` plan.
+#:
+#: Deliberately *not* ``get_args(RootType)``, though its members are exactly
+#: ``chooser.ROOT_TYPE_VOCAB`` and a test holds them to that. Reordering a ``Literal``'s
+#: members is a no-op for a type annotation, so upstream may do it in a patch release;
+#: deriving this tuple from the contract would turn that no-op into a silent reordering of
+#: every published card. Membership is the contract's to own, ordering is ours.
 _ROOT_SLOTS = ("primary", "lateral", "crown")
 
 
