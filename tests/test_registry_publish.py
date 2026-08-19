@@ -717,3 +717,61 @@ def test_a_reseed_of_unchanged_weights_keeps_its_digest(monkeypatch, tmp_path):
         publish.publish_card(run, card, model_dir, CFG, api=_ReReadApi(run))
         digests.append(run.link_returns[0].digest)
     assert digests[0] == digests[1] == "sha-unchanged"
+
+
+def test_a_refresh_without_an_api_is_not_reported_as_a_failure(monkeypatch, tmp_path):
+    # publish_card can be called without an api (the lazy path, and older wandb returns
+    # nothing useful from link_artifact). There is then nothing to re-read from, so the
+    # refresh cannot be confirmed EITHER WAY. Reporting "failed" there would be an alarm
+    # the operator cannot act on; reporting "published" is the honest degenerate answer.
+    import wandb
+
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    monkeypatch.setattr(
+        wandb, "Api", lambda *a, **kw: pytest.fail("must not build Api")
+    )
+    run = _RefreshRun(read_back=_LEGACY_META)
+    card = _card("primary", "soy/p", ("soybean", "cylinder", 2, 8))
+    model_dir = tmp_path / "m"
+    model_dir.mkdir()
+
+    assert publish.publish_card(run, card, model_dir, CFG, api=None) == "published"
+    # It still ATTEMPTED the refresh -- it just cannot confirm it landed.
+    assert run.link_returns[0].saved == 1
+
+
+def test_a_read_error_on_the_skip_path_is_not_reported_stale(monkeypatch, tmp_path):
+    # This runs on the skip path of an otherwise-successful re-run. Turning a transient
+    # read error into a reported migration failure would be a false alarm; the seed did
+    # nothing wrong. Fail SOFT here, unlike the idempotency read, which fails closed
+    # because there the consequence is a wrongly-moved production alias.
+    monkeypatch.setattr(publish, "publish_card", lambda *a, **kw: "published")
+
+    class _ArtsBoom(_FakeApi):
+        def artifacts(self, type_name, name):
+            raise ConnectionError("transient read error")
+
+    card = _card("primary", "soy/p", ("soybean", "cylinder", 2, 8))
+    api = _ArtsBoom(collections=["soy-p"])
+    # The idempotency read uses the same call, so it raises first and fails closed --
+    # which is the correct precedence. Assert that, rather than pretending otherwise.
+    with pytest.raises(ConnectionError):
+        publish.seed_registry(
+            _resolved([card], tmp_path), CFG, run=object(), api=api, force=False
+        )
+
+
+def test_the_skip_path_shape_check_fails_soft_on_a_read_error(tmp_path):
+    # The helper itself, in isolation: an unreadable artifact is NOT stale.
+    class _Boom:
+        def artifacts(self, type_name, name):
+            raise ConnectionError("transient read error")
+
+    assert publish._aliased_metadata_is_current(_Boom(), PROJECT, "soy-p", "production")
+
+
+def test_an_absent_aliased_artifact_is_not_reported_stale(tmp_path):
+    # Nothing carrying the alias -> nothing to call stale. (The alias's absence is the
+    # `missing` bucket's job, not this check's.)
+    api = _FakeApi(arts_by_name={})
+    assert publish._aliased_metadata_is_current(api, PROJECT, "soy-p", "production")
