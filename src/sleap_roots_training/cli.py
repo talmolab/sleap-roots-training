@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Optional
 
 import click
+from omegaconf import OmegaConf
 
 from sleap_roots_training import __version__
+from sleap_roots_training import backend
 from sleap_roots_training import config as training_config
 from sleap_roots_training.registry import cards, chooser, config, lineage, publish
 from sleap_roots_training.registry.models import resolve_model_dir
@@ -16,8 +18,10 @@ from sleap_roots_training.registry.models import resolve_model_dir
 def main() -> None:
     """Config-driven training and evaluation of SLEAP root models.
 
-    Subcommands are added as the pipeline is built out tier by tier (see the
-    program roadmap). Run ``sleap-roots-training --help`` to list them.
+    ``validate`` and ``emit`` are base-install safe, so a config can be authored and
+    checked anywhere; ``run`` chains validate -> emit -> ``sleap-nn train`` on a host that
+    also has the ``train`` extra installed. Subcommands are added as the pipeline is built
+    out tier by tier (see the program roadmap).
     """
 
 
@@ -650,3 +654,83 @@ def labeling_validate_command(package_dir: Path) -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     main()
+
+
+@main.command(name="run")
+@click.argument(
+    "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "--resolved-config",
+    # dir_okay=False for the same reason --selection-matrix has it: a directory would
+    # otherwise reach the writer and surface as a raw IsADirectoryError.
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Stage the emitted config here instead of in the run directory.",
+)
+@click.pass_context
+def run_command(
+    ctx: click.Context, config_path: Path, resolved_config: Optional[Path]
+) -> None:
+    """Validate CONFIG_PATH, stage it, and run ``sleap-nn train`` on it.
+
+    The one-command path for a host that has **both** this package and the ``train``
+    extra installed (the GPU box). ``validate`` and ``emit`` are unchanged and remain
+    base-install safe, so the author-here / train-there workflow still uses them.
+
+    Two configs are written into ``<trainer_config.ckpt_dir>/<trainer_config.run_name>/``
+    before training starts: ``resolved_config.yaml`` (what ``sleap-nn`` is given) and
+    ``source_config.yaml`` (what you wrote, ``experiment`` block included -- the identity
+    no ``sleap-nn`` artifact records). The backend's own output streams live, and its exit
+    status is this command's exit status.
+    """
+    # Step order is the contract (see the change's design.md D6): every step that can fail
+    # cheaply runs before any step with a side effect, so a failure here leaves nothing
+    # written and no subprocess started. A stale config beside a run that never happened
+    # is indistinguishable later from a real one.
+    try:
+        binary = backend.resolve_sleap_nn()
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+
+    try:
+        cfg = training_config.load_config(config_path)
+        notes = training_config.validate_config(cfg)
+    except training_config.ConfigError as error:
+        raise click.ClickException(str(error))
+    for note in notes:
+        # Resolving the console script does NOT mean `sleap_nn` is importable here (it may
+        # come from another environment entirely), so deep validation can still be skipped.
+        # Say so rather than let an operator assume a multi-hour run was fully checked.
+        click.echo(f"note: {note}")
+
+    try:
+        backend.reject_inline_api_key(cfg)
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+    if OmegaConf.select(cfg, "trainer_config.use_wandb", default=False):
+        # Every committed baseline example sets use_wandb; without a resolvable credential
+        # the run dies hours in, at wandb.init(). Fail now instead.
+        _require_api_key()
+
+    try:
+        run_dir = backend.run_directory(cfg)
+        backend.check_run_directory(run_dir)
+        destination = backend.resolved_config_path(run_dir, resolved_config)
+        backend.stage_artifacts(cfg, config_path, run_dir, destination)
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+
+    # Echo the resolved backend before a multi-hour run: this is the only signal that the
+    # interpreter-first search picked a different environment than the operator expected.
+    click.echo(f"backend: {binary}")
+    click.echo(f"config:  {destination}")
+    outcome = backend.run_backend(backend.build_argv(binary, destination))
+    if outcome.note:
+        click.echo(outcome.note, err=True)
+    if outcome.exit_code != 0:
+        ctx.exit(outcome.exit_code)
+    click.echo(
+        f"OK: training finished; {run_dir} holds "
+        f"{backend.RESOLVED_CONFIG_NAME} + {backend.SOURCE_CONFIG_NAME}"
+    )

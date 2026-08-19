@@ -149,27 +149,27 @@ commit.
 All tests in this group are written before 5.8's implementation; nothing is appended after the green
 gate.
 
-- [ ] 5.1 Write the failing CLI tests (`tests/test_cli_run.py`, Click `CliRunner`, following
+- [x] 5.1 Write the failing CLI tests (`tests/test_cli_run.py`, Click `CliRunner`, following
       `tests/test_cli_validate.py`): happy path exits 0, prints the resolved absolute backend path
       before invoking, and prints one success line naming the run directory and both artifacts;
       backend missing exits non-zero with the install message; invalid config exits non-zero with
       the field-named error; malformed YAML and a nonexistent path exit non-zero without a
       traceback.
-- [ ] 5.2 Write the failing **ordering** tests (design D6 — the contract that matters most). For
+- [x] 5.2 Write the failing **ordering** tests (design D6 — the contract that matters most). For
       each cheap-failure case, in the order the requirement lists them — backend unresolvable,
       invalid config, in-config `api_key`, W&B enabled with no resolvable credential, unusable
       `run_name`, occupied run directory — assert the subprocess seam recorded **zero** calls,
       `(tmp_path / "ckpt")` was never created, and the `rglob` snapshot is unchanged.
-- [ ] 5.3 Write the failing exit-propagation CLI tests: backend status `2` → CLI exit 2 with no
+- [x] 5.3 Write the failing exit-propagation CLI tests: backend status `2` → CLI exit 2 with no
       success line; `-9` → CLI exit 137; interrupt → the backend's status is reported, with
       `result.exception` never a `KeyboardInterrupt` and no `Aborted!`.
-- [ ] 5.4 Write the failing gate/importability test: with `resolve_sleap_nn` stubbed to a path and
+- [x] 5.4 Write the failing gate/importability test: with `resolve_sleap_nn` stubbed to a path and
       `config._deep_validation_available` stubbed to `False` (a `PATH` hit from another environment
       — design D2 deliberately does not gate on `find_spec`), `run` proceeds **and echoes the skip
       note**, so an operator knows a multi-hour run was not deeply validated.
-- [ ] 5.5 Write the failing failed-run-retention test: after a non-zero backend status, both
+- [x] 5.5 Write the failing failed-run-retention test: after a non-zero backend status, both
       artifacts remain on disk and the run directory is not rolled back.
-- [ ] 5.6 Write the failing base-install lock tests, in two parts, because
+- [x] 5.6 Write the failing base-install lock tests, in two parts, because
       `assert "sleap_nn" not in sys.modules` alone is **vacuous** where the extra is not installed
       (i.e. on every CI leg): (a) a tripwire — install a fake `sleap_nn` module whose `__getattr__`
       raises, then drive a full stubbed `run` and assert it completes; this is the part that catches
@@ -179,17 +179,17 @@ gate.
       dynamic imports. Follow `tests/test_config.py:195`'s
       `monkeypatch.delitem(sys.modules, "sleap_nn", raising=False)` so both are valid on the
       co-installed GPU box too.
-- [ ] 5.7 Write the failing regression test that the new gate did not leak into the base-safe
+- [x] 5.7 Write the failing regression test that the new gate did not leak into the base-safe
       commands: with `resolve_sleap_nn` stubbed to raise, `validate <good>` still exits 0 and
       `emit <good>` still writes its output. Confirm red for the whole group.
-- [ ] 5.8 Implement `run` in `cli.py`: `@main.command(name="run")`, `config_path` argument
+- [x] 5.8 Implement `run` in `cli.py`: `@main.command(name="run")`, `config_path` argument
       (`exists=True, dir_okay=False, path_type=Path`), `--resolved-config`
       (`dir_okay=False, path_type=Path`); compose gate → `load_config` → `validate_config` (echoing
       notes) → `_require_api_key()` when `use_wandb` → run-name and destination checks →
       run-directory refusal → stage → invoke → `ctx.exit(status)`; map `BackendError` /
       `ConfigError` to `click.ClickException`. Extend the CLI group docstring so `--help`
       distinguishes the base-safe `validate` / `emit` from the `[train]`-gated `run`.
-- [ ] 5.9 Confirm green; run the full suite + lint.
+- [x] 5.9 Confirm green; run the full suite + lint.
 
 ## 6. Documentation
 
