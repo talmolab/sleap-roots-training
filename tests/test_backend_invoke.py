@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from sleap_roots_training import backend
+from sleap_roots_training import config as training_config
 
 
 def _make_stub(directory: Path) -> Path:
@@ -120,3 +121,282 @@ def test_interpreter_scripts_dir_is_this_environments_script_dir():
         Path(backend._interpreter_scripts_dir()).resolve()
         == Path(black).parent.resolve()
     )
+
+
+# --- destination policy + provenance artifacts -------------------------------------------
+
+
+def _cfg(write_config, **kwargs):
+    """Load a config written by the shared factory, returning (cfg, path)."""
+    path = write_config(**kwargs)
+    return training_config.load_config(path), path
+
+
+def test_run_directory_is_ckpt_dir_joined_with_run_name(write_config, tmp_path):
+    cfg, _ = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    assert backend.run_directory(cfg) == tmp_path / "ckpt" / "r1"
+
+
+def test_unset_ckpt_dir_follows_the_backends_own_default(write_config, tmp_path):
+    """sleap-nn 0.2.0 defaults `ckpt_dir` to "." (config/trainer_config.py:368)."""
+    cfg, _ = _cfg(write_config, drop=("trainer_config.ckpt_dir",))
+    assert backend.run_directory(cfg) == Path(".") / "arabidopsis_primary_cylinder"
+
+
+def test_relative_ckpt_dir_resolves_against_the_process_cwd(write_config, tmp_path):
+    """The backend resolves it against *its* cwd, which it inherits from ours."""
+    cfg, _ = _cfg(
+        write_config,
+        overrides={"trainer_config": {"ckpt_dir": "models", "run_name": "r1"}},
+    )
+    assert (tmp_path / backend.run_directory(cfg)).parent == tmp_path / "models"
+
+
+@pytest.mark.parametrize("run_name", [None, "", "   ", "None"])
+def test_unusable_run_name_is_refused(write_config, run_name):
+    """Empty/`"None"` are what the backend itself treats as unset (model_trainer.py:491).
+
+    It would then generate `<timestamp>.<model_type>.n=<N>` -- a directory we cannot
+    predict -- so refusing beats guessing.
+    """
+    if run_name is None:
+        cfg, _ = _cfg(write_config, drop=("trainer_config.run_name",))
+    else:
+        cfg, _ = _cfg(
+            write_config, overrides={"trainer_config": {"run_name": run_name}}
+        )
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize("run_name", ["a/b", "../escape", "/tmp/absolute"])
+def test_run_name_that_escapes_the_run_directory_is_refused(write_config, run_name):
+    """`Path("ckpt") / "/tmp/x"` evaluates to `/tmp/x`, escaping ckpt_dir entirely."""
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
+
+
+def test_run_directory_holding_a_checkpoint_is_refused(tmp_path):
+    """The backend suffixes to `<run_name>-1` when best.ckpt exists (model_trainer.py:522).
+
+    Anything staged under `<run_name>/` would then describe a different run than the one
+    beside it, so this refuses rather than stranding the artifacts.
+    """
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "best.ckpt").write_bytes(b"weights")
+    with pytest.raises(backend.BackendError, match="run_name"):
+        backend.check_run_directory(run_dir)
+
+
+def test_run_directory_holding_a_backend_config_is_refused(tmp_path):
+    """Stricter than the backend's own trigger, deliberately.
+
+    A `save_ckpt: false` run never writes best.ckpt, so the backend silently reuses the
+    directory; `training_config.yaml` is the marker that a run completed there anyway.
+    """
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "training_config.yaml").write_text("{}", encoding="utf-8")
+    with pytest.raises(backend.BackendError, match="run_name"):
+        backend.check_run_directory(run_dir)
+
+
+def test_run_directory_without_run_evidence_is_the_retry_case(tmp_path):
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "resolved_config.yaml").write_text("stale", encoding="utf-8")
+    backend.check_run_directory(run_dir)  # must not raise
+
+
+def test_resolved_config_path_defaults_into_the_run_directory(tmp_path):
+    run_dir = tmp_path / "ckpt" / "r1"
+    assert (
+        backend.resolved_config_path(run_dir, None) == run_dir / "resolved_config.yaml"
+    )
+
+
+def test_resolved_config_path_honors_the_override(tmp_path):
+    run_dir = tmp_path / "ckpt" / "r1"
+    override = tmp_path / "elsewhere" / "cfg.yaml"
+    assert backend.resolved_config_path(run_dir, override) == override
+
+
+def test_stage_writes_both_artifacts(write_config, tmp_path):
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    dest = backend.resolved_config_path(run_dir, None)
+    backend.stage_artifacts(cfg, source, run_dir, dest)
+
+    resolved_bytes = dest.read_bytes()
+    assert resolved_bytes == training_config.to_sleap_nn_yaml(cfg).encode("utf-8")
+    assert b"\r" not in resolved_bytes
+    assert "experiment" not in dest.read_text(encoding="utf-8")
+    for block in ("data_config", "model_config", "trainer_config"):
+        assert block in dest.read_text(encoding="utf-8")
+
+    source_copy = run_dir / "source_config.yaml"
+    assert source_copy.read_bytes() == source.read_bytes()
+    assert "experiment" in source_copy.read_text(encoding="utf-8")
+
+
+def test_stage_creates_missing_parent_directories(write_config, tmp_path):
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {
+                "ckpt_dir": str(tmp_path / "deep" / "nested"),
+                "run_name": "r1",
+            }
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    dest = backend.resolved_config_path(run_dir, None)
+    backend.stage_artifacts(cfg, source, run_dir, dest)
+    assert dest.is_file()
+
+
+def test_stage_refuses_a_destination_whose_parent_is_a_file(write_config, tmp_path):
+    """Portable: `chmod(0o555)` denies nothing on Windows, nor for root on POSIX."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    blocker = tmp_path / "blocker"
+    blocker.write_text("i am a file", encoding="utf-8")
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, blocker / "resolved.yaml")
+
+
+def test_stage_refuses_a_directory_as_the_resolved_destination(write_config, tmp_path):
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    a_dir = tmp_path / "a_dir"
+    a_dir.mkdir()
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, a_dir)
+
+
+def test_stage_refuses_to_overwrite_the_source_config(write_config, tmp_path):
+    """Overwriting the source with its experiment-stripped form destroys the run identity."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, source)
+    assert "experiment" in source.read_text(encoding="utf-8")
+
+
+def test_stage_refuses_an_override_colliding_with_the_source_copy(
+    write_config, tmp_path
+):
+    """A relative override can resolve onto an artifact name `run` writes itself."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "source_config.yaml")
+
+
+def test_stage_leaves_no_truncated_artifact_when_the_write_fails(
+    write_config, tmp_path, monkeypatch
+):
+    """A failed write must not leave a partial file the next run reads as real."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    dest = backend.resolved_config_path(run_dir, None)
+
+    def _boom(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(backend.os, "replace", _boom)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, dest)
+    assert not dest.exists()
+    assert list(run_dir.glob("*.tmp*")) == []  # the temp file is cleaned up too
+
+
+def test_stage_rechecks_the_run_directory_before_writing(write_config, tmp_path):
+    """TOCTOU: a checkpoint appearing after the caller's check must still be refused."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    backend.check_run_directory(run_dir)  # passes: nothing there yet
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "best.ckpt").write_bytes(b"weights")  # ...appears in the window
+    with pytest.raises(backend.BackendError, match="run_name"):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "resolved_config.yaml")
+
+
+def test_a_run_name_too_long_for_the_filesystem_fails_cleanly(write_config, tmp_path):
+    """Long / non-ASCII names hit ENAMETOOLONG (POSIX) or MAX_PATH (Windows).
+
+    Either way it must surface as BackendError, never as a raw OSError traceback.
+    """
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {
+                "ckpt_dir": str(tmp_path / "ckpt"),
+                "run_name": "ünïcøde" * 60,
+            }
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "resolved_config.yaml")
+
+
+def test_inline_wandb_api_key_is_refused(write_config):
+    """registry/publish.py uploads the whole run dir, so a persisted key would ship."""
+    cfg, _ = _cfg(
+        write_config,
+        overrides={"trainer_config": {"wandb": {"api_key": "deadbeef"}}},
+    )
+    with pytest.raises(backend.BackendError, match="api_key"):
+        backend.reject_inline_api_key(cfg)
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_absent_or_empty_api_key_is_fine(write_config, value):
+    overrides = (
+        {"trainer_config": {"wandb": {"api_key": value}}} if value is not None else None
+    )
+    cfg, _ = _cfg(write_config, overrides=overrides)
+    backend.reject_inline_api_key(cfg)  # must not raise

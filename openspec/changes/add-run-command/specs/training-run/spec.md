@@ -78,9 +78,11 @@ Before invoking the backend, `run` SHALL write two files into the run directory
 `<trainer_config.ckpt_dir>/<trainer_config.run_name>/`: `resolved_config.yaml`, the emitted
 sleap-nn-native config with the same content `emit` produces for that input; and
 `source_config.yaml`, a verbatim copy of the input config including the repo-owned `experiment`
-block. Neither SHALL be a temporary file, an in-memory pipe, or a file `run` deletes afterwards.
-Both SHALL be written with LF (`\n`) line endings on every platform and SHALL be written atomically,
-so a failed write leaves no truncated artifact. `trainer_config.ckpt_dir` SHALL default to `"."`,
+block. Neither SHALL be a temporary file, an in-memory pipe, or a file `run` deletes afterwards. The
+emitted config SHALL be written with LF (`\n`) line endings on every platform, so its bytes are
+host-independent; the source config SHALL be copied byte-for-byte, since a provenance copy that
+rewrote the operator's bytes would not be one. Both SHALL be written atomically, so a failed write
+leaves no truncated artifact. `trainer_config.ckpt_dir` SHALL default to `"."`,
 matching the backend's own default. `run` SHALL require a usable `trainer_config.run_name` — a
 string that is non-empty after stripping surrounding whitespace, is not the literal `"None"` (which
 the backend itself treats as unset), is not absolute, and contains no path separator — and SHALL
@@ -107,10 +109,11 @@ config itself.
   `model_config` / `trainer_config` blocks
 - **AND** `source_config.yaml` holds the input config's content, including its `experiment` block
 
-#### Scenario: Artifacts use LF line endings on every platform
+#### Scenario: The emitted config uses LF line endings on every platform
 
 - **WHEN** `run` writes its artifacts on Windows
-- **THEN** neither file contains a CR byte
+- **THEN** `resolved_config.yaml` contains no CR byte, and `source_config.yaml` is a byte-for-byte
+  copy of the input
 - **AND** a subsequent invocation recognizes them as unchanged rather than as differing content
 
 #### Scenario: An unset checkpoint directory follows the backend's default

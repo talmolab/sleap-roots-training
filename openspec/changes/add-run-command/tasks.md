@@ -78,46 +78,47 @@ commit.
 
 ## 3. Destination policy and provenance artifacts (TDD)
 
-- [ ] 3.1 Write the failing destination tests: artifacts land in `<ckpt_dir>/<run_name>/`; an unset
+- [x] 3.1 Write the failing destination tests: artifacts land in `<ckpt_dir>/<run_name>/`; an unset
       `ckpt_dir` resolves to `.` (the backend's own default); `--resolved-config` relocates the
       emitted config while `source_config.yaml` still lands in the run directory; a relative
       `ckpt_dir` resolves against the process cwd (assert explicitly with `monkeypatch.chdir` —
       `VALID_CONFIG` ships a relative one).
-- [ ] 3.2 Write the failing `run_name` tests: absent, empty, **whitespace-only**, and the literal
+- [x] 3.2 Write the failing `run_name` tests: absent, empty, **whitespace-only**, and the literal
       `"None"` are each refused naming `trainer_config.run_name` (the backend treats `"None"` as
       unset and would generate a timestamped directory we cannot predict); a `run_name` containing a
       path separator or an absolute path is refused — `Path("ckpt") / "/tmp/x"` evaluates to
       `/tmp/x`, so an absolute value escapes the run tree entirely. Add a long / non-ASCII
       `run_name` case: on Windows the resulting path can exceed `MAX_PATH`, which must surface as
       the clean `OSError` path of 3.5, never a traceback.
-- [ ] 3.3 Write the failing run-directory-refusal tests (design D4): a run directory holding
+- [x] 3.3 Write the failing run-directory-refusal tests (design D4): a run directory holding
       `best.ckpt` **or** `training_config.yaml` is refused, naming the directory and a new
       `run_name`, leaving the directory unchanged (verify with a before/after hash) and starting no
       subprocess; **no flag overrides it**; a directory holding neither is the retry case and
       proceeds, overwriting only our two artifacts. Include the TOCTOU case: if the refusal
       condition appears *between* the check and the write, the write must still not clobber a
       checkpoint — assert the artifact write refuses to overwrite anything it did not expect.
-- [ ] 3.4 Write the failing content tests: `resolved_config.yaml` equals `emit -o`'s output
+- [x] 3.4 Write the failing content tests: `resolved_config.yaml` equals `emit -o`'s output
       **file-for-file** (compare artifact bytes to artifact bytes, never bytes to
       `to_sleap_nn_yaml(cfg).encode()` — `Path.write_text` translates `\n` to `os.linesep`, so the
       latter is red on Windows by construction; group 1 has already made both sides LF);
       `resolved_config.yaml` has no `experiment` block and retains the three sleap-nn blocks;
-      `source_config.yaml` matches the input file's content including `experiment`; neither file
-      contains a CR byte on any platform.
-- [ ] 3.5 Write the failing write-robustness tests: missing parents are created; a destination whose
+      `source_config.yaml` is a byte-for-byte copy of the input file, `experiment` block
+      included (a provenance copy is verbatim, so it is *not* LF-normalized); and
+      `resolved_config.yaml` contains no CR byte on any platform.
+- [x] 3.5 Write the failing write-robustness tests: missing parents are created; a destination whose
       parent is a file is refused cleanly (portable — `chmod(0o555)` does not deny writes on Windows
       or for root); `--resolved-config` naming a directory is refused (`dir_okay=False`);
       `--resolved-config` naming the input config is refused, since overwriting the source with its
       `experiment`-stripped form destroys the run's identity; a **relative** `--resolved-config`
       that resolves to one of the run directory's own artifact names is refused (it would collide
       with what `run` writes); a write that fails partway leaves no truncated file.
-- [ ] 3.6 Write the failing credential tests (design D9): a non-empty `trainer_config.wandb.api_key`
+- [x] 3.6 Write the failing credential tests (design D9): a non-empty `trainer_config.wandb.api_key`
       is refused before any write, naming `WANDB_API_KEY` / `wandb login`.
-- [ ] 3.7 Confirm red.
-- [ ] 3.8 Implement in `backend.py`: `run_directory(cfg)`, `resolved_config_path(cfg, override)`,
+- [x] 3.7 Confirm red.
+- [x] 3.8 Implement in `backend.py`: `run_directory(cfg)`, `resolved_config_path(cfg, override)`,
       and `stage_artifacts(cfg, source_path, dest)` writing atomically (temp file in the destination
       directory + `os.replace`) with `newline="\n"`.
-- [ ] 3.9 Confirm green; lint clean.
+- [x] 3.9 Confirm green; lint clean.
 
 ## 4. Invocation and exit-status translation (TDD)
 
