@@ -276,19 +276,19 @@ gate.
 
 ## 8. Verification (before requesting review of the implementation)
 
-- [ ] 8.1 `uv run pytest --cov=src/sleap_roots_training -m "not integration" tests/` green — CI's
+- [x] 8.1 `uv run pytest --cov=src/sleap_roots_training -m "not integration" tests/` green — CI's
       actual selection, not a bare `pytest`.
-- [ ] 8.2 `uv run pytest --collect-only -m integration` collects cleanly on a base install (a
+- [x] 8.2 `uv run pytest --collect-only -m integration` collects cleanly on a base install (a
       collection error in an integration test is invisible to CI's deselection).
-- [ ] 8.3 `uv run black --check src/sleap_roots_training tests` and
+- [x] 8.3 `uv run black --check src/sleap_roots_training tests` and
       `uv run ruff check src/sleap_roots_training` clean — CI's scoping, not `.`.
-- [ ] 8.4 Confirm `backend.py` has no uncovered branch in `resolve_sleap_nn` / `stage_artifacts` /
+- [x] 8.4 Confirm `backend.py` has no uncovered branch in `resolve_sleap_nn` / `stage_artifacts` /
       `run_backend` under the base-install run.
-- [ ] 8.5 `uv build`; then `uv run --isolated --with dist/*.whl sleap-roots-training run --help`
+- [x] 8.5 `uv build`; then `uv run --isolated --with dist/*.whl sleap-roots-training run --help`
       exits 0, and `run` on a valid config **without** the extra fails with the install message and
       no traceback (`build.yml`'s existing entry-point step is the natural home for this — consider
       adding it there rather than leaving it manual).
-- [ ] 8.6 `npx --yes @fission-ai/openspec@latest validate add-run-command --strict` passes. (The
+- [x] 8.6 `npx --yes @fission-ai/openspec@latest validate add-run-command --strict` passes. (The
       `openspec` binary is not installed globally; `openspec/**` is outside CI's paths filter, so
       this gate is manual by construction.)
 - [ ] 8.7 Update this checklist to `- [x]` only once every item above is actually done.
