@@ -49,7 +49,7 @@ commit.
 
 ## 2. Backend executable resolution (TDD)
 
-- [ ] 2.1 Write the failing tests (`tests/test_backend_invoke.py`). Helper: `_make_stub(dir_)`
+- [x] 2.1 Write the failing tests (`tests/test_backend_invoke.py`). Helper: `_make_stub(dir_)`
       writing `"sleap-nn.exe" if os.name == "nt" else "sleap-nn"` (Windows `shutil.which` on Python
       **3.11** only tries `cmd + ext` for each `PATHEXT` entry — the bare extensionless name is
       never tried, so an unsuffixed stub is invisible on that leg) and `chmod(0o755)` on POSIX.
@@ -62,19 +62,19 @@ commit.
       patched `sys.executable`; drive `PATH` with `monkeypatch.setenv`.
       `monkeypatch.chdir(tmp_path)` in every case: Python 3.11's `shutil.which` prepends `os.curdir`
       on win32 **even when `path=` is passed**.
-- [ ] 2.2 Write the failing test for the error text: it names `sleap-roots-training[train]`, gives
+- [x] 2.2 Write the failing test for the error text: it names `sleap-roots-training[train]`, gives
       the `uvx --from` form, and points at `docs/training-backend.md`.
-- [ ] 2.3 Write the failing test that `_interpreter_scripts_dir()` really is this environment's
+- [x] 2.3 Write the failing test that `_interpreter_scripts_dir()` really is this environment's
       console-script directory: assert it equals `Path(shutil.which("black")).parent` when `black`
       resolves (a dev-group dependency, present on every CI leg), else skip. This is the only test
       that would catch a regression back to `Path(sys.executable).parent`.
-- [ ] 2.4 Confirm red (module does not exist).
-- [ ] 2.5 Implement `src/sleap_roots_training/backend.py`: `BackendError(RuntimeError)`, the seam
+- [x] 2.4 Confirm red (module does not exist).
+- [x] 2.5 Implement `src/sleap_roots_training/backend.py`: `BackendError(RuntimeError)`, the seam
       `_interpreter_scripts_dir() -> str` returning **`sysconfig.get_path("scripts")`** (design D2 —
       *not* `Path(sys.executable).parent`, which is the env root rather than `Scripts\` for conda and
       base Windows installs), and `resolve_sleap_nn() -> Path` searching scripts dir → interpreter
       dir → `PATH`. Stdlib only; no `sleap_nn` import.
-- [ ] 2.6 Confirm green; lint clean.
+- [x] 2.6 Confirm green; lint clean.
 
 ## 3. Destination policy and provenance artifacts (TDD)
 
