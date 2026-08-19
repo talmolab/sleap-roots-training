@@ -193,7 +193,7 @@ gate.
 
 ## 6. Documentation
 
-- [ ] 6.1 Write the failing doc-contract tests first (`tests/test_training_docs.py`): a fenced
+- [x] 6.1 Write the failing doc-contract tests first (`tests/test_training_docs.py`): a fenced
       `sleap-roots-training run` command exists **inside** the new section (section-scoped, following
       `test_backend_docs.py`'s `_arch_findings_section` precedent); the section names
       `resolved_config.yaml`, `source_config.yaml`, and `[train]`; and — the assertion that actually
@@ -201,8 +201,8 @@ gate.
       among the fenced blocks that do **not** mention `run`. The three existing whole-document
       assertions would otherwise be satisfied from inside an "equivalent to…" comment in the `run`
       block, letting the canonical sections be deleted while the suite stays green.
-- [ ] 6.2 Confirm red (the section does not exist yet).
-- [ ] 6.3 Write the `docs/training.md` section as a `###` at the end of `## 3. Train` (a new `##`
+- [x] 6.2 Confirm red (the section does not exist yet).
+- [x] 6.3 Write the `docs/training.md` section as a `###` at the end of `## 3. Train` (a new `##`
       would break the guide's 1–5 narrative, which both later sections depend on from either path).
       It must carry: the `uv run --no-sync` form with its reason (a bare `uv run` re-syncs and
       uninstalls the `[train]` extra installed by `uv pip install ".[train]"` — the same rule
@@ -216,17 +216,17 @@ gate.
       test forbids them) and no `**range**` token (the baseline test parses the first line containing
       it); use an untagged fence for any directory listing, since `_yaml_blocks` parses every
       ```yaml``` fence.
-- [ ] 6.4 Confirm green.
-- [ ] 6.5 `README.md`: extend the pointer paragraph (`README.md:25-28`) with one line for the
+- [x] 6.4 Confirm green.
+- [x] 6.5 `README.md`: extend the pointer paragraph (`README.md:25-28`) with one line for the
       one-command shortcut. There is no command list in the README to add to — `emit` is not
       mentioned there at all.
-- [ ] 6.6 `docs/CHANGELOG.md`: add to the top of the existing `### Added` list under `[Unreleased]`,
+- [x] 6.6 `docs/CHANGELOG.md`: add to the top of the existing `### Added` list under `[Unreleased]`,
       in this repo's voice — the command, the gate, the artifacts, the exit-status contract, then a
       **`For config authors:`** paragraph covering what does *not* change, the reused-`run_name`
       rule, the refused in-config `api_key`, and `emit -o`'s Windows line-ending change. (That
       bolded audience lead-in currently appears only under `### Changed`; using it under `### Added`
       is a deliberate first, since this entry has real caveats for authors.)
-- [ ] 6.7 `openspec/project.md`: update the Architecture Patterns line for the new consumption mode
+- [x] 6.7 `openspec/project.md`: update the Architecture Patterns line for the new consumption mode
       (`sleap-nn` is consumed as a pinned library **and**, for `run` only, as a console script
       invoked as a subprocess), mirroring how `add-config-schema` updated the same line. While in
       that file, fix the Git Workflow line's "archived with the code on merge" — it contradicts

@@ -84,6 +84,74 @@ sleap-nn train --config resolved.yaml
 `labels_pr.*.slp` and `metrics.*.npz` into `<ckpt_dir>/<run_name>`. (Needs the `[train]` extra;
 see the runbook.)
 
+### One command (same machine)
+
+On a host that has **both** this package and the `[train]` extra — the GPU box — steps 1–3
+collapse into one:
+
+```bash
+uv run --no-sync sleap-roots-training run examples/arabidopsis_primary_cylinder.yaml
+```
+
+`run` resolves the `sleap-nn` console script (failing with the install command from
+[training-backend.md](training-backend.md) if it cannot), runs the same checks as `validate`,
+writes the configs described below, then invokes `sleap-nn train --config` on the emitted one.
+The backend's output streams live and its exit code becomes `run`'s exit code.
+
+**Use `--no-sync`** (or an absolute path into the venv, `.venv/bin/sleap-roots-training`). A bare
+`uv run` re-syncs the project environment and *uninstalls* the `[train]` extra you installed with
+`uv pip install ".[train]"`, so the gate would fire on a box where the backend was installed a
+moment earlier. Same rule [`scripts/clean_pkg.py`](../scripts/clean_pkg.py) already documents.
+
+**Steps 1–3 stay canonical.** `validate` and `emit` are base-install safe, so the
+author-on-a-Mac / train-on-the-A5000 workflow — and every `examples/*.yaml` header — still uses
+them. `run` is a shortcut for the co-installed case, not a different pipeline: the config it
+stages is byte-identical to what `emit -o` writes for the same input.
+
+#### What ends up in the run directory
+
+A finished run directory holds four configs, two from each side (as of `sleap-nn` 0.2.0 —
+`sleap_nn/training/model_trainer.py:1269,1313`):
+
+```
+models/cyl_arabidopsis_primary/
+  best.ckpt                 # the trained weights
+  initial_config.yaml       # sleap-nn: the config as submitted, stamped with sleap_nn_version
+  training_config.yaml      # sleap-nn: the config actually used, after its own resolution
+  resolved_config.yaml      # run: what sleap-nn was given, written *before* training started
+  source_config.yaml        # run: your config, verbatim, `experiment` block included
+  labels_pr.*.slp           # predictions from the built-in eval pass
+  metrics.*.npz             # eval metrics
+```
+
+`source_config.yaml` is the one no `sleap-nn` artifact can replace: every config the backend sees
+has the repo-owned `experiment` block stripped by construction, so nothing else in that directory
+records which species / mode / root_type / dataset the run was for. `resolved_config.yaml` earns
+its place by existing *before* the backend starts — sleap-nn writes its two only after the trainer
+is built, so a run that dies on a bad `.slp` path or at model init leaves a directory with no
+config at all. Stage it elsewhere with `--resolved-config <path>` if you prefer.
+
+#### One `run_name` per run
+
+`run` refuses to start when `<ckpt_dir>/<run_name>/` already holds a `best.ckpt` or a
+`training_config.yaml`, and tells you to change `trainer_config.run_name`. This is not
+fussiness: sleap-nn auto-suffixes the run directory to `<run_name>-1` when a checkpoint is
+already there (`model_trainer.py:522`), so it would train *elsewhere* while the configs landed
+next to the older run — describing results they did not produce. There is no `--force`; the fix
+for a name collision is a new name. (The check also covers `save_ckpt: false` runs, where no
+checkpoint is ever written and sleap-nn would silently reuse the directory.)
+
+For the same reason `run` requires an explicit `trainer_config.run_name`: with none, sleap-nn
+generates a timestamped directory (`model_trainer.py:513`) that `run` cannot predict. Vary the
+name per run the way the baseline configs do — `..._seed42`, `..._seed43`, `..._seed44`.
+
+A W&B key written into `trainer_config.wandb.api_key` is refused as well, since the run directory
+is uploaded whole when a model is published. Use `WANDB_API_KEY` or `wandb login`.
+
+The provenance caveat above is unchanged by `run`: it records no config hash, git commit, or
+dataset checksum (still #10/#11). It makes a run directory self-describing as to *which
+experiment* it was, not *which bytes* it consumed.
+
 ## 4. Read the metrics
 
 The eval metrics land in `metrics.val.0.npz` / `metrics.train.0.npz` next to the checkpoint (the
