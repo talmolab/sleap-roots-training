@@ -339,7 +339,7 @@ There is deliberately **no** "delete the per-species duplicate-publish path" tas
 had one and it was a no-op. `publish.py` is entirely card-driven, so 8 cards produce 8 artifacts with
 no diff to `publish_card`; the collapse happens upstream in expansion.
 
-- [ ] 4.1 Extend `--verify` to report production-aliased collections the current expansion no longer
+- [x] 4.1 Extend `--verify` to report production-aliased collections the current expansion no longer
       produces, without deleting or re-pointing them. Determine alias membership **without**
       paginating every version of every collection: `_collection_has_production` (`publish.py:65-76`)
       pages every version at 50/page and is fine for 8 expected collections, but the registry holds far
@@ -354,7 +354,7 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       fallback — otherwise the offline fakes in 4.4 give exactly the false green that the artifact-name
       check gave before 3.14 was corrected. `_existing_collections` (`publish.py:57-62`) currently
       discards the collection objects to a set of names and will need to keep them.
-- [ ] 4.2 Add the metadata **shape** check to `--verify`: for each expected collection whose
+- [x] 4.2 Add the metadata **shape** check to `--verify`: for each expected collection whose
       production-aliased artifact is present, report whether its metadata is the `selectors` shape or
       the legacy flat shape, and exit non-zero on legacy. Without this, `--verify` reports `present`
       for a collection an upgraded consumer cannot read, and §6.2 has no re-runnable way to ask
@@ -362,12 +362,12 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       card-level `species`/`mode`/`age_min`/`age_max`) and must **not** be
       `ModelCard.model_validate(...)`: under 0.3's tolerant read the legacy blob validates fine, so a
       validation-based check reports every stale collection as current.
-- [ ] 4.3 Implement the `--only` interaction and encode it in the help text (`cli.py:64`).
+- [x] 4.3 Implement the `--only` interaction and encode it in the help text (`cli.py:64`).
       `cli.py:105-119` filters `all_cards` before the expected set is computed, so a canary
       `--verify --only <one>` would report every other collection as orphaned. Suppress orphan
       reporting under `--only` and say so in the output; keep orphans and indeterminate collections
       out of the exit code, while a missing alias or a legacy shape on an *expected* collection fails.
-- [ ] 4.4 Tests for orphan reporting **and the shape check**, which have **zero** coverage today: an
+- [x] 4.4 Tests for orphan reporting **and the shape check**, which have **zero** coverage today: an
       orphan is named; a non-production collection is not; an orphan alone does not change the exit
       code; an undeterminable collection is reported indeterminate and does not change the exit code;
       `--only` suppresses the check and says so. Plus, for 4.2: an expected collection present with
@@ -379,7 +379,7 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       object**, not on `_FakeApi.artifacts` — `--verify` legitimately calls the latter for *expected*
       collections (`publish.py:73-76`), so spying there would fail on correct behavior; what must never
       happen is a per-version walk of the unexpected ones.
-- [ ] 4.5 Implement the Re-Publish Metadata Refresh check and its remedy. Read back the server's own
+- [x] 4.5 Implement the Re-Publish Metadata Refresh check and its remedy. Read back the server's own
       view — after `logged.wait()`, `logged.metadata` and `logged.digest` are the server's values
       (`wait()` re-fetches), and `run.link_artifact(...)` already returns a membership-backed artifact
       carrying `metadata`, `digest`, and the membership aliases, which `publish.py:46` currently
@@ -390,7 +390,7 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       non-zero, and continue with the remaining cards. `--force` does not close this
       (`publish.py:146` bypasses only the idempotency read) and cannot create a new version while the
       digest is unchanged.
-- [ ] 4.6 Test with a **legacy-metadata fixture** that the read-back fires: `_FakeArt`
+- [x] 4.6 Test with a **legacy-metadata fixture** that the read-back fires: `_FakeArt`
       (`test_registry_publish.py:67-69`) gains `.metadata`, `_FakeApi` (`:72-85`) gains
       `artifact(name, type=None)` matching `wandb.Api.artifact`'s signature. Record explicitly that
       the offline test covers **our classifier only** — the premise that wandb leaves the previous
@@ -399,38 +399,38 @@ no diff to `publish_card`; the collapse happens upstream in expansion.
       time (assert one logged artifact and an unchanged `add_dir` count), so an implementation that
       "refreshes" by re-logging fails here rather than silently no-opping in production — the digest is
       unchanged, so a re-log cannot create a new version.
-- [ ] 4.7 Verify a re-seed of unchanged weights produces an **unchanged** `weights_checksum` (Bloom
+- [x] 4.7 Verify a re-seed of unchanged weights produces an **unchanged** `weights_checksum` (Bloom
       idempotency), with a test. `logged.digest` after `wait()` gives this for free. Verify, do not
       assume — and do not credit selector ordering for it.
-- [ ] 4.8 Test that the read-back is **structural**, not contract validation: a legacy blob that
+- [x] 4.8 Test that the read-back is **structural**, not contract validation: a legacy blob that
       validates fine under a tolerant-read contract is still classified stale.
-- [ ] 4.9 **Negative control:** an artifact whose metadata carries `selectors` and no card-level
+- [x] 4.9 **Negative control:** an artifact whose metadata carries `selectors` and no card-level
       selection keys is reported **published**, not failed. Without it, a checker that fails
       everything passes 4.6 — the discrimination gap `tests/test_registry_chooser.py:276` already
       guards against elsewhere ("the guard must discriminate, not just fail").
-- [ ] 4.10 Close the `skipped`-path hole and test it. `publish.py:151-159` skips a collection that
+- [x] 4.10 Close the `skipped`-path hole and test it. `publish.py:151-159` skips a collection that
       already carries the production alias, so a check scoped to collections reported `published`
       never sees it — and the skip path is the default on every re-run, so a half-migrated collection
       sits there undetected. Check the metadata shape on the skip path too and report it distinctly.
-- [ ] 4.11 Test that `--force` alone does not satisfy the refresh check: a `--force` re-seed of
+- [x] 4.11 Test that `--force` alone does not satisfy the refresh check: a `--force` re-seed of
       byte-identical weights whose read-back metadata is still flat is reported **failed**. In the same
       test, pin "the remaining cards are still attempted": three cards with the middle one stale must
       give `failed == [middle]` and `published == [first, last]`. Repeat it with the middle card's
       refresh **raising** rather than merely reading back stale — a `CommError` from `updateArtifact`
       must land in `failed` too, not propagate and abort the seed. Without both assertions a classifier
       that stops at the first problem passes 4.6/4.9/4.11 and aborts mid-migration.
-- [ ] 4.12 Update `tests/test_registry_publish.py` and `tests/test_registry_cli.py` for the new
+- [x] 4.12 Update `tests/test_registry_publish.py` and `tests/test_registry_cli.py` for the new
       `failed` bucket, the widened `verify_registry` signature, and the new report keys —
       `seed_registry` returns only `{"published", "skipped"}` today (`publish.py:163`) and
       `cli.py:184-185` echoes only those. See this group's header for the five tests that go red and
       why. Also make `test_publish_card` monkeypatch `wandb.Api` so a unit test cannot reach the
       network.
-- [ ] 4.13 Make a partial failure recoverable: `seed_registry` logs each publish with `logger.info`,
+- [x] 4.13 Make a partial failure recoverable: `seed_registry` logs each publish with `logger.info`,
       nothing in the package configures logging, and `cli.py:179-183` never reaches its `click.echo`
       of the report if an exception propagates. After a failure at card 5 of 8 the operator has **no
       local record** of which collections now carry `production`. Echo per-collection outcomes to
       stdout as they happen, and surface the partial report on failure.
-- [ ] 4.G Same gate as 3.G before committing.
+- [x] 4.G Same gate as 3.G before committing.
 
 ## 5. This repo — docs (safe standalone)
 

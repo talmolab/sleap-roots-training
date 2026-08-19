@@ -12,6 +12,24 @@ def _invoke(args, **kw):
     return CliRunner().invoke(cli.main, ["seed-registry", *args], **kw)
 
 
+def _verify_report(
+    present=(),
+    missing=(),
+    legacy=(),
+    orphans=(),
+    indeterminate=(),
+    orphans_suppressed=False,
+):
+    return {
+        "present": list(present),
+        "missing": list(missing),
+        "legacy": list(legacy),
+        "orphans": list(orphans),
+        "indeterminate": list(indeterminate),
+        "orphans_suppressed": orphans_suppressed,
+    }
+
+
 def _no_wandb(monkeypatch):
     """Make any wandb.init / publish_card call fail the test loudly."""
     import wandb
@@ -120,7 +138,7 @@ def test_execute_yes_seeds_and_reports(monkeypatch, tiny_matrix, stub_models_roo
     def fake_seed(resolved, cfg, run, *, api=None, force=False):
         seed_calls["n"] = len(resolved)
         seed_calls["force"] = force
-        return {"published": ["soy-p"], "skipped": []}
+        return {"published": ["soy-p"], "skipped": [], "failed": [], "stale": []}
 
     monkeypatch.setattr(wandb, "init", fake_init)
     monkeypatch.setattr(publish, "resolve_all", fake_resolve_all)
@@ -182,9 +200,12 @@ def test_verify_only_scopes(monkeypatch, tiny_matrix):
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     seen = {}
 
-    def fake_verify(cfg, expected, api=None):
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
         seen["expected"] = list(expected)
-        return {"present": list(expected), "missing": []}
+        seen["report_orphans"] = report_orphans
+        return _verify_report(
+            present=list(expected), orphans_suppressed=not report_orphans
+        )
 
     monkeypatch.setattr(publish, "verify_registry", fake_verify)
     result = _invoke(
@@ -205,10 +226,9 @@ def test_verify_needs_no_models_root(monkeypatch, tiny_matrix):
     monkeypatch.setattr(
         publish,
         "verify_registry",
-        lambda cfg, expected, api=None: {
-            "present": ["soy-p"],
-            "missing": ["soy-l"],
-        },
+        lambda cfg, expected, api=None, **kw: _verify_report(
+            present=["soy-p"], missing=["soy-l"]
+        ),
     )
     result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
     assert result.exit_code != 0  # a missing collection -> non-zero
@@ -377,7 +397,12 @@ def test_publish_only_and_verify_all_use_one_collection_id_scheme(
 
     def fake_seed(resolved, cfg, run, *, api=None, force=False):
         seen["published"] = [publish.collection_id(c) for c, _ in resolved]
-        return {"published": seen["published"], "skipped": []}
+        return {
+            "published": seen["published"],
+            "skipped": [],
+            "failed": [],
+            "stale": [],
+        }
 
     monkeypatch.setattr(
         wandb, "init", lambda **kw: SimpleNamespace(finish=lambda: None)
@@ -411,7 +436,7 @@ def test_publish_only_and_verify_all_use_one_collection_id_scheme(
 
     def fake_verify(cfg, expected, api=None, **kw):
         verified["expected"] = list(expected)
-        return {"present": list(expected), "missing": []}
+        return _verify_report(present=list(expected))
 
     monkeypatch.setattr(publish, "verify_registry", fake_verify)
     result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
@@ -419,3 +444,132 @@ def test_publish_only_and_verify_all_use_one_collection_id_scheme(
     assert verified["expected"] == sorted(
         ["SENTINEL-primary-soy_p", "SENTINEL-lateral-soy_l"]
     )
+
+
+def test_verify_only_suppresses_orphans_and_says_so(monkeypatch, tiny_matrix):
+    # 4.3. cli.py filters all_cards BEFORE the expected set is computed, so a canary
+    # `--verify --only <one>` would report every other collection as orphaned.
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seen = {}
+
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+        seen["report_orphans"] = report_orphans
+        return _verify_report(
+            present=list(expected), orphans_suppressed=not report_orphans
+        )
+
+    monkeypatch.setattr(publish, "verify_registry", fake_verify)
+    result = _invoke(
+        ["--selection-matrix", str(tiny_matrix), "--verify", "--only", "soy-p"]
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["report_orphans"] is False
+    assert "suppressed under --only" in result.output
+
+
+def test_verify_without_only_asks_for_orphans(monkeypatch, tiny_matrix):
+    # The negative control: suppression must be scoped to --only, not always on.
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seen = {}
+
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+        seen["report_orphans"] = report_orphans
+        return _verify_report(present=list(expected), orphans=["old-collection"])
+
+    monkeypatch.setattr(publish, "verify_registry", fake_verify)
+    result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
+    assert result.exit_code == 0, result.output  # an orphan alone does not fail
+    assert seen["report_orphans"] is True
+    assert "orphan: old-collection" in result.output
+
+
+def test_verify_fails_on_legacy_metadata(monkeypatch, tiny_matrix):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setattr(
+        publish,
+        "verify_registry",
+        lambda cfg, expected, api=None, **kw: _verify_report(
+            present=["soy-p", "soy-l"], legacy=["soy-l"]
+        ),
+    )
+    result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
+    assert result.exit_code != 0  # a card the consumer cannot read IS a failure
+    assert "LEGACY METADATA: soy-l" in result.output
+
+
+def test_seed_reports_failed_and_exits_non_zero(
+    monkeypatch, tiny_matrix, stub_models_root
+):
+    # 4.13's operator-facing half: a partial failure must be visible AND non-zero.
+    import wandb
+
+    monkeypatch.setattr(
+        wandb, "init", lambda **kw: SimpleNamespace(finish=lambda: None)
+    )
+    monkeypatch.setattr(
+        publish,
+        "resolve_all",
+        lambda card_list, root, ck: [(c, root) for c in card_list],
+    )
+    monkeypatch.setattr(
+        publish,
+        "seed_registry",
+        lambda resolved, cfg, run, **kw: {
+            "published": ["soy-p"],
+            "skipped": [],
+            "failed": ["soy-l"],
+            "stale": [],
+        },
+    )
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(tiny_matrix),
+            "--models-root",
+            str(stub_models_root),
+            "--execute",
+            "--yes",
+        ]
+    )
+    assert result.exit_code != 0
+    assert "FAILED (1): ['soy-l']" in result.output
+    assert "published (1): ['soy-p']" in result.output  # the partial report survives
+
+
+def test_seed_reports_stale_skips_and_exits_non_zero(
+    monkeypatch, tiny_matrix, stub_models_root
+):
+    # 4.10's operator-facing half: the skip path is the default on every re-run, so a
+    # half-migrated collection must not be reported as a clean no-op.
+    import wandb
+
+    monkeypatch.setattr(
+        wandb, "init", lambda **kw: SimpleNamespace(finish=lambda: None)
+    )
+    monkeypatch.setattr(
+        publish,
+        "resolve_all",
+        lambda card_list, root, ck: [(c, root) for c in card_list],
+    )
+    monkeypatch.setattr(
+        publish,
+        "seed_registry",
+        lambda resolved, cfg, run, **kw: {
+            "published": [],
+            "skipped": ["soy-p"],
+            "failed": [],
+            "stale": ["soy-p"],
+        },
+    )
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(tiny_matrix),
+            "--models-root",
+            str(stub_models_root),
+            "--execute",
+            "--yes",
+        ]
+    )
+    assert result.exit_code != 0
+    assert "STALE metadata on already-seeded (1): ['soy-p']" in result.output
