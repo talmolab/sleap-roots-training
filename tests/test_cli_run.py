@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import importlib.machinery
+import os
 import sys
 import types
 from pathlib import Path
@@ -336,3 +337,62 @@ def test_the_gate_did_not_leak_into_validate_or_emit(monkeypatch, run_config, tm
     out = tmp_path / "emitted.yaml"
     assert _invoke(["emit", str(path), "-o", str(out)]).exit_code == 0
     assert out.is_file()
+
+
+# --- the full CLI against a real console script (no seams) ---------------------------------
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="POSIX: a #! stub is not executable on Windows, and CreateProcess cannot launch "
+    "a .bat without a shell. The real-Popen path is covered there by test_backend_invoke.",
+)
+def test_end_to_end_through_a_real_console_script(run_config, tmp_path, monkeypatch):
+    """Resolution through PATH, the argv the backend actually receives, and exit 0.
+
+    Nothing is patched except the interpreter's script directory, which is pointed at an
+    empty directory so the lookup falls through to the PATH entry this test controls.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sentinel = tmp_path / "argv.txt"
+    stub = bin_dir / "sleap-nn"
+    stub.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$@" > "{sentinel}"\nexit 0\n', encoding="utf-8"
+    )
+    stub.chmod(0o755)
+    monkeypatch.setattr(
+        backend, "_interpreter_scripts_dir", lambda: str(tmp_path / "empty")
+    )
+    monkeypatch.setattr(backend.sys, "executable", str(tmp_path / "empty" / "python"))
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+    result = _invoke(["run", str(run_config())])
+    assert result.exit_code == 0, result.output
+    resolved = tmp_path / "ckpt" / "r1" / "resolved_config.yaml"
+    assert sentinel.read_text(encoding="utf-8").split() == [
+        "train",
+        "--config",
+        str(resolved.resolve()),
+    ]
+
+
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX signal semantics; see the test above"
+)
+def test_a_signal_killed_backend_exits_128_plus_n(run_config, tmp_path, monkeypatch):
+    """A real SIGKILL, not a fabricated return code -- the 128+N path end to end."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "sleap-nn"
+    stub.write_text("#!/bin/sh\nkill -9 $$\n", encoding="utf-8")
+    stub.chmod(0o755)
+    monkeypatch.setattr(
+        backend, "_interpreter_scripts_dir", lambda: str(tmp_path / "empty")
+    )
+    monkeypatch.setattr(backend.sys, "executable", str(tmp_path / "empty" / "python"))
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+    result = _invoke(["run", str(run_config())])
+    assert result.exit_code == 137
+    assert "signal 9" in result.output + str(result.stderr_bytes or b"")

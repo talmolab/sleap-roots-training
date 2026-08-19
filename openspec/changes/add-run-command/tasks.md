@@ -235,7 +235,7 @@ gate.
 
 ## 7. Backend verification
 
-- [ ] 7.1 Add the **real-`Popen` plumbing test** (`tests/test_backend_invoke.py`), no seams patched,
+- [x] 7.1 Add the **real-`Popen` plumbing test** (`tests/test_backend_invoke.py`), no seams patched,
       running on **every** platform including Windows: call `backend.run_backend([sys.executable,
       "-c", <script>])` — `sys.executable` is a real executable everywhere — with a script that
       writes to stdout and stderr and exits with a chosen code. Assert with `capfd`
@@ -243,13 +243,13 @@ gate.
       fds (the behavioral proof of inheritance that 4.2 cannot give), and that `0` → 0 and `2` → 2
       survive a real process. This is the only automated coverage of the `Popen` path on the OS the
       GPU box actually runs.
-- [ ] 7.2 Add the **stub console script** end-to-end test (`tests/test_cli_run.py`),
+- [x] 7.2 Add the **stub console script** end-to-end test (`tests/test_cli_run.py`),
       `skipif(os.name == "nt")` (a shell stub is not executable there, and `CreateProcess` cannot
       launch a `.bat` without a shell — 7.1 is the Windows-side mitigation): write
       `tmp_path/bin/sleap-nn` as a `#!/bin/sh` script recording `"$@"` to a sentinel file, point
       `PATH` at it, and assert the stub received exactly `["train", "--config", <abs dest>]` through
       the full CLI path, plus a stub that `kill -9 $$`es itself → 137.
-- [ ] 7.3 **[integration]** Add a `sleap-nn train --help` probe asserting `--config` is accepted —
+- [x] 7.3 **[integration]** Add a `sleap-nn train --help` probe asserting `--config` is accepted —
       the upstream-compatibility check the argv contract test cannot perform, and the test that
       fails first at the Tier 6 bump to the 0.3.0 mask line. Body-level
       `pytest.importorskip("sleap_nn")`; inert in CI.

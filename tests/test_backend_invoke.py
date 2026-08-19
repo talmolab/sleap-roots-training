@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -529,3 +531,52 @@ def test_interrupt_lets_the_backend_own_the_signal(fake_popen):
     assert not call.killed and not call.terminated
     assert call.waits == 2  # waited again rather than giving up
     assert outcome.exit_code == 130  # 128 + SIGINT
+
+
+# --- the real Popen path (no seams) --------------------------------------------------------
+
+#: A child that writes to both streams and exits with a chosen status. Driven through
+#: `sys.executable` rather than a shell stub so this runs on **Windows** too -- the OS the
+#: target GPU box runs, and the one where a `#!` script is not executable and a `.bat`
+#: cannot be launched by CreateProcess without a shell.
+_CHILD = (
+    "import sys; sys.stdout.write('child-stdout\\n'); "
+    "sys.stderr.write('child-stderr\\n'); sys.exit(int(sys.argv[1]))"
+)
+
+
+def test_real_subprocess_inherits_both_streams(capfd):
+    """The behavioral proof of stream inheritance the call-shape test cannot give.
+
+    ``capfd`` captures at the file-descriptor level; ``capsys`` cannot see a child process.
+    """
+    outcome = backend.run_backend([sys.executable, "-c", _CHILD, "0"])
+    captured = capfd.readouterr()
+    assert "child-stdout" in captured.out
+    assert "child-stderr" in captured.err
+    assert outcome.exit_code == 0
+
+
+@pytest.mark.parametrize("status", [0, 2, 7])
+def test_real_subprocess_propagates_its_exit_status(status, capfd):
+    assert (
+        backend.run_backend([sys.executable, "-c", _CHILD, str(status)]).exit_code
+        == status
+    )
+    capfd.readouterr()  # drain the child's output so it does not leak into the report
+
+
+@pytest.mark.integration
+def test_installed_backend_still_accepts_config_flag():
+    """The upstream-compatibility check the argv contract test cannot perform.
+
+    ``build_argv`` asserts what *we* emit; it cannot notice sleap-nn renaming the flag.
+    This is the test that fails first at the Tier 6 bump to the 0.3.0 mask line, before a
+    long run is wasted on it. Inert in CI, which never installs the extra.
+    """
+    pytest.importorskip("sleap_nn")
+    binary = backend.resolve_sleap_nn()
+    completed = subprocess.run(
+        [str(binary), "train", "--help"], capture_output=True, text=True, timeout=120
+    )
+    assert "--config" in (completed.stdout + completed.stderr)
