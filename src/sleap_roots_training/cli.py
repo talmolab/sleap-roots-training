@@ -275,7 +275,13 @@ def emit_command(config_path: Path, output: Optional[Path]) -> None:
         click.echo(sleap_nn_yaml, nl=False)
         return
     try:
-        output.write_text(sleap_nn_yaml, encoding="utf-8")
+        # newline="\n" is explicit, not incidental: the default (newline=None) translates
+        # every "\n" to os.linesep, so the same config emits CRLF on Windows -- the platform
+        # the target GPU box runs (docs/training-backend.md) -- and LF everywhere else. That
+        # makes the emitted bytes host-dependent, which breaks byte-comparison of one config
+        # against another (the `run` command relies on it, and the deferred content hashing
+        # in #10/#11 would too).
+        output.write_text(sleap_nn_yaml, encoding="utf-8", newline="\n")
     except OSError as error:
         raise click.ClickException(f"could not write {output}: {error}")
     click.echo(f"wrote sleap-nn config to {output}")

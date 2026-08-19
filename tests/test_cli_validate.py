@@ -94,3 +94,26 @@ def test_emit_to_missing_dir_errors_cleanly(write_config, tmp_path):
     result = _invoke(["emit", str(write_config()), "-o", str(out)])
     assert result.exit_code != 0
     assert "Traceback" not in result.output
+
+
+def test_emit_output_uses_lf_line_endings(write_config, tmp_path):
+    r"""``emit -o`` writes LF on every platform, so its bytes are host-independent.
+
+    Before the explicit ``newline="\n"``, ``Path.write_text`` opened with
+    ``newline=None`` and translated every ``\n`` to ``os.linesep`` -- CRLF on Windows,
+    which is what the target GPU box runs (``docs/training-backend.md`` section 1). That
+    made the same config emit different bytes depending on the host, and it would break
+    the byte-identity comparison the ``run`` command relies on to recognize an unchanged
+    artifact.
+
+    NOTE: before the fix this test goes red **only on Windows**, so a green run on
+    Linux/macOS is not evidence that the fix is present. The teeth are in the byte
+    comparison below: writing the same text with ``newline="\r\n"`` fails both asserts.
+    """
+    path = write_config()
+    out = tmp_path / "resolved.yaml"
+    result = _invoke(["emit", str(path), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    raw = out.read_bytes()
+    assert b"\r" not in raw
+    assert raw == config.to_sleap_nn_yaml(config.load_config(path)).encode("utf-8")

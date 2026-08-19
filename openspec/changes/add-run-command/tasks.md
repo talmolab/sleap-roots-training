@@ -39,13 +39,13 @@ against `emit -o`'s file, and today `emit` inherits `newline=None` and writes CR
 commit that adds those tests *before* this fix is red on `windows-latest`, which runs on every
 commit.
 
-- [ ] 1.1 Write the failing test: `emit -o out.yaml` produces a file containing no CR byte, and its
+- [x] 1.1 Write the failing test: `emit -o out.yaml` produces a file containing no CR byte, and its
       bytes are the UTF-8 encoding of `config.to_sleap_nn_yaml(cfg)` exactly.
-- [ ] 1.2 Confirm red on Windows (and green elsewhere — note in the test's docstring that this is a
+- [x] 1.2 Confirm red on Windows (and green elsewhere — note in the test's docstring that this is a
       Windows-only failure before the fix, so a green local run is not evidence).
-- [ ] 1.3 Implement: `output.write_text(sleap_nn_yaml, encoding="utf-8", newline="\n")` in `cli.py`'s
+- [x] 1.3 Implement: `output.write_text(sleap_nn_yaml, encoding="utf-8", newline="\n")` in `cli.py`'s
       `emit` (design D10).
-- [ ] 1.4 Confirm green; `black --check` + `ruff check` clean.
+- [x] 1.4 Confirm green; `black --check` + `ruff check` clean.
 
 ## 2. Backend executable resolution (TDD)
 
