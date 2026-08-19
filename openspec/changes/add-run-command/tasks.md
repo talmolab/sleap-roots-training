@@ -256,21 +256,21 @@ gate.
       *(No `.slp`-backed end-to-end test is proposed: `.gitignore` blocks `*.slp` and `/data/`, and
       `openspec/project.md` makes W&B the system of record, so a committed fixture is prohibited and
       a test gated on one would be a permanent skip masquerading as coverage — design D8.)*
-- [ ] 7.4 On the RTX A5000 box (`[train]` installed), copy `examples/baseline_bottomup_v000_os4.yaml`
+- [x] 7.4 On the RTX A5000 box (`[train]` installed), copy `examples/baseline_bottomup_v000_os4.yaml`
       to a **scratch** config with `run_name: runcmd_verify_<date>` and `ckpt_dir: models_scratch` —
       never the published baseline's name or directory, whose run directory exists on that box and
       whose numbers are in `docs/training.md` — and run `sleap-roots-training run` on it against the
       real v000 split. Confirm exit 0, the four configs in the run directory, and
       `resolved_config.yaml` byte-identical to `emit`'s output. Paste the console output, including
       the echoed resolved backend path, into the PR.
-- [ ] 7.5 On the same box, re-run against a `run_name` whose directory already holds a `best.ckpt`
+- [x] 7.5 On the same box, re-run against a `run_name` whose directory already holds a `best.ckpt`
       and confirm `run` **refuses**, leaving that directory unchanged (checksum before/after). This
       is the regression that matters most — assert it against the real backend, not only the seam.
-- [ ] 7.6 On the same box, interrupt a run with Ctrl-C and **record what was observed** — the exit
+- [x] 7.6 On the same box, interrupt a run with Ctrl-C and **record what was observed** — the exit
       code, and whether any traceback appeared. The box is native Windows, where exit codes are
       unsigned and `128 + N` does not apply, so the check there is "non-zero, no traceback, no
       success line"; the POSIX `128 + N` mapping is covered by 4.3 and 7.2.
-- [ ] 7.7 Backfill the verification into `docs/training.md`'s status banner (dated, like the
+- [x] 7.7 Backfill the verification into `docs/training.md`'s status banner (dated, like the
       2026-07-23 entry), as its own commit after 7.4–7.6 — mirroring how `add-config-schema`
       backfilled its GPU evidence.
 
@@ -291,7 +291,7 @@ gate.
 - [x] 8.6 `npx --yes @fission-ai/openspec@latest validate add-run-command --strict` passes. (The
       `openspec` binary is not installed globally; `openspec/**` is outside CI's paths filter, so
       this gate is manual by construction.)
-- [ ] 8.7 Update this checklist to `- [x]` only once every item above is actually done.
+- [x] 8.7 Update this checklist to `- [x]` only once every item above is actually done.
 
 ## Commit Plan
 

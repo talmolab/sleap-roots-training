@@ -12,6 +12,13 @@ mechanics (GPU setup, sample data, `sleap-nn track`), see
 > emitted config trains + runs eval (writing `metrics.*.npz`) with no post-fit `preprocessing`
 > crash; and a short `use_wandb=true` run's `run.scan_history()` returned per-epoch rows carrying
 > `epoch` + `loss` (the legacy TF runs returned zero) — closing the observability gap.
+>
+> **The one-command `run` path was verified on the same box on 2026-08-19** (`sleap-nn` 0.2.0,
+> torch 2.8.0+cu129, native Windows): a short run on the real v000 split staged both configs and
+> exited 0, with `resolved_config.yaml` **byte-identical** to `emit -o`'s output (SHA-256 match on
+> Windows, where the line-ending fix matters); re-running into the same `run_name` was refused with
+> the existing run directory unchanged; and Ctrl-C reached the backend, which ran Lightning's
+> graceful shutdown and exited non-zero with no traceback.
 
 ## The config file
 
@@ -97,6 +104,14 @@ uv run --no-sync sleap-roots-training run examples/arabidopsis_primary_cylinder.
 [training-backend.md](training-backend.md) if it cannot), runs the same checks as `validate`,
 writes the configs described below, then invokes `sleap-nn train --config` on the emitted one.
 The backend's output streams live and its exit code becomes `run`'s exit code.
+
+Two things you will see that are expected. Lightning logs `Checkpoint directory ... exists and is
+not empty` — `run` writes its configs *before* training starts, so the directory is never empty by
+the time the trainer looks; this is why the reuse check below keys on `best.ckpt` /
+`training_config.yaml` rather than on the directory being non-empty. And Ctrl-C is handed to the
+backend rather than intercepted: sleap-nn/Lightning runs its own graceful shutdown, and `run` then
+reports the backend's exit status (`128 + N` on POSIX, a plain non-zero on Windows, which has no
+signal exit codes) with no traceback.
 
 **Use `--no-sync`** (or an absolute path into the venv, `.venv/bin/sleap-roots-training`). A bare
 `uv run` re-syncs the project environment and *uninstalls* the `[train]` extra you installed with
