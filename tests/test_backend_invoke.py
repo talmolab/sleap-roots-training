@@ -400,3 +400,132 @@ def test_absent_or_empty_api_key_is_fine(write_config, value):
     )
     cfg, _ = _cfg(write_config, overrides=overrides)
     backend.reject_inline_api_key(cfg)  # must not raise
+
+
+# --- invocation + exit-status translation ------------------------------------------------
+
+
+class _FakePopen:
+    """A stand-in for ``subprocess.Popen`` recording how it was called.
+
+    ``wait`` yields ``statuses`` in order; a ``KeyboardInterrupt`` entry is *raised*
+    instead of returned, which is what really happens on Ctrl-C (SIGINT reaches this
+    process too, not only the child).
+    """
+
+    instances: list = []
+
+    def __init__(self, argv, **kwargs):
+        self.argv = argv
+        self.kwargs = kwargs
+        self.killed = False
+        self.terminated = False
+        self.waits = 0
+        self._statuses = list(type(self).statuses)
+        type(self).instances.append(self)
+
+    def wait(self):
+        self.waits += 1
+        status = self._statuses.pop(0)
+        if isinstance(status, BaseException):
+            raise status
+        return status
+
+    def kill(self):
+        self.killed = True
+
+    def terminate(self):
+        self.terminated = True
+
+
+@pytest.fixture
+def fake_popen(monkeypatch):
+    """Install ``_FakePopen`` and return it, with per-test ``statuses`` to yield."""
+    _FakePopen.instances = []
+    _FakePopen.statuses = [0]
+    monkeypatch.setattr(backend.subprocess, "Popen", _FakePopen)
+    return _FakePopen
+
+
+def test_build_argv_is_exactly_the_documented_vector(tmp_path):
+    binary = tmp_path / "bin" / "sleap-nn"
+    dest = tmp_path / "ckpt" / "r1" / "resolved_config.yaml"
+    assert backend.build_argv(binary, dest) == [
+        str(binary),
+        "train",
+        "--config",
+        str(dest.resolve()),
+    ]
+
+
+def test_build_argv_absolutizes_the_config_path(tmp_path, monkeypatch):
+    """The child inherits our cwd, but the backend hands the path to Hydra, which
+    resolves it itself -- passing it absolute keeps the two from disagreeing."""
+    monkeypatch.chdir(tmp_path)
+    argv = backend.build_argv(Path("sleap-nn"), Path("relative.yaml"))
+    assert Path(argv[3]).is_absolute()
+
+
+def test_invocation_is_a_bare_vector_with_no_redirection(fake_popen, tmp_path):
+    backend.run_backend([str(tmp_path / "sleap-nn"), "train", "--config", "x.yaml"])
+    (call,) = fake_popen.instances  # exactly one subprocess
+    assert "shell" not in call.kwargs  # a vector, never a command string
+    assert "env" not in call.kwargs  # the operator's environment reaches the backend
+    assert "cwd" not in call.kwargs  # relative dataset/ckpt paths must agree with ours
+    for redirect in ("stdout", "stderr", "capture_output"):
+        assert (
+            redirect not in call.kwargs
+        )  # streams are inherited, so a run streams live
+    assert set(call.kwargs) == set()  # nothing smuggled in later, either
+
+
+def test_success_status_is_zero(fake_popen, tmp_path):
+    fake_popen.statuses = [0]
+    outcome = backend.run_backend(["sleap-nn"])
+    assert outcome.exit_code == 0
+    assert outcome.note is None
+
+
+def test_positive_status_propagates_verbatim(fake_popen):
+    fake_popen.statuses = [2]
+    assert backend.run_backend(["sleap-nn"]).exit_code == 2
+
+
+def test_signal_termination_maps_to_128_plus_n(fake_popen):
+    """POSIX reports a signal-killed child as a negative return code."""
+    fake_popen.statuses = [-9]
+    outcome = backend.run_backend(["sleap-nn"])
+    assert outcome.exit_code == 137
+    assert "signal 9" in outcome.note
+
+
+def test_windows_style_status_is_not_translated(fake_popen):
+    """0xC000013A (Ctrl-C on Windows) is a status, not a signal, and does not fit an exit code."""
+    fake_popen.statuses = [3221225786]
+    outcome = backend.run_backend(["sleap-nn"])
+    assert outcome.exit_code != 0
+    assert outcome.exit_code <= 255
+    assert "3221225786" in outcome.note
+
+
+def test_status_above_the_exit_code_range_stays_a_failure(fake_popen):
+    """POSIX truncates a real exit status to 8 bits, so 256 must not become 0."""
+    fake_popen.statuses = [256]
+    outcome = backend.run_backend(["sleap-nn"])
+    assert outcome.exit_code != 0
+    assert outcome.exit_code <= 255
+
+
+def test_interrupt_lets_the_backend_own_the_signal(fake_popen):
+    """Ctrl-C reaches both processes; the backend must be allowed to shut down.
+
+    ``subprocess.run`` is unusable here precisely because it responds to the parent's
+    KeyboardInterrupt by SIGKILLing the child and re-raising -- which both destroys
+    Lightning's checkpoint-on-interrupt and makes the signal branch unreachable.
+    """
+    fake_popen.statuses = [KeyboardInterrupt(), -2]
+    outcome = backend.run_backend(["sleap-nn"])
+    (call,) = fake_popen.instances
+    assert not call.killed and not call.terminated
+    assert call.waits == 2  # waited again rather than giving up
+    assert outcome.exit_code == 130  # 128 + SIGINT

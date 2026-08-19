@@ -122,27 +122,27 @@ commit.
 
 ## 4. Invocation and exit-status translation (TDD)
 
-- [ ] 4.1 Write the failing argv test: `build_argv(binary, dest)` (pure, public — kept separate from
+- [x] 4.1 Write the failing argv test: `build_argv(binary, dest)` (pure, public — kept separate from
       `run_backend` so the plumbing can be exercised with a different argv, see 7.1) returns exactly
       `[str(binary), "train", "--config", str(dest)]` with `dest` absolute — nothing appended, no
       Hydra-style `key=value` overrides forwarded.
-- [ ] 4.2 Write the failing invocation-shape test: the subprocess is created exactly once, with no
+- [x] 4.2 Write the failing invocation-shape test: the subprocess is created exactly once, with no
       `shell=`, no `env=`, no `cwd=`, and no `stdout` / `stderr` redirection. Assert the kwargs *set*
       is bounded (`set(kwargs) <= {…}`) so a later `text=True` or `PIPE` fails the test. This asserts
       **call shape**; behavioral proof of stream inheritance is 7.1.
-- [ ] 4.3 Write the failing exit-status tests with fabricated return codes: `0` → 0; `2` → 2; `-9` →
+- [x] 4.3 Write the failing exit-status tests with fabricated return codes: `0` → 0; `2` → 2; `-9` →
       `137` with a message naming signal 9; a large Windows-style status (`3221225786`) → non-zero
       without `128 + N` synthesis, naming the raw status; and a boundary case above 255 → non-zero,
       with the contract stated (POSIX truncates a real exit status to 8 bits, so `run` must not hand
       `sys.exit` a value it cannot represent).
-- [ ] 4.4 Write the failing interrupt test (design D5): when the wait raises `KeyboardInterrupt`,
+- [x] 4.4 Write the failing interrupt test (design D5): when the wait raises `KeyboardInterrupt`,
       `run_backend` does **not** kill the child, waits again, and returns the child's own status.
       This is what really happens on Ctrl-C — SIGINT reaches the parent too — and it is why
       `subprocess.run` is unusable here (it SIGKILLs the child and re-raises).
-- [ ] 4.5 Confirm red.
-- [ ] 4.6 Implement `backend.run_backend(argv)` on `subprocess.Popen` with the wait loop, returning a
+- [x] 4.5 Confirm red.
+- [x] 4.6 Implement `backend.run_backend(argv)` on `subprocess.Popen` with the wait loop, returning a
       translated status (no `sys.exit` inside `backend.py` — the CLI owns process exit).
-- [ ] 4.7 Confirm green; lint clean.
+- [x] 4.7 Confirm green; lint clean.
 
 ## 5. CLI `run` subcommand (TDD)
 

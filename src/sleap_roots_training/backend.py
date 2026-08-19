@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import sysconfig
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from omegaconf import OmegaConf
 
@@ -281,3 +282,98 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
         raise BackendError(
             f"could not write the run's config artifacts: {error}"
         ) from error
+
+
+class BackendOutcome(NamedTuple):
+    """What the backend did, translated into terms a CLI can exit with.
+
+    Attributes:
+        exit_code: The status this process should exit with.
+        note: A line to print for the operator when the raw status needs explaining
+            (a signal, or a status too large to be an exit code), else ``None``.
+    """
+
+    exit_code: int
+    note: Optional[str] = None
+
+
+def build_argv(binary: Path, resolved_config: Path) -> list[str]:
+    """Return the exact argument vector the backend is invoked with.
+
+    Pure and public so the argv contract can be asserted without a subprocess, and so the
+    plumbing in :func:`run_backend` can be exercised against a different executable.
+
+    The config path is absolutized because the backend hands it to Hydra, which resolves
+    it itself (``sleap_nn/cli.py``'s ``split_config_path``); passing it absolute keeps the
+    two from ever disagreeing about what a relative path meant.
+
+    Args:
+        binary: The resolved ``sleap-nn`` console script.
+        resolved_config: The staged, sleap-nn-native config.
+
+    Returns:
+        ``[<binary>, "train", "--config", <absolute config path>]`` -- nothing appended.
+        In particular no Hydra-style ``key=value`` overrides: ``run`` passes one config and
+        nothing else, so the staged file is always a complete description of the run.
+    """
+    return [str(binary), "train", "--config", str(Path(resolved_config).resolve())]
+
+
+def _translate_status(returncode: int) -> BackendOutcome:
+    """Turn a child's return code into an exit code this process can actually exit with.
+
+    Args:
+        returncode: The value reported by ``Popen.wait``.
+
+    Returns:
+        The translated outcome. A negative code is POSIX signal termination and becomes
+        ``128 + N``; a code too large for an exit status (Windows reports e.g.
+        ``0xC000013A`` for Ctrl-C, and POSIX truncates a real status to 8 bits) becomes a
+        plain failure naming the raw value, rather than a number that would wrap to 0.
+    """
+    if returncode == 0:
+        return BackendOutcome(0)
+    if returncode < 0:
+        signal_number = -returncode
+        return BackendOutcome(
+            128 + signal_number,
+            f"sleap-nn train was terminated by signal {signal_number}",
+        )
+    if returncode > 255:
+        return BackendOutcome(
+            1, f"sleap-nn train exited with status {returncode} (reported as-is)"
+        )
+    return BackendOutcome(returncode)
+
+
+def run_backend(argv: list[str]) -> BackendOutcome:
+    """Run the backend to completion and translate its exit status.
+
+    Streams are inherited (no redirection), so a multi-hour run shows live progress and
+    nothing is buffered here. The environment and working directory are inherited too:
+    ``WANDB_API_KEY`` / ``CUDA_VISIBLE_DEVICES`` are how an operator steers a run, and every
+    committed example uses relative dataset and checkpoint paths that the backend resolves
+    against the cwd it inherits.
+
+    ``Popen`` plus an explicit wait loop rather than ``subprocess.run``: Ctrl-C signals the
+    whole foreground process group, so this process takes SIGINT too, and ``run()`` responds
+    by killing the child and re-raising. That would SIGKILL a trainer that had just been
+    asked to stop -- destroying Lightning's checkpoint-on-interrupt -- and would make the
+    signal branch below unreachable. Instead the interrupt is swallowed here and the child,
+    which already received it, is left to shut down and report its own status.
+
+    Args:
+        argv: The argument vector, as built by :func:`build_argv`.
+
+    Returns:
+        The translated :class:`BackendOutcome`. This function never exits the process; the
+        CLI owns that.
+    """
+    process = subprocess.Popen(argv)
+    while True:
+        try:
+            returncode = process.wait()
+            break
+        except KeyboardInterrupt:
+            continue
+    return _translate_status(returncode)
