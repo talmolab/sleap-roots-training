@@ -158,68 +158,68 @@ incidental catch that covers it today. 3.4 no longer waits on a decision: the fo
 spec (0.2, 0.6). Expect the full suite to be red from 3.1 until the last test
 lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather than by whole-suite runs.
 
-- [ ] 3.1 Bump the `sleap-roots-contracts` pin to **`==0.1.0a8`** (`pyproject.toml`, `uv.lock`
+- [x] 3.1 Bump the `sleap-roots-contracts` pin to **`==0.1.0a8`** (`pyproject.toml`, `uv.lock`
       together). Blocked until that version is actually published to PyPI, not merely merged.
-- [ ] 3.2 Rewrite `expand_rows_to_cards` to group by `(source_model_id, root_type)` and attach one
+- [x] 3.2 Rewrite `expand_rows_to_cards` to group by `(source_model_id, root_type)` and attach one
       selector per contributing row, **de-duplicated** and sorted on an explicit key
       (`key=lambda s: (s.species, s.mode, s.age_min, s.age_max)`) — a frozen pydantic `Selector` is
       hashable but **not** orderable, so a bare `sorted(selectors)` raises `TypeError`, and a
       set-based dedupe leaves the order salted by `PYTHONHASHSEED`.
-- [ ] 3.3 Update `card_to_metadata` to emit `selectors` + `root_type` + `source_model_id`, still
+- [x] 3.3 Update `card_to_metadata` to emit `selectors` + `root_type` + `source_model_id`, still
       omitting `registry_id` / `version` / `weights_checksum`, and emitting no card-level `species` /
       `mode` / `age_min` / `age_max`. Selectors must be **plain JSON-native dicts**, not `Selector`
       instances: `wandb.Artifact(metadata=...)` runs the mapping through `validate_metadata`, which
       coerces rather than rejects, degrading a pydantic model to its `repr` string and a `NamedTuple`
       to a positional list — publishing unreadable metadata with a zero exit code.
-- [ ] 3.4 Implement the `collection_id` scheme in the one existing function, so publish, `--only`, and
+- [x] 3.4 Implement the `collection_id` scheme in the one existing function, so publish, `--only`, and
       `--verify` cannot disagree; keep the duplicate-id fail-fast guard. The formula is settled (0.2) and
       written into the delta spec: replace each `/` and each `=` in `source_model_id` with `-`, change
       nothing else. Keep the guard even though the 8 committed ids are verified distinct, because the
       mapping is not injective in principle.
-- [ ] 3.5 Assert every physical model resolves to exactly one `root_type`, failing the seed loudly if
+- [x] 3.5 Assert every physical model resolves to exactly one `root_type`, failing the seed loudly if
       a future matrix edit breaks that assumption (the whole design rests on it).
-- [ ] 3.5b Add the **selector-collision** guard: two different `source_model_id`s of the same
+- [x] 3.5b Add the **selector-collision** guard: two different `source_model_id`s of the same
       `root_type` carrying an identical `(species, mode, age_min, age_max)` selector must fail fast.
       Today this is caught incidentally, because the id is built from those four fields and the
       duplicate-id check rejects the pair; an id derived from the model gives them distinct ids, so
       both would publish, both would take the production alias, and the consumer would find two
       matching production cards. Verified no such collision exists in the committed matrix, so this
       guards the future the existing "guard against future matrix edits" scenario is about.
-- [ ] 3.6 Rewrite the `cards.py` module/class/function **docstrings**, which describe the per-row,
+- [x] 3.6 Rewrite the `cards.py` module/class/function **docstrings**, which describe the per-row,
       per-species semantics as current fact (`cards.py:1`; also the `collection_id` docstring's
       `Returns: "rice-cylinder-crown-age6-10"` example). `publish.py`'s docstrings need **no** change
       — they are card-driven and shape-agnostic; an earlier draft named the wrong file.
-- [ ] 3.7 Rewrite `registry/__init__.py:1-8` ("per-species, per-root-type") **and**
+- [x] 3.7 Rewrite `registry/__init__.py:1-8` ("per-species, per-root-type") **and**
       `registry/chooser.py:21-23`, whose comment asserts "``ModelCard.species`` is a free ``str``, so
       there is no contract-side vocabulary to defer to" — false once card-level `species` is gone.
       `SPECIES_VOCAB` still stays local; the reason becomes "a *selector's* `species` is a free `str`".
-- [ ] 3.8 Update `tests/test_registry_cards.py`, `tests/test_registry_chooser.py`,
+- [x] 3.8 Update `tests/test_registry_cards.py`, `tests/test_registry_chooser.py`,
       `tests/test_registry_smoke.py`. Expansion yields **exactly 8 cards**, the shared primary carries
       4 selectors, the two lateral models carry 2 each, every card's metadata validates against the
       real `ModelCard`, legacy models still yield `sleap_nn_version is None`. Also re-key
       `test_crown_only_row_single_card` (`tests/test_registry_cards.py:38`), which reads
       `result[0].age_min`/`age_max` off the `Card` — 3.2/3.3 move the window onto the selector, so it
       reddens at 3.2 and no other task names it.
-- [ ] 3.9 Re-key `test_matrix_lock_collection_to_model` (`tests/test_registry_cards.py:220-226`). It
+- [x] 3.9 Re-key `test_matrix_lock_collection_to_model` (`tests/test_registry_cards.py:220-226`). It
       asserts `{collection_id: source_model_id} == <13-entry literal>`; under an
       id-derived-from-model scheme that degenerates to `{slug(x): x}` and stops testing anything.
       Re-key it to lock `source_model_id → sorted selector tuples` (the real matrix invariant) and
       keep an explicit `len == 8`.
-- [ ] 3.10 New test: each card's selectors equal an exact **set of 4-tuples**, so the shared primary's
+- [x] 3.10 New test: each card's selectors equal an exact **set of 4-tuples**, so the shared primary's
       four windows (canola 2–13, the other three 2–14) are all preserved and none is widened.
-- [ ] 3.11 New test: a matrix where one `source_model_id` appears in two root-type slots **fails
+- [x] 3.11 New test: a matrix where one `source_model_id` appears in two root-type slots **fails
       fast**, naming the model id, producing no cards. Plus the 3.5b sibling: two models of one
       root_type sharing a selector fails fast, naming the selector and both model ids.
-- [ ] 3.12 New test: selector order is stable **across processes** with differing `PYTHONHASHSEED`,
+- [x] 3.12 New test: selector order is stable **across processes** with differing `PYTHONHASHSEED`,
       using ≥3 seeds and the existing helper pattern at `tests/test_registry_chooser.py:236-256`
       (`env = dict(os.environ)` then mutate, `[sys.executable, "-B", "-c", ...]`) — a bare
       `env={"PYTHONHASHSEED": "1"}` breaks on Windows for want of `SYSTEMROOT`. Note `PYTHONHASHSEED=0`
       *disables* randomization, so 0-vs-1 is the discriminating pair. A same-process re-expansion is
       vacuous. Compare the **serialized JSON** from the child's stdout, which also discharges the
       scenario's "byte-identical metadata" clause.
-- [ ] 3.13 New test: selector order is independent of matrix **row order** (shuffle the rows, expect
+- [x] 3.13 New test: selector order is independent of matrix **row order** (shuffle the rows, expect
       identical output).
-- [ ] 3.14 New test: every collection id is accepted by the **real `wandb.Artifact` constructor** —
+- [x] 3.14 New test: every collection id is accepted by the **real `wandb.Artifact` constructor** —
       `wandb.Artifact(name=cards.collection_id(card), type="model")`, which is public API, offline, and
       needs no credential. Do **not** assert against
       `wandb.sdk.artifacts._validators.validate_artifact_name` or `INVALID_ARTIFACT_NAME_CHARS`:
@@ -229,8 +229,8 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       rejects it. Asserting against the validator is a false green whose production symptom is
       `--execute` raising on the first card. `INVALID_ARTIFACT_NAME_CHARS` is exactly `{"/"}` and is
       **not** the effective rule. Also assert the 128-char `NAME_MAXLEN` bound.
-- [ ] 3.15 Cross-product regression: no card matches a (species, mode) pair absent from its selectors.
-- [ ] 3.16 Update `tests/test_registry_publish.py` and `tests/test_registry_cli.py` **in the same
+- [x] 3.15 Cross-product regression: no card matches a (species, mode) pair absent from its selectors.
+- [x] 3.16 Update `tests/test_registry_publish.py` and `tests/test_registry_cli.py` **in the same
       commit as 3.2–3.4** — an earlier draft deferred them, and simulating the id change alone proves
       that wrong: **11 failures, 9 of them in these two files** (against the full 226-test suite;
       nothing outside these plus `test_registry_cards.py` moves). Both build expectations from
@@ -239,7 +239,7 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       `test_registry_cli.py:34-35,115,123,137,143,173,177-178,196-197,200,209-210`. Note
       `tests/conftest.py` needs **no** edit — `soy/p`/`soy/l` slug fine; the constraint it carries is on
       the slug function, not on the file.
-- [ ] 3.17 Re-author `test_seed_duplicate_collection_aborts` (`tests/test_registry_publish.py:154-163`).
+- [x] 3.17 Re-author `test_seed_duplicate_collection_aborts` (`tests/test_registry_publish.py:154-163`).
       Verified: under an id derived from `source_model_id` the current `"a"`/`"b"` fixture **DID NOT
       RAISE**, and id collisions become otherwise structurally impossible (grouping is by
       `(source_model_id, root_type)`; 3.5 rejects a model spanning two root types). The remaining
@@ -247,29 +247,29 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       ids differing only there collapse. Build the fixture from that (`x/y` and `x=y`), assert the
       seed raises before any publish and names both, and add a sibling asserting the 8 committed model
       ids slug to 8 distinct ids.
-- [ ] 3.18 New test: `card_to_metadata` is **serialization-stable**. Verified the real
+- [x] 3.18 New test: `card_to_metadata` is **serialization-stable**. Verified the real
       `wandb.Artifact` normalizes metadata (tuple → list, object → dict, pydantic model → `repr`
       string) while `_FakeArtifact` (`tests/test_registry_publish.py:25-33`) stores it verbatim, so
       `art.metadata == card_to_metadata(card)` (`:103`) is a tautology that cannot catch it. Assert
       `json.loads(json.dumps(meta)) == wandb.Artifact(name="n", type="model", metadata=meta).metadata`
       for a real card, with `selectors` a list of dicts of primitives **in the emitted order**. This
       also settles what §4's read-back may compare against.
-- [ ] 3.19 New test: the shared primary's `selectors` equal an exact **ordered tuple literal**. 3.10
+- [x] 3.19 New test: the shared primary's `selectors` equal an exact **ordered tuple literal**. 3.10
       (set equality) plus 3.12/3.13 (relative "same order twice") are all satisfied by a stably-wrong
       order, so nothing else pins the absolute one.
-- [ ] 3.20 Re-key `test_every_accepted_mode_round_trips_through_the_real_modelcard`
+- [x] 3.20 Re-key `test_every_accepted_mode_round_trips_through_the_real_modelcard`
       (`tests/test_registry_cards.py:141-155`) and `test_expected_modes_match_the_live_vocabulary`
       (`:136`) onto the selector shape — the "Every accepted mode survives the round trip" scenario
       otherwise has no test, and the current test builds a flat `cards.Card(...)` that stops
       compiling. Keep `_EXPECTED_MODES` spelled out so an upstream narrowing stays a failure.
-- [ ] 3.21 New test: a metadata mapping with an empty `selectors` list fails `ModelCard` validation.
+- [x] 3.21 New test: a metadata mapping with an empty `selectors` list fails `ModelCard` validation.
       Update `tests/test_registry_smoke.py:10-29`, which builds the flat six-key card, at the same time.
-- [ ] 3.22 New test: `sleap_nn_version` stays a **card-level scalar** and is absent from `Selector` —
+- [x] 3.22 New test: `sleap_nn_version` stays a **card-level scalar** and is absent from `Selector` —
       assert it is not in any emitted selector dict and not in `Selector.model_fields`.
-- [ ] 3.23 New test: `card_to_metadata` emits an **exact** key set of
+- [x] 3.23 New test: `card_to_metadata` emits an **exact** key set of
       `{root_type, selectors, source_model_id}` and no card-level `species`/`mode`/`age_min`/`age_max`.
       Re-key `test_card_to_metadata_exact_keys_and_raw_mode` (`tests/test_registry_cards.py:95-112`).
-- [ ] 3.23b New test: **each selector dict emits exactly `{species, mode, age_min, age_max}`** and
+- [x] 3.23b New test: **each selector dict emits exactly `{species, mode, age_min, age_max}`** and
       nothing else — assert the key set of every selector on every card, not just one sample. Asked for
       by Elizabeth on review of `0be3277`, and it exists because of a contracts-side decision: `Selector`
       is `extra="ignore"` (approved on contracts#32), so a stray key inside a selector dict is silently
@@ -278,40 +278,40 @@ lands; drive it per file (`pytest tests/test_registry_cards.py` etc.) rather tha
       *card-level* key set, and 3.22 checks one specific absence (`sleap_nn_version`), not a general
       no-extras guard one level down. A *missing* key still fails loudly on the contract side, so this
       guards the extras direction only.
-- [ ] 3.24 New test: the one-scheme invariant. Patch **both** `publish.collection_id` and
+- [x] 3.24 New test: the one-scheme invariant. Patch **both** `publish.collection_id` and
       `cards.collection_id` — `publish.py:16-20` does `from ...cards import collection_id`, so patching
       only the `cards` attribute leaves the publish path on the real function while `cli.py:109,114,115`
       (which go through `cards.collection_id`) observe the patch, and the test silently proves nothing.
       The sentinel must be **injective per card**; a constant one trips the duplicate-id guards at
       `cli.py:116-118` / `publish.py:136-138` before the assertion runs. Assert the publish path, the
       `--only` filter, and the `--verify` expected set all agree.
-- [ ] 3.25 New test: the two rice crown models remain two distinct cards in two distinct collections.
-- [ ] 3.26 New test: a **stale old-scheme** `--only` id (e.g. `canola-cylinder-primary-age2-13`, as
+- [x] 3.25 New test: the two rice crown models remain two distinct cards in two distinct collections.
+- [x] 3.26 New test: a **stale old-scheme** `--only` id (e.g. `canola-cylinder-primary-age2-13`, as
       sitting in runbooks and `README.md` today) fails fast via `cli.py:110-113` with an actionable
       message. `test_only_unknown_fails_fast` (`tests/test_registry_cli.py:148`) covers only a
       synthetic `does-not-exist`.
-- [ ] 3.27 Check `scripts/regen_model_checksums.py:24` (`expand_rows_to_cards`, `c.source_model_id`)
+- [x] 3.27 Check `scripts/regen_model_checksums.py:24` (`expand_rows_to_cards`, `c.source_model_id`)
       still works. It is in **no** CI path filter, **no** lint target, and **no** test, so a break
       there is silent. Consider adding it to `tests/test_scripts.py`, which currently loads only two of
       the other scripts (`clean_pkg`, `dump_val_metrics` at `:29-30`; `pull_tf_reference.py` is
       likewise untested).
-- [ ] 3.28 Check `tests/test_config.py:321-328`
+- [x] 3.28 Check `tests/test_config.py:321-328`
       (`test_root_type_vocab_mirrors_cards_slots`, asserting `config.ROOT_TYPE_VOCAB ==
       frozenset(cards._ROOT_SLOTS)`) — green only while 3.2 preserves `_ROOT_SLOTS`.
-- [ ] 3.29 New test for the **dedup** rule, which the committed matrix cannot exercise: no two rows
+- [x] 3.29 New test for the **dedup** rule, which the committed matrix cannot exercise: no two rows
       contribute an identical `(species, mode, age_min, age_max)` to one card today (the two
       arabidopsis rows differ by `mode`; canola/pennycress differ by species *and* `age_max`), and the
       matrix loader does not reject duplicate rows. So 3.2's "de-duplicated" is untested — 3.10 (set
       equality) and 3.19 (ordered literal over the committed matrix) both stay green if the dedupe is
       deleted. Use a synthetic two-identical-rows matrix and assert `len(selectors) == 1`.
-- [ ] 3.30 Anchor the three §3 tests no other task names, all of which redden at 3.1 or 3.4:
+- [x] 3.30 Anchor the three §3 tests no other task names, all of which redden at 3.1 or 3.4:
       `test_collection_id_slugs_mode` (`tests/test_registry_cards.py:185-191`) — the only
       *assertion-level* old id literal (`"rice-cylinder-crown-age6-10"` at `:191`) outside 3.9's
       `EXPECTED_MODEL_BY_COLLECTION` (`:203-217`) and 3.16's `test_registry_publish.py:10-11`;
       `test_metadata_validates_against_real_modelcard` (`:115-124`); and
       `test_every_committed_matrix_card_validates_against_the_real_modelcard` (`:158-182`). The first
       belongs with 3.4, the other two with commit A's scope.
-- [ ] 3.G Gate before committing: `uv lock --check`, `uv run pytest -m "not integration"`,
+- [x] 3.G Gate before committing: `uv lock --check`, `uv run pytest -m "not integration"`,
       `uv run black --check src/sleap_roots_training tests`,
       `uv run ruff check src/sleap_roots_training`. `uv lock --check` is load-bearing here and nowhere
       else: CI installs with `uv sync --locked` (`ci.yml:42,81`), so a lock drifting from 3.1 reddens

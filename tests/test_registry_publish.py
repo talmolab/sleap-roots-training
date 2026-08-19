@@ -1,5 +1,7 @@
 import pytest
 
+from sleap_roots_contracts import Selector
+
 from sleap_roots_training.registry import cards, chooser, publish
 from sleap_roots_training.registry.cards import Card, card_to_metadata, collection_id
 from sleap_roots_training.registry.config import RegistryConfig
@@ -7,8 +9,23 @@ from sleap_roots_training.registry.config import RegistryConfig
 CFG = RegistryConfig("ent", "reg", "production")
 PROJECT = CFG.registry_project()
 CPA_PRIMARY = "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743"
-ARAB_MULTI_PRIMARY = "arabidopsis-multiplant-cylinder-primary-age2-14"
-RICE_OLD_CROWN = "rice-cylinder-crown-age6-10"
+#: Collection ids are now derived from the source model id (each `/` and `=` -> `-`).
+CPA_PRIMARY_COLLECTION = (
+    "canola_pennycress_arabidopsis-primary-240611_102513.multi_instance.n-743"
+)
+RICE_OLD_CROWN = "rice-older-crown-221208_113552.multi_instance.n-574"
+SOYBEAN_PRIMARY = "soybean-primary-221003_111420.multi_instance.n-1389"
+
+
+def _card(root_type, source_model_id, *selectors):
+    return Card(
+        root_type=root_type,
+        selectors=tuple(
+            Selector(species=s, mode=m, age_min=lo, age_max=hi)
+            for s, m, lo, hi in selectors
+        ),
+        source_model_id=source_model_id,
+    )
 
 
 def _all_cards():
@@ -92,7 +109,7 @@ def test_publish_card(monkeypatch, tmp_path):
 
     monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
     run = _FakeRun()
-    card = Card("arabidopsis", "multiplant cylinder", 2, 14, "primary", CPA_PRIMARY)
+    card = _card("primary", CPA_PRIMARY, ("arabidopsis", "multiplant cylinder", 2, 14))
     model_dir = tmp_path / "m"
     model_dir.mkdir()
 
@@ -105,7 +122,7 @@ def test_publish_card(monkeypatch, tmp_path):
     assert art.added_dirs == [str(model_dir)]
     assert run.order == ["log", "wait", "link"]  # wait before link
     _, target, aliases = run.linked
-    assert target == "ent-org/wandb-registry-reg/" + ARAB_MULTI_PRIMARY
+    assert target == "ent-org/wandb-registry-reg/" + CPA_PRIMARY_COLLECTION
     assert aliases == ["production"]
 
 
@@ -147,20 +164,42 @@ def test_seed_publishes_all_distinct(monkeypatch, tmp_path):
     report = publish.seed_registry(
         _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api
     )
-    assert len(calls) == 13 and len(set(calls)) == 13
+    assert len(calls) == 8 and len(set(calls)) == 8  # one per physical model
     assert sorted(report["published"]) == sorted(calls) and report["skipped"] == []
 
 
 def test_seed_duplicate_collection_aborts(monkeypatch, tmp_path):
-    monkeypatch.setattr(publish, "publish_card", lambda *a: None)
+    # Re-authored for the id-derived-from-model scheme. The old "a"/"b" fixture DID NOT
+    # RAISE under it, and id collisions are otherwise structurally impossible now:
+    # grouping is by (source_model_id, root_type), and a model spanning two root types
+    # is rejected upstream. The one remaining collision channel is the LOSSY SLUG --
+    # `/` and `=` both map to `-`, so two ids differing only there collapse.
+    def boom_publish(*a):
+        raise AssertionError("must not publish before the duplicate check")
+
+    monkeypatch.setattr(publish, "publish_card", boom_publish)
     dup = [
-        Card("rice", "cylinder", 6, 10, "crown", "a"),
-        Card("rice", "cylinder", 6, 10, "crown", "b"),
+        _card("crown", "x/y", ("rice", "cylinder", 6, 10)),
+        _card("crown", "x=y", ("rice", "cylinder", 6, 10)),
     ]
-    with pytest.raises(ValueError, match="(?i)duplicate"):
+    assert collection_id(dup[0]) == collection_id(dup[1]) == "x-y"  # the premise
+    with pytest.raises(ValueError, match="(?i)duplicate") as excinfo:
         publish.seed_registry(
             _resolved(dup, tmp_path), CFG, run=object(), api=_FakeApi()
         )
+    # It must name both offending models, not just the collapsed id -- the operator
+    # cannot act on "x-y" alone.
+    message = str(excinfo.value)
+    assert "x/y" in message and "x=y" in message
+
+
+def test_the_eight_committed_model_ids_slug_to_eight_distinct_collections():
+    # The sibling of the above: the lossy slug is a real hazard in principle, but it
+    # does not bite the committed matrix. Asserted so a future matrix edit that DOES
+    # collide fails here rather than at `--execute` time.
+    all_cards = _all_cards()
+    assert len(all_cards) == 8
+    assert len({collection_id(c) for c in all_cards}) == 8
 
 
 def test_seed_idempotent_skip_and_force(monkeypatch, tmp_path):

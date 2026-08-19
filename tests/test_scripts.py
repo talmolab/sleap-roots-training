@@ -28,6 +28,7 @@ def _load(name: str):
 
 clean_pkg = _load("clean_pkg")
 dump_val_metrics = _load("dump_val_metrics")
+regen_model_checksums = _load("regen_model_checksums")
 
 
 # --- fakes for clean_pkg (no sleap_io needed) --------------------------------------------------
@@ -283,3 +284,39 @@ def test_dump_reads_good_npz_and_reports_corrupt(tmp_path, monkeypatch, capsys):
     bad.write_bytes(b"not a real npz")
     assert dump_val_metrics.dump("run_bad") is False
     assert "CORRUPT" in capsys.readouterr().out
+
+
+# --- regen_model_checksums (consumes the Card API) ---------------------------------------------
+
+
+def test_regen_model_checksums_enumerates_every_physical_model(tmp_path, capsys):
+    # This script consumes `expand_rows_to_cards` and `c.source_model_id` but sits in
+    # NO CI path filter, NO lint target and, until now, NO test -- so a break here was
+    # silent. It reddened for real when the Card shape changed, which is exactly the
+    # class of break this guards.
+    assert regen_model_checksums.main(str(tmp_path)) == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("checksums:")
+    # Every distinct physical model is enumerated, one line each, deduped and sorted.
+    missing = [ln for ln in captured.err.splitlines() if "MISSING" in ln]
+    assert len(missing) == 8, captured.err
+    assert missing == sorted(missing)
+
+
+def test_regen_model_checksums_hashes_a_present_archive(tmp_path, capsys):
+    # The negative control: the MISSING path above passes even if the hashing branch is
+    # broken. Plant one real archive and assert it is hashed rather than reported absent.
+    import hashlib
+    import zipfile
+
+    model_id = "rice/older/crown/221208_113552.multi_instance.n=574"
+    archive = tmp_path / f"{model_id}.zip"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("best_model.h5", "w")
+    expected = hashlib.sha256(archive.read_bytes()).hexdigest()
+
+    assert regen_model_checksums.main(str(tmp_path)) == 0
+    captured = capsys.readouterr()
+    assert f"  {model_id}: {expected}" in captured.out
+    assert model_id not in captured.err  # not reported missing

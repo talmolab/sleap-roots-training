@@ -132,10 +132,21 @@ def seed_registry(
         ValueError: On a duplicate collection id in the seed set.
     """
     resolved = list(resolved)
-    ids = [collection_id(card) for card, _ in resolved]
-    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    # The id is derived from `source_model_id` via a lossy slug (`/` and `=` both map
+    # to `-`), so two models differing only there collapse onto one collection. Report
+    # the offending MODELS, not just the collapsed id -- an operator cannot act on
+    # "x-y" alone.
+    owners: dict[str, list[str]] = {}
+    for card, _ in resolved:
+        owners.setdefault(collection_id(card), []).append(card.source_model_id)
+    duplicates = {
+        cid: sorted(models) for cid, models in owners.items() if len(models) > 1
+    }
     if duplicates:
-        raise ValueError(f"duplicate collection ids in the seed set: {duplicates}")
+        detail = "; ".join(
+            f"{cid!r} <- {models}" for cid, models in sorted(duplicates.items())
+        )
+        raise ValueError(f"duplicate collection ids in the seed set: {detail}")
 
     if api is None:
         import wandb

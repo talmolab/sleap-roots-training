@@ -166,19 +166,22 @@ def test_mode_vocab_is_non_empty():
 
 
 def test_species_vocab_stays_local():
-    # The mirror of the above: ModelCard.species is a free `str`, so there is no
+    # The mirror of the above: a *selector's* species is a free `str`, so there is no
     # contract-side species vocabulary to defer to. Guards against a future reader
     # assuming both constants moved.
     import sleap_roots_contracts
-    from sleap_roots_contracts import ModelCard
+    from sleap_roots_contracts import ModelCard, Selector
 
     assert "soybean" in chooser.SPECIES_VOCAB
     # The actual invariant, asserted on the field rather than on a symbol name: a
     # contract-side species vocabulary would arrive the way `Mode` did -- as a Literal
-    # annotation on ModelCard.species -- which a `hasattr(..., "Species")` probe would
+    # annotation on the species field -- which a `hasattr(..., "Species")` probe would
     # not see. The symbol check stays as the secondary signal.
-    assert ModelCard.model_fields["species"].annotation is str
+    assert Selector.model_fields["species"].annotation is str
     assert not hasattr(sleap_roots_contracts, "Species")
+    # And it really did move: the card no longer carries species at all, so a reader
+    # reaching for ModelCard.species gets a loud KeyError rather than a stale answer.
+    assert "species" not in ModelCard.model_fields
 
 
 def test_every_committed_matrix_mode_is_contract_valid():

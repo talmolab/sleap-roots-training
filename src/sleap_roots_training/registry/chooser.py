@@ -19,8 +19,9 @@ from omegaconf import OmegaConf
 from sleap_roots_contracts import Mode
 
 #: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned
-#: here, not by the contract: ``ModelCard.species`` is a free ``str``, so there is no
-#: contract-side vocabulary to defer to.
+#: here, not by the contract: a ``Selector``'s ``species`` is a free ``str``, so there
+#: is no contract-side vocabulary to defer to. (The card itself no longer carries
+#: ``species`` at all — it lives one level down, on each selector.)
 SPECIES_VOCAB: frozenset[str] = frozenset(
     {"soybean", "canola", "pennycress", "arabidopsis", "rice"}
 )

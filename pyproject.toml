@@ -43,7 +43,7 @@ dependencies = [
     # The <0.8.0 cap deliberately matches the `train` extra's pre-mask line so the two cannot
     # disagree; sleap-io is declared in BOTH places on purpose — see the `train` comment.
     "sleap-io>=0.7.1,<0.8.0",
-    "sleap-roots-contracts==0.1.0a6",
+    "sleap-roots-contracts==0.1.0a8",
     "wandb>=0.28.0,<0.29.0",
 ]
 
