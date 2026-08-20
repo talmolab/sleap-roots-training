@@ -373,8 +373,10 @@ def test_a_stale_old_scheme_only_id_fails_fast(
 
 
 def test_publish_only_and_verify_all_use_one_collection_id_scheme(
-    monkeypatch, tiny_matrix, stub_models_root
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env
 ):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+
     # 3.24: the one-scheme invariant. Patch BOTH `publish.collection_id` and
     # `cards.collection_id` -- publish.py does `from ...cards import collection_id`, so
     # patching only the `cards` attribute leaves the publish path on the real function
@@ -498,9 +500,10 @@ def test_verify_fails_on_legacy_metadata(monkeypatch, tiny_matrix):
 
 
 def test_seed_reports_failed_and_exits_non_zero(
-    monkeypatch, tiny_matrix, stub_models_root
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env
 ):
     # 4.13's operator-facing half: a partial failure must be visible AND non-zero.
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
     import wandb
 
     monkeypatch.setattr(
@@ -537,10 +540,11 @@ def test_seed_reports_failed_and_exits_non_zero(
 
 
 def test_seed_reports_stale_skips_and_exits_non_zero(
-    monkeypatch, tiny_matrix, stub_models_root
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env
 ):
     # 4.10's operator-facing half: the skip path is the default on every re-run, so a
     # half-migrated collection must not be reported as a clean no-op.
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
     import wandb
 
     monkeypatch.setattr(
