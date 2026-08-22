@@ -9,8 +9,9 @@ The package SHALL define a training configuration as a **composition** of `sleap
 `TrainingJobConfig` (`data_config` / `model_config` / `trainer_config`) plus a repo-owned
 `experiment` metadata block (species / mode / root_type / dataset identity). The wrapper SHALL
 validate the `experiment` fields itself — `species` against `SPECIES_VOCAB`, `mode` against
-`MODE_VOCAB`, and `root_type` against the known root vocabulary (`primary` / `lateral` / `crown`) —
-and SHALL delegate validation of the `sleap-nn` portion to `sleap-nn`'s `TrainingJobConfig` /
+`MODE_VOCAB`, and `root_type` against `ROOT_TYPE_VOCAB`, which SHALL be the contract-owned
+`sleap_roots_contracts.RootType`, not a value list restated here or in this package — and SHALL
+delegate validation of the `sleap-nn` portion to `sleap-nn`'s `TrainingJobConfig` /
 `verify_training_cfg`. The wrapper SHALL NOT re-declare `sleap-nn`'s configuration fields, and SHALL
 NOT silently discard any top-level key.
 

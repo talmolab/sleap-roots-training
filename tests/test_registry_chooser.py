@@ -275,7 +275,7 @@ _MODE_RESHAPES = {
     ),
 }
 
-#: The same five reshapes for `RootType`, which `chooser` now also derives a vocabulary
+#: The same six reshapes for `RootType`, which `chooser` now also derives a vocabulary
 #: from. Kept as a separate table rather than generated from `_MODE_RESHAPES` by string
 #: substitution: the members differ, and a generated table would silently stop covering a
 #: shape the moment the two aliases diverge upstream.
@@ -360,6 +360,11 @@ def test_chooser_refuses_to_import_when_root_type_is_not_a_literal_of_strings(
     # `RootType` sends the reader to the wrong upstream symbol.
     assert "sleap_roots_contracts.RootType" in result.stderr
     assert "sleap_roots_contracts.Mode" not in result.stderr
+    # Both of `_vocab_from_contract_literal`'s naming arguments are swappable independently:
+    # the pair above catches a swapped `name`, this pair a swapped `vocab_name`. Without it,
+    # a call passing `RootType` but labelling the constant `MODE_VOCAB` reads as correct.
+    assert "ROOT_TYPE_VOCAB" in result.stderr
+    assert "MODE_VOCAB" not in result.stderr
     assert "TypeError" not in result.stderr
 
 

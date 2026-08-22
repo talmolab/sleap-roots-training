@@ -77,15 +77,17 @@ All notable changes to this project are documented here. The format is based on
   the `Mode` collapse above deliberately left (#38). `chooser.ROOT_TYPE_VOCAB` is now derived from
   `sleap_roots_contracts.RootType`, retiring the two hand-written copies of `{"primary", "lateral",
   "crown"}` that existed only as membership sets — in `config.py` and in `labeling/metadata.py`.
-  Exactly one spelled-out copy remains, `registry/cards.py`'s ordered `_ROOT_SLOTS`, kept
-  deliberately and for its *ordering* rather than its membership (see below). The old guard compared
+  Exactly one *ordered* copy remains, `registry/cards.py`'s `_ROOT_SLOTS`, kept deliberately and
+  for its *ordering* rather than its membership (see below) — alongside the slot-to-field mapping
+  four lines below it, which `SelectionRow`'s `primary_model_id` / `lateral_model_id` /
+  `crown_model_id` field names bake in anyway and so cannot be collapsed. The old guard compared
   the two retired copies *to each other*, which could
   only ever catch one of them going stale; identity against the contract is asserted at each
   consumer instead. **Nothing accepted or published changes:** `get_args(RootType)` on the pinned
   `0.1.0a6` is set-identical to the vocabulary it replaces, so no config, package, or card that
   validated before stops validating. Carries the same import guard as `MODE_VOCAB` — a `RootType`
   that stops being a plain `Literal` raises at import naming `RootType`, rather than degrading to
-  "nothing is valid" — with its own fault injection over all five reshapes.
+  "nothing is valid" — with its own fault injection over all six reshapes.
 
   **`registry/cards.py` keeps its own `_ROOT_SLOTS`, on purpose.** Membership is the contract's;
   *ordering* is not. `_ROOT_SLOTS` is an ordered tuple whose order decides which order
@@ -96,6 +98,11 @@ All notable changes to this project are documented here. The format is based on
   order it governs — nothing in the suite constrained cross-root card order before (the card tests
   use a set, `sorted()`, and `Counter`), so `expand_rows_to_cards` could have stopped honoring it
   unnoticed.
+
+  `openspec/specs/training-config/spec.md` and `docs/training.md` now name `ROOT_TYPE_VOCAB` and
+  its contract ownership instead of restating `primary` / `lateral` / `crown`, mirroring the
+  `model-registry` wording the `Mode` collapse introduced. Folded in here rather than deferred: the
+  requirement's value list would otherwise be false the moment this merged (closes #51).
 
   **For config authors and package builders:** as with `mode`, the contract now governs two
   user-facing fields it did not before — `experiment.root_type` in a training config, and
