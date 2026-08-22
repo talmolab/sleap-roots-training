@@ -81,6 +81,12 @@ def dump(run: str) -> bool:
     #    loudly instead of being reported to the operator as `CORRUPT (<path>)`, which would
     #    send them to investigate a data file that is perfectly fine.
     #
+    # The price of the split is that `values` materializes every member at once where a streaming
+    # loop held one. That is deliberate, not an oversight: streaming would have to print the
+    # `(keys: ...)` header *before* corruption is discovered, so the operator gets a header
+    # followed by a traceback instead of one clean CORRUPT line. For a metrics.val.0.npz the
+    # memory is negligible, and the tidy output is worth it.
+    #
     # `except Exception` rather than a type list on purpose. The previous list
     # (OSError/ValueError/EOFError/BadZipFile) was tracking numpy's *undocumented* error
     # surface and silently fell behind it: numpy >= 2 raises `pickle.UnpicklingError`, which
@@ -89,8 +95,8 @@ def dump(run: str) -> bool:
     # promised these types; the region below reads an untrusted file and must survive anything
     # it does. The type name is printed, so nothing is hidden by catching broadly.
     try:
-        data = np.load(path, allow_pickle=True)
-        values = [(key, data[key]) for key in data.files]
+        with np.load(path, allow_pickle=True) as data:
+            values = [(key, data[key]) for key in data.files]
     except Exception as exc:
         # a truncated/corrupt npz must not abort the rest of the batch
         print(f"=== {run} ===\n   CORRUPT ({path}): {type(exc).__name__}: {exc}")

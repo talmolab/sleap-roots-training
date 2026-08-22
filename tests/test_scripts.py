@@ -269,7 +269,10 @@ def _write_npz_with_truncated_pickle(path: Path) -> None:
 
     source = path.parent / "_source_for_truncation.npz"
     _write_metrics_npz(source, {"distance_metrics": {"avg": 12.3}})
-    member = zipfile.ZipFile(source).read("metrics.npy")
+    # `with` rather than relying on the temporary being refcount-collected before the unlink:
+    # on Windows a still-open handle makes `source.unlink()` raise PermissionError.
+    with zipfile.ZipFile(source) as archive:
+        member = archive.read("metrics.npy")
     source.unlink()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
         archive.writestr("metrics.npy", member[: len(member) - 12])
