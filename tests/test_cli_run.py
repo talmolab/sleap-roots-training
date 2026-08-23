@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from omegaconf import OmegaConf
 
 from sleap_roots_training import backend, cli, config
 
@@ -68,16 +69,45 @@ def backend_stub(monkeypatch, tmp_path):
 
 @pytest.fixture
 def run_config(write_config, tmp_path):
-    """A valid config whose checkpoint tree lives inside tmp_path."""
+    """A valid config whose checkpoint tree lives inside tmp_path.
 
-    def _make(**overrides):
-        trainer = {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
-        trainer.update(overrides.pop("trainer_config", {}))
-        merged = {"trainer_config": trainer}
-        merged.update(overrides.pop("overrides", {}))
-        return write_config(overrides=merged, **overrides)
+    ``overrides`` is **deep**-merged onto the sandboxed ``trainer_config``. A shallow
+    ``dict.update()`` here replaced that block wholesale, so any test passing
+    ``overrides={"trainer_config": ...}`` silently got the template's *relative* ``ckpt_dir``
+    back -- precisely the footgun this module's docstring warns about. Those tests still passed,
+    because they assert "nothing happened" and the autouse ``chdir`` kept the fallback inside
+    ``tmp_path``, which is exactly why it was worth fixing rather than leaving to be discovered
+    by a future test that does assert on a path.
+    """
+
+    def _make(**kwargs):
+        sandbox = {
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        }
+        extra = kwargs.pop("overrides", None) or {}
+        trainer = kwargs.pop("trainer_config", None)
+        if trainer:
+            extra = OmegaConf.to_container(
+                OmegaConf.merge(
+                    OmegaConf.create(extra),
+                    OmegaConf.create({"trainer_config": trainer}),
+                )
+            )
+        merged = OmegaConf.to_container(
+            OmegaConf.merge(OmegaConf.create(sandbox), OmegaConf.create(extra))
+        )
+        return write_config(overrides=merged, **kwargs)
 
     return _make
+
+
+def test_run_config_fixture_keeps_the_sandbox_under_overrides(run_config, tmp_path):
+    """Locks the merge above: an `overrides` block must not evict the sandboxed paths."""
+    path = run_config(overrides={"trainer_config": {"use_wandb": False}})
+    cfg = config.load_config(path)
+    assert cfg.trainer_config.ckpt_dir == str(tmp_path / "ckpt")
+    assert cfg.trainer_config.run_name == "r1"
+    assert cfg.trainer_config.use_wandb is False
 
 
 def _invoke(args):

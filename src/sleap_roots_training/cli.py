@@ -652,10 +652,6 @@ def labeling_validate_command(package_dir: Path) -> None:
     )
 
 
-if __name__ == "__main__":  # pragma: no cover
-    main()
-
-
 @main.command(name="run")
 @click.argument(
     "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
@@ -734,3 +730,7 @@ def run_command(
         f"OK: training finished; {run_dir} holds "
         f"{backend.RESOLVED_CONFIG_NAME} + {backend.SOURCE_CONFIG_NAME}"
     )
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

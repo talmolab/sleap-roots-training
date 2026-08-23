@@ -85,8 +85,11 @@ rewrote the operator's bytes would not be one. Both SHALL be written atomically,
 leaves no truncated artifact. `trainer_config.ckpt_dir` SHALL default to `"."`,
 matching the backend's own default. `run` SHALL require a usable `trainer_config.run_name` — a
 string that is non-empty after stripping surrounding whitespace, is not the literal `"None"` (which
-the backend itself treats as unset), is not absolute, and contains no path separator — and SHALL
-refuse otherwise, naming the field. `run` SHALL refuse to reuse a run directory that
+the backend itself treats as unset), resolves to exactly **one path component under both POSIX and
+Windows semantics**, and carries no character or device name Windows forbids in a path — and SHALL
+refuse otherwise, naming the field. The rule SHALL be applied identically on every platform, so a
+name that would escape the run directory on the training host is rejected on the authoring host too.
+`run` SHALL also refuse when the run path already exists and is not a directory. `run` SHALL refuse to reuse a run directory that
 already holds evidence of a previous run (a `best.ckpt`, or the `training_config.yaml` the backend
 writes on completion), naming the directory and instructing the operator to choose a new
 `trainer_config.run_name`; no flag SHALL override this refusal. `--resolved-config PATH` SHALL
@@ -131,9 +134,24 @@ config itself.
 
 #### Scenario: A run name that escapes the run directory is refused
 
-- **WHEN** `trainer_config.run_name` is an absolute path or contains a path separator
+- **WHEN** `trainer_config.run_name` is an absolute path, contains a path separator, or is
+  **drive-relative** (such as `C:foo`, which is not absolute and contains no separator, yet
+  discards the checkpoint directory when joined)
 - **THEN** the command exits non-zero naming `trainer_config.run_name`
 - **AND** no file is written outside the checkpoint directory
+
+#### Scenario: A run name that is not portable to the training host is refused
+
+- **WHEN** `trainer_config.run_name` carries a character Windows forbids in a path, or is a Windows
+  reserved device name
+- **THEN** the command exits non-zero naming `trainer_config.run_name`, on every platform rather
+  than only on Windows
+
+#### Scenario: A run path that is not a directory is refused
+
+- **WHEN** the computed run path already exists and is a file
+- **THEN** the command exits non-zero naming that path
+- **AND** the backend is not invoked
 
 #### Scenario: A run directory holding a previous run is refused
 

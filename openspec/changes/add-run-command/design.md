@@ -142,8 +142,14 @@ only protection.
 A directory holding neither (a run that died before the backend wrote anything) is the retry case:
 `run` overwrites its own two artifacts and proceeds, no flag needed.
 
-`run_name` must be usable — non-empty, not the literal `"None"` (which the backend treats as unset),
-not absolute, no path separator. With none of those, the backend generates a timestamped name we
+`run_name` must be usable — non-empty, not the literal `"None"` (which the backend treats as
+unset), and **exactly one path component under both POSIX and Windows semantics**, carrying no
+character or device name Windows forbids. The component count is deliberate, not decoration:
+`is_absolute()` plus a separator scan reports `C:foo` as safe, yet `PureWindowsPath("ckpt") /
+"C:foo"` evaluates to `C:foo`, because pathlib discards the left-hand side once the right carries a
+drive. That would put the artifacts outside the very directory D4 guards, on the one OS this command
+exists for. Applying the rule under both flavours on every platform means a name that would escape
+on the box is rejected on the laptop that authored it. With none of those, the backend generates a timestamped name we
 cannot predict; dropping artifacts in `<ckpt_dir>` instead would place them one level above the real
 run, next to every other run sharing that directory (every committed example uses `ckpt_dir: models`).
 Refusing costs one config line.
@@ -186,6 +192,18 @@ while True:
     except KeyboardInterrupt:
         continue                        # the child already got SIGINT; let it shut down
 ```
+
+The loop has **no timeout and no escape hatch**, deliberately: if the backend never responds to the
+interrupt, `run` waits indefinitely rather than escalating to a kill. That is the same trade-off as
+"let the child own the shutdown" — force-killing a trainer after N seconds would reintroduce exactly
+the lost-checkpoint failure this decision exists to prevent, and the operator keeps the real escape
+hatch (a second interrupt, or killing the process tree) either way.
+
+One honest limit on the automated coverage: the parent-side `KeyboardInterrupt` is exercised with a
+stubbed `wait()` that raises it, because a genuine SIGINT would have to be delivered to the whole
+foreground process group and would take the test runner with it. The real signal path is covered on
+POSIX by a stub that `kill -9`s itself, and on Windows by the recorded manual verification (which
+showed Lightning's own graceful shutdown running, then a clean non-zero exit).
 
 ### D6 — Step order is a contract, not an implementation detail
 

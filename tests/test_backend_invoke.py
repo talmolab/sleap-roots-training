@@ -176,12 +176,87 @@ def test_unusable_run_name_is_refused(write_config, run_name):
         backend.run_directory(cfg)
 
 
-@pytest.mark.parametrize("run_name", ["a/b", "../escape", "/tmp/absolute"])
+@pytest.mark.parametrize(
+    "run_name",
+    [
+        "a/b",
+        "a\\b",  # one component to PurePosixPath, two to PureWindowsPath
+        "../escape",
+        "/tmp/absolute",
+        "C:foo",  # drive-RELATIVE: is_absolute() is False and there is no separator...
+        "C:\\abs",
+    ],
+)
 def test_run_name_that_escapes_the_run_directory_is_refused(write_config, run_name):
-    """`Path("ckpt") / "/tmp/x"` evaluates to `/tmp/x`, escaping ckpt_dir entirely."""
+    """`Path("ckpt") / "/tmp/x"` evaluates to `/tmp/x`, escaping ckpt_dir entirely.
+
+    The `C:foo` case is why this is a component count rather than
+    ``is_absolute()`` + a separator scan: that pair reports the name as safe, while
+    ``PureWindowsPath("ckpt") / "C:foo"`` still evaluates to ``C:foo`` -- pathlib drops the
+    left-hand side as soon as the right-hand side carries a drive.
+    """
     cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
     with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
         backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize(
+    "run_name", ["has:colon", "star*", 'quo"te', "pipe|d", "lt<gt>"]
+)
+def test_run_name_with_windows_reserved_characters_is_refused(write_config, run_name):
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize("run_name", ["con", "AUX", "nul.txt", "com1", "LPT9.yaml"])
+def test_run_name_that_is_a_windows_device_name_is_refused(write_config, run_name):
+    """Refused on every platform, not just Windows.
+
+    These are legal directory names on POSIX, so a name accepted on the authoring Mac would
+    fail only on the training box -- the worst place to discover it.
+    """
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize("run_name", [5, True, 1.5])
+def test_non_string_run_name_is_refused(write_config, run_name):
+    """A malformed YAML can yield an int/bool where a name belongs."""
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize(
+    "run_name",
+    ["r1", "runcmd_verify_20260819", "baseline_os4_seed42", "r1.v2", "r-1_2"],
+)
+def test_the_run_directory_is_always_a_child_of_ckpt_dir(
+    write_config, tmp_path, run_name
+):
+    """The invariant the drive-relative bug broke, asserted directly.
+
+    Every accepted `run_name` must resolve to a directory *inside* `ckpt_dir` -- that is what
+    makes the run-directory refusal (and therefore the provenance guarantee) meaningful.
+    """
+    cfg, _ = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": run_name}
+        },
+    )
+    assert backend.run_directory(cfg).parent == tmp_path / "ckpt"
+
+
+def test_a_run_path_that_exists_as_a_file_is_refused(tmp_path):
+    """Named explicitly rather than surfacing later as an mkdir failure."""
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.parent.mkdir(parents=True)
+    run_dir.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(backend.BackendError, match="not a directory"):
+        backend.check_run_directory(run_dir)
 
 
 def test_run_directory_holding_a_checkpoint_is_refused(tmp_path):

@@ -19,7 +19,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import NamedTuple, Optional
 
 from omegaconf import OmegaConf
@@ -105,6 +105,63 @@ SOURCE_CONFIG_NAME = "source_config.yaml"
 RUN_EVIDENCE = ("best.ckpt", "training_config.yaml")
 
 
+#: Characters Windows forbids in a path component. ``/`` and ``\\`` are already excluded by the
+#: single-component check; ``:`` is listed because a bare ``C:foo`` is *drive-relative*, not
+#: absolute, and joining it discards everything to its left.
+_WINDOWS_RESERVED_CHARS = frozenset('<>:"|?*')
+
+#: Windows device names, which cannot be used as a directory component regardless of extension.
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{digit}" for digit in range(1, 10)}
+    | {f"LPT{digit}" for digit in range(1, 10)}
+)
+
+
+def _check_single_component(run_name: str) -> None:
+    r"""Reject a ``run_name`` that is anything other than one plain directory name.
+
+    The gate is applied under **both** POSIX and Windows path semantics, so the same config is
+    accepted or rejected identically on the laptop that authors it and the box that trains it --
+    a rule that only fired on Windows would let a bad name reach the GPU box unnoticed.
+
+    ``PurePath.is_absolute()`` plus a separator scan is *not* sufficient, and the gap is not
+    theoretical: ``PureWindowsPath("C:foo")`` is drive-**relative**, so it reports
+    ``is_absolute() == False`` and contains no separator, yet
+    ``PureWindowsPath("ckpt") / "C:foo"`` evaluates to ``C:foo`` -- pathlib discards the
+    left-hand side once the right-hand side carries a drive. The artifacts would then land
+    outside the run directory this whole design guards, with no error. Counting path components
+    catches that, and catches a backslash on POSIX as a bonus (``PurePosixPath("a\\b")`` is one
+    component, ``PureWindowsPath("a\\b")`` is two).
+
+    Args:
+        run_name: The candidate ``trainer_config.run_name``.
+
+    Raises:
+        BackendError: The name is not a single, portable path component.
+    """
+    for flavour in (PurePosixPath, PureWindowsPath):
+        if len(flavour(run_name).parts) != 1:
+            raise BackendError(
+                f"trainer_config.run_name must be a single directory name, got {run_name!r} "
+                "(a separator, an absolute path, or a Windows drive-relative name like 'C:foo' "
+                "would place the run outside ckpt_dir)"
+            )
+    bad_chars = sorted(set(run_name) & _WINDOWS_RESERVED_CHARS)
+    if bad_chars:
+        raise BackendError(
+            f"trainer_config.run_name contains character(s) Windows forbids in a path: "
+            f"{''.join(bad_chars)!r} (got {run_name!r})"
+        )
+    # Rejected on every platform, not only Windows: the GPU box is Windows, so a name that is
+    # legal on the authoring Mac but illegal there would fail at the worst possible moment.
+    if run_name.split(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
+        raise BackendError(
+            f"trainer_config.run_name is a Windows reserved device name ({run_name!r}); "
+            "it cannot be a directory on the training box"
+        )
+
+
 def run_directory(cfg) -> Path:
     """Return the directory the backend will train into, validating the run name.
 
@@ -135,11 +192,7 @@ def run_directory(cfg) -> Path:
             "trainer_config.run_name is the literal string 'None', which the backend "
             "treats as unset; set a real run name"
         )
-    if Path(run_name).is_absolute() or any(sep in run_name for sep in ("/", "\\")):
-        raise BackendError(
-            f"trainer_config.run_name must be a single directory name, got {run_name!r} "
-            "(a separator or absolute path would place the run outside ckpt_dir)"
-        )
+    _check_single_component(run_name)
     ckpt_dir = OmegaConf.select(cfg, "trainer_config.ckpt_dir", default=None) or "."
     return Path(str(ckpt_dir)) / run_name
 
@@ -159,6 +212,10 @@ def check_run_directory(run_dir: Path) -> None:
     Raises:
         BackendError: The directory already contains evidence of a previous run.
     """
+    if run_dir.exists() and not run_dir.is_dir():
+        raise BackendError(
+            f"{run_dir} exists and is not a directory, so it cannot hold this run's artifacts"
+        )
     for marker in RUN_EVIDENCE:
         if (run_dir / marker).exists():
             raise BackendError(
@@ -254,7 +311,11 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
             failed. Nothing partial is left behind.
     """
     # Re-check immediately before writing: the caller checked earlier, and a checkpoint
-    # appearing in that window would otherwise strand these artifacts next to it.
+    # appearing in that window would otherwise strand these artifacts next to it. This narrows
+    # the race, it does not close it -- a checkpoint appearing between *this* check and the
+    # writes below would still slip through. Closing it properly would need a lock the backend
+    # does not participate in, and the operator-facing failure (two runs sharing one name) is
+    # already refused for every realistic ordering.
     check_run_directory(run_dir)
 
     source_copy = run_dir / SOURCE_CONFIG_NAME
