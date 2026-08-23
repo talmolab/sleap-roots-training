@@ -17,7 +17,7 @@ read off the *matching* selector.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from collections.abc import Iterable
 
 from sleap_roots_contracts import Selector
 
@@ -31,7 +31,7 @@ _ROOT_SLOTS = ("primary", "lateral", "crown")
 #: orderable, so a bare ``sorted(selectors)`` raises ``TypeError``; and a set-based
 #: dedupe left unsorted would salt the order with ``PYTHONHASHSEED``. Sorting on an
 #: explicit key is what makes emitted metadata byte-identical across processes.
-def _selector_key(selector: Selector) -> tuple:
+def _selector_key(selector: Selector) -> tuple[str, str, int, int]:
     return (selector.species, selector.mode, selector.age_min, selector.age_max)
 
 
@@ -105,7 +105,9 @@ def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
     return sorted(cards, key=lambda card: (card.source_model_id, card.root_type))
 
 
-def _reject_models_spanning_root_types(root_types_by_model: dict) -> None:
+def _reject_models_spanning_root_types(
+    root_types_by_model: dict[str, set[str]],
+) -> None:
     """Fail the seed if one physical model is registered under two root types."""
     straddling = {
         model_id: sorted(root_types)
@@ -132,7 +134,7 @@ def _reject_selector_collisions(cards: Iterable[Card]) -> None:
     them distinct ids, so both would publish, both would take the production alias, and
     the consumer would find two matching production cards for one request.
     """
-    owners: dict[tuple, list[str]] = {}
+    owners: dict[tuple[str, str, str, int, int], list[str]] = {}
     for card in cards:
         for selector in card.selectors:
             key = (card.root_type,) + _selector_key(selector)
@@ -152,7 +154,7 @@ def _reject_selector_collisions(cards: Iterable[Card]) -> None:
         )
 
 
-def card_to_metadata(card: Card) -> dict:
+def card_to_metadata(card: Card) -> dict[str, object]:
     """Build the wandb-artifact metadata for a card.
 
     Returns exactly the selection dimensions the consumer reads plus the non-contract

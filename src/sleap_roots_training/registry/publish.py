@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
+from collections.abc import Iterable, Mapping
+from typing import Optional
 
 from sleap_roots_training.registry.cards import (
     Card,
@@ -110,7 +111,7 @@ def _is_selectors_shape(metadata) -> bool:
     return not (_LEGACY_CARD_KEYS & set(metadata))
 
 
-def _existing_collections(api, project: str) -> dict:
+def _existing_collections(api, project: str) -> dict[str, object]:
     """Return the existing model collections under ``project``, keyed by name.
 
     Listing existing collections up front lets the idempotency check distinguish
@@ -130,20 +131,6 @@ def _existing_collections(api, project: str) -> dict:
             project_name=project, type_name="model"
         )
     }
-
-
-def _collection_has_production(api, project: str, collection: str, alias: str) -> bool:
-    """Return whether an existing ``collection`` holds an artifact with ``alias``.
-
-    The caller MUST have confirmed the collection exists (see ``_existing_collections``)
-    — for an existing collection ``api.artifacts`` does not raise "not found", so any
-    error here propagates (fail closed) rather than being mistaken for "no production".
-    """
-    name = f"{project}/{collection}"
-    return any(
-        alias in (getattr(artifact, "aliases", None) or [])
-        for artifact in api.artifacts(type_name="model", name=name)
-    )
 
 
 def resolve_all(
@@ -239,18 +226,23 @@ def seed_registry(
 
     for card, model_dir in resolved:
         collection = collection_id(card)
-        already = (
-            not force
-            and collection in existing
-            and _collection_has_production(api, project, collection, cfg.alias)
+        # ONE read answers both questions: is this already production, and is what is
+        # there still readable by an upgraded consumer. Querying twice was redundant,
+        # and the second query's fail-soft branch was unreachable anyway -- this read
+        # fails closed, so a transient error raises here rather than being mistaken
+        # for "not yet production" and re-publishing over a live alias.
+        aliased = (
+            _aliased_artifact(api, project, collection, cfg.alias)
+            if not force and collection in existing
+            else None
         )
-        if already:
+        if aliased is not None:
             logger.info("skip %s (already production)", collection)
             skipped.append(collection)
             # The skip path is the DEFAULT on every re-run, so a half-migrated
             # collection would otherwise sit here undetected: a check scoped to
             # `published` never sees it.
-            if not _aliased_metadata_is_current(api, project, collection, cfg.alias):
+            if not _is_selectors_shape(getattr(aliased, "metadata", None)):
                 stale.append(collection)
                 _emit("skipped (STALE metadata)", collection)
             else:
@@ -278,25 +270,6 @@ def seed_registry(
         "failed": failed,
         "stale": stale,
     }
-
-
-def _aliased_metadata_is_current(
-    api, project: str, collection: str, alias: str
-) -> bool:
-    """Return whether the aliased artifact in ``collection`` carries the current shape.
-
-    A read failure counts as *current* rather than stale: this runs on the skip path of
-    an otherwise-successful re-run, and turning a transient read error into a reported
-    migration failure would be a false alarm the operator cannot act on.
-    """
-    name = f"{project}/{collection}"
-    try:
-        for artifact in api.artifacts(type_name="model", name=name):
-            if alias in (getattr(artifact, "aliases", None) or []):
-                return _is_selectors_shape(getattr(artifact, "metadata", None))
-    except Exception:  # noqa: BLE001 - see docstring
-        return True
-    return True
 
 
 def verify_registry(

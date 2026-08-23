@@ -215,14 +215,30 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
                 f"row {index}: unknown mode {mode!r} "
                 f"(expected one of {sorted(MODE_VOCAB)})"
             )
+        # A model id must be a string or absent. Without this a row whose id parses to
+        # a non-string scalar (an unquoted YAML number, a bool, a nested mapping) sails
+        # past every other check and surfaces much later as an opaque AttributeError
+        # inside `cards.collection_id`, at `--execute` time -- while every other
+        # malformed-row case gets a clean, row-numbered ValueError here.
+        model_ids = {
+            slot: raw.get(slot)
+            for slot in ("primary_model_id", "lateral_model_id", "crown_model_id")
+        }
+        for slot, model_id in model_ids.items():
+            if model_id is not None and not isinstance(model_id, str):
+                raise ValueError(
+                    f"row {index}: {slot} must be a string or null, got "
+                    f"{type(model_id).__name__} ({model_id!r})"
+                )
+
         rows.append(
             SelectionRow(
                 species=species,
                 mode=mode,
                 age=str(raw["age"]),
-                primary_model_id=raw.get("primary_model_id"),
-                lateral_model_id=raw.get("lateral_model_id"),
-                crown_model_id=raw.get("crown_model_id"),
+                primary_model_id=model_ids["primary_model_id"],
+                lateral_model_id=model_ids["lateral_model_id"],
+                crown_model_id=model_ids["crown_model_id"],
             )
         )
 

@@ -761,17 +761,80 @@ def test_a_read_error_on_the_skip_path_is_not_reported_stale(monkeypatch, tmp_pa
         )
 
 
-def test_the_skip_path_shape_check_fails_soft_on_a_read_error(tmp_path):
-    # The helper itself, in isolation: an unreadable artifact is NOT stale.
-    class _Boom:
+def test_the_skip_path_reads_the_aliased_artifact_exactly_once(monkeypatch, tmp_path):
+    # Both facts the skip path needs -- "is it already production" and "is its metadata
+    # still readable" -- come from ONE `_aliased_artifact` read. They used to be two
+    # independent `api.artifacts(...)` round-trips for the same artifact.
+    monkeypatch.setattr(publish, "publish_card", lambda *a, **kw: "published")
+    calls = []
+
+    class _CountingApi(_FakeApi):
         def artifacts(self, type_name, name):
-            raise ConnectionError("transient read error")
+            calls.append(name)
+            return super().artifacts(type_name, name)
 
-    assert publish._aliased_metadata_is_current(_Boom(), PROJECT, "soy-p", "production")
+    card = _card("primary", "soy/p", ("soybean", "cylinder", 2, 8))
+    api = _CountingApi(
+        collections=["soy-p"],
+        arts_by_name={
+            f"{PROJECT}/soy-p": [_FakeArt(["production"], metadata=_LEGACY_META)]
+        },
+    )
+    report = publish.seed_registry(
+        _resolved([card], tmp_path), CFG, run=object(), api=api, force=False
+    )
+    assert calls == [f"{PROJECT}/soy-p"], calls
+    # ...and collapsing the reads did not cost the staleness signal.
+    assert report["stale"] == ["soy-p"] and report["skipped"] == ["soy-p"]
 
 
-def test_an_absent_aliased_artifact_is_not_reported_stale(tmp_path):
-    # Nothing carrying the alias -> nothing to call stale. (The alias's absence is the
-    # `missing` bucket's job, not this check's.)
-    api = _FakeApi(arts_by_name={})
-    assert publish._aliased_metadata_is_current(api, PROJECT, "soy-p", "production")
+def test_a_collection_without_the_alias_is_published_not_skipped(monkeypatch, tmp_path):
+    # An existing collection that does not carry the alias is not "already production":
+    # it must publish. (The alias's absence is the seed's business, not the staleness
+    # check's.)
+    published = []
+    monkeypatch.setattr(
+        publish,
+        "publish_card",
+        lambda run, c, d, cfg, **kw: published.append(collection_id(c)) or "published",
+    )
+    card = _card("primary", "soy/p", ("soybean", "cylinder", 2, 8))
+    api = _FakeApi(
+        collections=["soy-p"],
+        arts_by_name={f"{PROJECT}/soy-p": [_FakeArt(["latest"])]},  # no production
+    )
+    report = publish.seed_registry(
+        _resolved([card], tmp_path), CFG, run=object(), api=api, force=False
+    )
+    assert published == ["soy-p"]
+    assert report["skipped"] == [] and report["stale"] == []
+
+
+def test_a_raising_refresh_on_the_real_publish_path_lands_in_failed(
+    monkeypatch, tmp_path
+):
+    # The sibling of `test_a_raising_refresh_lands_in_failed_rather_than_aborting`,
+    # which mocks `publish_card` entirely and therefore proves only that seed_registry
+    # buckets an exception. This one drives the REAL publish_card with a save() that
+    # raises (the `refresh_raises` fixture, previously built but never exercised), so
+    # the guard covers the actual code path rather than a stand-in for it.
+    import wandb
+
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    run = _RefreshRun(read_back=_LEGACY_META, refresh_raises=True)
+    card = _card("primary", "soy/p", ("soybean", "cylinder", 2, 8))
+    model_dir = tmp_path / "m"
+    model_dir.mkdir()
+
+    # publish_card itself lets the CommError out...
+    with pytest.raises(ConnectionError):
+        publish.publish_card(run, card, model_dir, CFG, api=_ReReadApi(run))
+
+    # ...and seed_registry turns it into a `failed` bucket entry rather than an abort,
+    # with the remaining cards still attempted.
+    run2 = _RefreshRun(read_back=_LEGACY_META, refresh_raises=True)
+    monkeypatch.setattr(publish, "_aliased_artifact", lambda api, p, c, a: None)
+    report = publish.seed_registry(
+        _resolved([card], model_dir), CFG, run=run2, api=_ReReadApi(run2), force=True
+    )
+    assert report["failed"] == ["soy-p"] and report["published"] == []
