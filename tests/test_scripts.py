@@ -275,7 +275,9 @@ def _write_npz_with_truncated_pickle(path: Path) -> None:
         member = archive.read("metrics.npy")
     source.unlink()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
-        archive.writestr("metrics.npy", member[: len(member) - 12])
+        # 12 is arbitrary — any cut that removes the pickle's trailing STOP opcode leaves the
+        # unpickler reading past the end. Nothing depends on the exact count.
+        archive.writestr("metrics.npy", member[:-12])
 
 
 def test_emit_unwraps_dicts_scalars_and_summarizes_arrays(capsys):
