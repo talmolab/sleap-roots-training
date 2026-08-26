@@ -166,19 +166,22 @@ def test_mode_vocab_is_non_empty():
 
 
 def test_species_vocab_stays_local():
-    # The mirror of the above: ModelCard.species is a free `str`, so there is no
+    # The mirror of the above: a *selector's* species is a free `str`, so there is no
     # contract-side species vocabulary to defer to. Guards against a future reader
     # assuming both constants moved.
     import sleap_roots_contracts
-    from sleap_roots_contracts import ModelCard
+    from sleap_roots_contracts import ModelCard, Selector
 
     assert "soybean" in chooser.SPECIES_VOCAB
     # The actual invariant, asserted on the field rather than on a symbol name: a
     # contract-side species vocabulary would arrive the way `Mode` did -- as a Literal
-    # annotation on ModelCard.species -- which a `hasattr(..., "Species")` probe would
+    # annotation on the species field -- which a `hasattr(..., "Species")` probe would
     # not see. The symbol check stays as the secondary signal.
-    assert ModelCard.model_fields["species"].annotation is str
+    assert Selector.model_fields["species"].annotation is str
     assert not hasattr(sleap_roots_contracts, "Species")
+    # And it really did move: the card no longer carries species at all, so a reader
+    # reaching for ModelCard.species gets a loud KeyError rather than a stale answer.
+    assert "species" not in ModelCard.model_fields
 
 
 def test_every_committed_matrix_mode_is_contract_valid():
@@ -279,3 +282,52 @@ def test_chooser_imports_cleanly_when_mode_is_a_plain_literal(tmp_path):
         tmp_path, "Mode = Literal['cylinder', 'multiplant cylinder', 'plate']\n"
     )
     assert result.returncode == 0, result.stderr
+
+
+# --- Model-id type validation (review note, PR #47) ---
+
+
+@pytest.mark.parametrize(
+    "bad", ["743", "[743]", "true", "{a: b}"], ids=["int", "list", "bool", "mapping"]
+)
+def test_a_non_string_model_id_is_rejected_with_a_row_numbered_error(tmp_path, bad):
+    # An unquoted `n=743`-style id, a stray list, a bare `true`, or a nested mapping all
+    # parse to non-strings. Before this check they passed every row validation and blew
+    # up much later as an opaque AttributeError inside cards.collection_id, at
+    # --execute time -- unlike every other malformed-row case, which fails here.
+    path = tmp_path / "matrix.yaml"
+    path.write_text(
+        "models:\n"
+        "  - species: soybean\n"
+        "    mode: cylinder\n"
+        '    age: "2, 3"\n'
+        f"    primary_model_id: {bad}\n"
+        "    lateral_model_id: null\n"
+        "    crown_model_id: null\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError) as excinfo:
+        chooser.load_selection_matrix(path)
+    message = str(excinfo.value)
+    assert "row 0" in message
+    assert "primary_model_id" in message
+
+
+def test_a_string_model_id_and_an_absent_one_are_both_accepted(tmp_path):
+    # The negative control: the guard must discriminate. A quoted id and a null slot
+    # are the normal cases and must survive.
+    path = tmp_path / "matrix.yaml"
+    path.write_text(
+        "models:\n"
+        "  - species: soybean\n"
+        "    mode: cylinder\n"
+        '    age: "2, 3"\n'
+        "    primary_model_id: soybean/primary/221003_111420.multi_instance.n=1389\n"
+        "    lateral_model_id: null\n"
+        "    crown_model_id: null\n",
+        encoding="utf-8",
+    )
+    matrix = chooser.load_selection_matrix(path)
+    assert len(matrix.rows) == 1
+    assert matrix.rows[0].primary_model_id.endswith("n=1389")
+    assert matrix.rows[0].lateral_model_id is None

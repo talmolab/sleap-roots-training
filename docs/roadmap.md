@@ -90,16 +90,19 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   `openspec/changes/archive/2026-07-05-seed-production-model-registry/`): the `model-registry`
   spec, `src/sleap_roots_training/registry/`, and the `sleap-roots-training seed-registry` CLI. It
   curates the **existing legacy TF models** into the `wandb-registry-sleap-roots-models` registry —
-  13 cards carrying the `production` alias (the registry also holds ~87 non-production
-  training-run/sweep collections; the 13 are the curated, `ModelCard`-stamped subset), each stamped
-  with `ModelCard` metadata (`sleap-roots-contracts`) — so the `WandbRegistrySource` in
-  `talmolab/sleap-roots-predict` has something to fetch.
+  one card per physical model carrying the `production` alias — **8** under the selector reshape
+  (#39), down from the 13 the original per-row expansion produced (the registry also holds ~87
+  non-production training-run/sweep collections; the curated, `ModelCard`-stamped subset is the
+  small one). Each is stamped with `ModelCard` metadata (`sleap-roots-contracts`) — so the
+  `WandbRegistrySource` in `talmolab/sleap-roots-predict` has something to fetch. The live registry
+  carries the old 13 until the re-seed migration runs.
 - **This is registry curation, not training.** The weights are legacy and are uploaded as-is. It
   does not advance the keypoint or mask tiers below.
 - **Why later tiers care:** seeding fixed the **publishing surface** — the `ModelCard` metadata
   schema, the `production` alias, and the registry path — that this repo's future `sleap-nn`-trained
   models will reuse, whether the weights are legacy or native.
-- **Open follow-ups:** #3 (seed the deferred arabidopsis plate models → 15 cards), #7 (accept a
+- **Open follow-ups:** #3 (seed the deferred arabidopsis plate models — one card per physical plate
+  model, not one per matrix row), #7 (accept a
   `wandb login` session, not just `WANDB_API_KEY`; mirrors to `talmolab/sleap-roots-predict`).
 
 ## Tier 0 — Scaffold `talmolab/sleap-roots-training` *(prerequisite — not OpenSpec)*
@@ -179,8 +182,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   (`sleap-roots-labels`, `sleap-roots-models`) with run→artifact lineage.
 - **Builds on the shipped publishing surface** (see *Adjacent work* above): reuse the existing
   `ModelCard` contract, `production` alias, and `sleap-roots-models` registry path — do **not**
-  define new ones. The models registry already carries 13 `production`-aliased collections (the
-  registry has ~100 collections total; most are non-production sweep/run artifacts).
+  define new ones. The models registry carries one `production`-aliased collection per physical
+  model — 8 after the #39 re-seed, 13 before it (the registry has ~100 collections total; most are
+  non-production sweep/run artifacts).
 - **Labels need a contract of their own.** The `sleap-roots-labels` registry currently stores
   provenance as boolean-key metadata and `data_path`s pointing at deleted temp directories, so a
   label set cannot be traced to its experiment — and `cyl` (labels) vs `cylinder` (models) means a
@@ -188,24 +192,17 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   row-level sample manifest (the ad hoc labeling-package build process already computes this
   provenance in a personal script, not yet ported into a shared repo — see #26), is a prerequisite
   for the lineage oracle.
-- **Shared/generalist models have no way to be represented once.** `ModelCard.species` is a single
-  required string, so a model trained once but serving multiple species (confirmed: one
-  primary-root model already serves arabidopsis/canola/pennycress) is registered N times —
-  currently 13 registrations for only 8 physically distinct weight sets, each a full separate
-  ~75MB artifact upload (training#39, surfaced while building A3-predict's parity harness — see
-  Tier 2.2). **Direction set (2026-08-10):** not a bare `species` tuple — independently tupling
-  `species` and `mode` would let a card match combinations nobody validated (e.g. canola in
-  `multiplant cylinder`, never trained/tested). Instead `ModelCard` gets a
-  `selectors: tuple[Selector, ...]` field, each selector bundling its own
-  `species`/`mode`/`age_min`/`age_max` together, with `root_type` staying scalar (always intrinsic
-  to the physical weights) — one card per physical model, collapsing registrations from 13 to 8.
-  This also sidesteps the canola-age-13-vs-14 question (each selector keeps its own age window on
-  the same card); the longer-term idea of validating/deriving age windows from the associated
-  `LabelCard`(s) instead of hand-curating them is tracked separately (#46), out of scope for #39.
-  `predict#14`'s `weights_checksum`-keyed warm-cache dedup covers the consumer-side symptom in the
-  interim and stays useful as defense-in-depth after this lands. Tier 2.2 dedups on
-  `weights_checksum` either way. Implementation not yet proposed — #39 tracks scoping the OpenSpec
-  change.
+- **Shared/generalist models are represented once (#39, resolved).** `ModelCard` carries
+  `selectors: tuple[Selector, ...]`, each selector bundling its own
+  `species`/`mode`/`age_min`/`age_max`, with `root_type` scalar because it is intrinsic to the
+  weights. One card per physical model, matched on the any-selector rule rather than the cross
+  product of independent tuples — so a generalist model cannot advertise a combination nobody
+  trained. Registrations collapse 13 → 8. See #39 and the `update-model-card-selectors` change for
+  the axis analysis and the migration order; the canola-age-13-vs-14 question is sidestepped (each
+  selector keeps its own window on the same card), and deriving age windows from the associated
+  `LabelCard`(s) is tracked separately as #46. `predict#14`'s `weights_checksum`-keyed warm-cache
+  dedup becomes largely moot for the shared-primary case but stays useful as defense-in-depth;
+  Tier 2.2 dedups on `weights_checksum` either way.
 - **Oracle:** round-trip a dataset and a model through the registries; lineage reproduces a run;
   **a dry-run sweep (≈5 configs, 1 species) launches and logs with full lineage** — verifying the
   registry is solid **before** the expensive Tier 3 sweeps.
@@ -226,7 +223,8 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 
 ### Tier 2.2 — Per-model training-backend parity (sleap-nn vs. legacy TF, full production fleet)
 - **Deliverable:** for every **physically distinct** production model (dedup on `weights_checksum`,
-  not the 13 `ModelCard` registrations — see Tier 2's registry-duplication decision / #39), retrain
+  not the `ModelCard` registrations — see Tier 2's registry-duplication decision / #39; after that
+  change the two coincide, since one card *is* one physical model), retrain
   via the sleap-nn backend. **Use that model's exact legacy TF config and dataset — not a
   modernized config, not a "TF-inspired" one, the literal same split and hyperparameters TF used**,
   following the schedule-*and*-architecture-matched translation approach Tier 1 validated the hard
@@ -279,8 +277,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   inference-delta table informs how much slack to expect from engine-level noise without
   substituting for the training-side tolerance itself.
 - **Depends on:** Tier 2 (registry/lineage — need it to enumerate "every production model" against
-  tracked, versioned data) and #39 (train once per distinct `weights_checksum`, not once per card,
-  or this retrains the same physical model up to 4×). **Sequenced, not parallel:** kickoff waits
+  tracked, versioned data) and #39 (train once per distinct `weights_checksum`; before #39 that was
+  explicitly *not* once per card, or this would retrain the same physical model up to 4× — after it,
+  one card is one physical model and the two coincide). **Sequenced, not parallel:** kickoff waits
   for #11 (backfill) and #39 (dedup decision) to close — retraining "the actual pipeline" against
   the real dataset registry is the point of this tier, so it can't start against registry loose
   ends.
@@ -555,11 +554,13 @@ From the pragmatism review — keep throughput high and de-risk the likely-overr
 - The comparison matrix (which crops × root types) — drafted at Tier 3, locked at Tier 4.
 - The common skeleton / node count per root type for unification — set at Tier 2.7.
 - Phase boundary timing (summer→fall), contingent on available team hours.
-- Shared-model-registry duplication (#39) — **direction set 2026-08-10:** a `ModelCard.selectors`
-  list (see Tier 2), not a bare `species` tuple; implementation still to be proposed via OpenSpec.
-  Tier 2.2 dedups on `weights_checksum` in the interim either way. Age-window provenance (deriving
-  `age_min`/`age_max` from the associated `LabelCard`(s)) split out as a separate, unscheduled
-  follow-up (#46).
+- ~~Shared-model-registry duplication (#39)~~ — **closed.** Direction set 2026-08-10 (a
+  `ModelCard.selectors` list, see Tier 2, not a bare `species` tuple), scoped and approved as the
+  `update-model-card-selectors` OpenSpec change. What remains is rollout, not decision: the re-seed
+  must be live and verified before the upgraded `sleap-roots-predict` is deployed, and the 13 old
+  collections are retired only after that deployment is confirmed. Tier 2.2 dedups on
+  `weights_checksum` either way. Age-window provenance (deriving `age_min`/`age_max` from the
+  associated `LabelCard`(s)) remains a separate, unscheduled follow-up (#46).
 - Tier 2.2's exact per-model tolerance — fixed at Tier 2.2 kickoff, grounded in the real legacy TF
   numbers and `sleap-roots-predict`'s measured inference-parity deltas (see Tier 2.2).
 
@@ -804,6 +805,11 @@ Anirudh's redundancy-math review before starting the proposal.
   `registry/data/model_selection.yaml`: only the pennycress/arabidopsis-cylinder primary pair shares
   species+mode+age and would merge from species alone; the arabidopsis pair differs only by `mode`,
   the canola/pennycress pairs only by `age`).
+  **Correction (2026-08-17):** the last clause is wrong as written. The canola/pennycress **lateral**
+  pair differs by species *and* age window (2–13 vs 2–14), not by age alone — so tupling `species`
+  leaves the age difference behind and the two still cannot merge. Age is the *residual* axis, not
+  the only one. The 1-of-5 figure and the decision above are unaffected; `update-model-card-selectors`
+  carries the corrected analysis.
 - **IMPORTANT (scope discipline):** **Age-window provenance split out** as its own, unscheduled
   follow-up (#46) rather than folded into #39 — the selector-list design means #39 doesn't need to
   decide whether canola's model is "good through age 14" to land; that question (and the

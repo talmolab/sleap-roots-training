@@ -7,17 +7,42 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- Pinned `sleap-roots-contracts` to `0.1.0a8` and **reshaped the registry so one card describes one
+  physical model** (#39). A card now carries a scalar `root_type` plus a `selectors` list — one
+  entry per `(species, mode, age_min, age_max)` combination the weights were validated for —
+  instead of one card per matrix row. Expansion groups by `(source_model_id, root_type)`, so the
+  committed 7-row matrix yields **8 cards over 8 physical models** rather than 13, and a generalist
+  model (one primary-root model already serves arabidopsis/canola/pennycress) is editable in one
+  place. Selectors are de-duplicated and sorted on an explicit key, so emitted metadata is
+  byte-identical across processes and independent of matrix row order. Matching is the
+  **any-selector** rule — some single selector must match all of species, mode, and age — never the
+  cross product, which would advertise combinations nobody trained.
+
+  **For registry operators:** this is **breaking, and it renames every live collection.** Collection
+  ids are now derived from `source_model_id` (each `/` and `=` replaced with `-`) rather than built
+  from the selection tuple, because a card with several species has no single species to name itself
+  after. The re-seed is therefore purely **additive**: it creates 8 new collections and leaves the 13
+  existing ones untouched, so `--verify` reports those 13 as orphans until they are retired. There is
+  deliberately **no tolerant read** of the old flat shape — an upgraded consumer skips old-shape
+  cards with a warning and an old-pinned consumer skips the new ones, which cleanly partitions the
+  two generations during the migration instead of producing two matching cards for one context.
+  **Order matters:** re-seed and verify here first, then deploy the upgraded `sleap-roots-predict`,
+  and only retire the old collections once that deployment is confirmed. Publishing also now reads
+  the server's own metadata back after linking and refreshes it in place when stale — `--force`
+  alone does not create a new version when the weights digest is unchanged, so it is not evidence
+  that metadata was refreshed.
 - Pinned `sleap-roots-contracts` to `0.1.0a6` (from `0.1.0a3`) and **collapsed the local mode
   vocabulary into the contract-owned `Mode`**. `chooser.MODE_VOCAB` is now derived from
   `sleap_roots_contracts.Mode` rather than restated here, so the producer and the
   `sleap-roots-predict` consumer agree by construction instead of by reconciliation at acceptance.
-  `SPECIES_VOCAB` stays local — `ModelCard.species` is a free `str`, so there is no contract-side
-  species vocabulary to defer to. **Nothing accepted or published changes:** the contract's `Mode`
+  `SPECIES_VOCAB` stays local — a *selector's* `species` is a free `str`, so there is no
+  contract-side species vocabulary to defer to. **Nothing accepted or published changes:** the contract's `Mode`
   is set-identical to the vocabulary it replaces, and all 7 rows of the committed selection matrix
   are already in vocabulary, so no card that validated before stops validating and no config that
   validated before stops validating. Two *error-reporting* surfaces did change, both noted below.
   Upstream, `0.1.0a6` is
-  a breaking *validation* tightening (`ModelCard.mode` is a `Mode` and no longer a free `str`;
+  a breaking *validation* tightening (the card's `mode` is a `Mode` and no longer a free `str` —
+  it lives on `Selector` as of the `0.1.0a8` reshape below;
   `age_min`/`age_max` reject `bool` and `numpy.bool_`) — neither reaches anything this package
   produces. This also unblocks `add-label-registry` (#10), which needs `LabelCard`.
 
@@ -130,11 +155,12 @@ All notable changes to this project are documented here. The format is based on
   excluded as broken and the observability gap (no per-epoch logging) is recorded for Tier 1.
 - `sleap-roots-training seed-registry`: seed the production wandb model registry from the
   committed selection matrix. Publishes the current legacy root models as `type="model"`
-  artifacts with flat `ModelCard` selection metadata and the `production` alias — the
+  artifacts with `ModelCard` selection metadata and the `production` alias — the
   surface the `sleap-roots-predict` warm worker reads. Defaults to a dry run; `--execute`
-  (with `--yes`/`--force`/`--only`) publishes; `--verify` re-runs the consumer read path.
+  (with `--yes`/`--force`/`--only`) publishes; `--verify` re-runs the consumer read path,
+  reports collections the matrix no longer produces, and fails on a stale metadata shape.
 - `sleap_roots_training.registry` package: env-driven config, the provenance-stamped
-  `model_selection.yaml` (7 rows → 13 cards over 8 SHA256-pinned models), card expansion,
+  `model_selection.yaml` (7 rows → 8 cards, one per SHA256-pinned physical model), card expansion,
   legacy-model resolution (SHA256-verified unzip), run-config lineage, and the
   publish/link/verify helpers.
 - Runtime deps `wandb` and `sleap-roots-contracts`.

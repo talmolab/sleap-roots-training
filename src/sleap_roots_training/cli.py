@@ -61,7 +61,11 @@ def _require_api_key() -> None:
 @click.option(
     "--only",
     multiple=True,
-    help="Restrict validation + publishing to these collection ids (canary).",
+    help=(
+        "Restrict validation + publishing to these collection ids (canary). "
+        "Under --verify this also SUPPRESSES orphan reporting, since every "
+        "collection outside the scope would otherwise be reported as an orphan."
+    ),
 )
 @click.option("--verify", is_flag=True, help="Read-only: check the live registry.")
 @click.pass_context
@@ -120,12 +124,32 @@ def seed_registry_command(
 
     if verify:
         _require_api_key()
-        report = publish.verify_registry(cfg, expected)
+        # `--only` scopes `expected` above, so orphan reporting has to be suppressed
+        # under it: otherwise a one-collection canary reports every OTHER collection
+        # in the registry as orphaned.
+        report = publish.verify_registry(cfg, expected, report_orphans=not only)
         for collection in report["present"]:
             click.echo(f"present: {collection}")
         for collection in report["missing"]:
             click.echo(f"missing: {collection}")
-        if report["missing"]:
+        for collection in report["legacy"]:
+            click.echo(
+                f"LEGACY METADATA: {collection} (an upgraded consumer cannot read it)"
+            )
+        for collection in report["orphans"]:
+            click.echo(
+                f"orphan: {collection} (production-aliased, no longer in the matrix)"
+            )
+        for collection in report["indeterminate"]:
+            click.echo(f"indeterminate: {collection} (could not read its aliases)")
+        if report["orphans_suppressed"]:
+            click.echo(
+                "note: orphan reporting is suppressed under --only; "
+                "run --verify without --only for the orphan report."
+            )
+        # Orphans and indeterminate collections are reported, not acted on, and do not
+        # fail: an orphan is expected for the whole migration window.
+        if publish.verify_failed(report):
             ctx.exit(1)
         return
 
@@ -175,6 +199,10 @@ def seed_registry_command(
             "pins the exact inputs regardless."
         )
     run = wandb.init(job_type="seed_registry", config=lineage_config)
+    # `seed_registry` echoes each collection's outcome as it happens, so a failure
+    # partway through still leaves the operator a local record of which collections
+    # now carry `production` — the summary below is never reached if something
+    # propagates out of the seed.
     try:
         report = publish.seed_registry(resolved, cfg, run, force=force)
     except ValueError as error:
@@ -183,6 +211,14 @@ def seed_registry_command(
         run.finish()
     click.echo(f"published ({len(report['published'])}): {report['published']}")
     click.echo(f"skipped ({len(report['skipped'])}): {report['skipped']}")
+    if report["stale"]:
+        click.echo(
+            f"STALE metadata on already-seeded ({len(report['stale'])}): {report['stale']}"
+        )
+    if report["failed"]:
+        click.echo(f"FAILED ({len(report['failed'])}): {report['failed']}")
+    if report["failed"] or report["stale"]:
+        ctx.exit(1)
 
 
 @main.command(name="validate")
