@@ -99,10 +99,16 @@ All notable changes to this project are documented here. The format is based on
   use a set, `sorted()`, and `Counter`), so `expand_rows_to_cards` could have stopped honoring it
   unnoticed.
 
-  `openspec/specs/training-config/spec.md` and `docs/training.md` now name `ROOT_TYPE_VOCAB` and
-  its contract ownership instead of restating `primary` / `lateral` / `crown`, mirroring the
+  `openspec/specs/training-config/spec.md` and `docs/training.md` now name `ROOT_TYPE_VOCAB` and its
+  contract ownership instead of restating `primary` / `lateral` / `crown`, mirroring the
   `model-registry` wording the `Mode` collapse introduced. Folded in here rather than deferred: the
   requirement's value list would otherwise be false the moment this merged (closes #51).
+  `openspec/specs/model-registry/spec.md` — the file that wording came from — gets the same
+  treatment, because the `Mode` collapse only half-applied it there: **ModelCard Selection
+  Metadata** described `mode` as "a member of the contract-owned `Mode` vocabulary" while still
+  spelling `root_type` out as `"primary"` / `"lateral"` / `"crown"` four words later. That asymmetry
+  was accurate before this change and is not after it, so `root_type` now names `RootType`'s
+  ownership in the same shape as its neighbour.
 
   **For config authors and package builders:** as with `mode`, the contract now governs two
   user-facing fields it did not before — `experiment.root_type` in a training config, and
