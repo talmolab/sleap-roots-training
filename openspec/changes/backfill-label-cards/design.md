@@ -24,14 +24,17 @@ below are written against what `main` will actually hold.
 | `plate_arabidopsis_2-7DAG_primary_8nodes_labels` | arabidopsis | plate | primary | 2 | deleted temp |
 | `cyl_arabidopsis_7-11DAG_primary_6nodes_labels` | arabidopsis | cylinder | primary | 2 | deleted temp |
 | `rice_3DAG_crown_6nodes_labels` | rice | cylinder | crown | 2 | deleted temp |
-| `wheat_5-14DAG_seminal_6nodes_labels` | wheat | cylinder | seminal² | 2 | deleted temp |
+| `wheat_5-14DAG_seminal_6nodes_labels` | wheat | cylinder | crown² | 2 | deleted temp |
 | `sorghum_5-12DAG_primary_6nodes_labels` | sorghum | cylinder | primary | 2 | deleted temp |
 
 ¹ `medicago` is not in `SPECIES_VOCAB`. See D5 — it is added to a *label-side* vocabulary, not to
 the model-side one.
 
-² `seminal` is not in the contract's `RootType`, on the pin or at contracts HEAD. See D3 — an
-earlier draft of this document asserted it was, which was wrong and is what forced D3's rewrite.
+² The collection is *named* `seminal`, and the root type recorded on its card is `crown`. At the
+age wheat is studied here the roots are technically seminal, but they are morphologically
+indistinguishable from crown roots and this project labels them as crown. See D3 — an earlier draft
+of this document asserted the contract's `RootType` already accepted `seminal` (it does not, on the
+pin or at HEAD) and proposed adding it; both the claim and the remedy were wrong.
 
 **Six of the eight names carry an age** (`14DAG`, `2-7DAG`, `7-11DAG`, `3DAG`, `5-14DAG`,
 `5-12DAG`). The two that do not are the two soybean collections — which are also the two whose
@@ -44,7 +47,8 @@ age in the name, which is what makes D7 load-bearing rather than a formality.
 - Stamp every collection with a valid `LabelCard` via normalized metadata
 - Normalize collection names to match the model registry pattern (`species-mode-root_type`)
 - Preserve existing artifact versions (link, don't re-publish)
-- Give the label side a root-type vocabulary that admits `seminal`, without widening the model side
+- Record wheat's root type as `crown`, the value this project already labels it with, so no
+  root-type vocabulary changes on either side
 - Verify single-species content per collection
 - Mark unrecoverable provenance fields as `null`
 
@@ -53,23 +57,28 @@ age in the name, which is what makes D7 load-bearing rather than a formality.
 - Building a `publish-labels` CLI for *new* packages (that is #10/#26 scope)
 - Multi-species `LabelCard` support (decision: stays single-species)
 - Changing the `ModelCard` side of the registry, its `_ROOT_SLOTS`, or `SPECIES_VOCAB`
-- Making `wheat` / `sorghum` / `medicago` / `seminal` valid in a *training config* (see D5)
+- Making `wheat` / `sorghum` / `medicago` valid in a *training config* (see D5)
+- Introducing a label-side root-type vocabulary, or any root-type nickname/alias mechanism
+  (`sleap-roots-contracts#34` tracks the latter; it is low priority and not a dependency here)
 
 ## Upstream dependency
 
-D3 and D7 both require a `sleap-roots-contracts` release. They are folded into **one** bump rather
-than two, since they land in the same file and the second is conditional on §2's findings:
+**Conditional, and possibly none.** An earlier draft made a contracts release unconditional, on the
+strength of D3's since-corrected `seminal` claim. With wheat's root type recorded as `crown`, the
+only thing that could still require an upstream change is D7's field relaxation, and that is
+decided by §2's findings rather than up front:
 
 | upstream change | source | conditional? |
 |---|---|---|
-| add `LabelRootType` (superset of `RootType`, adds `seminal`) | D3 | no |
 | relax `age_min`/`age_max`/`n_plants`/`n_scans` to `Optional` | D7 | yes — only if §2 cannot recover them |
 
-Contracts is at `0.1.0a8`; this repo pins `0.1.0a6`. So the bump is **two-part**: catch up to the
-current release *and* carry the new work, landing as `0.1.0a9`. The `a3 → a6` bump went through its
-own change directory (`archive/2026-08-05-update-contracts-pin-0-1-0a6`) with a full `a3 → a6` delta
-review, and this one should follow that precedent rather than being folded in here silently — see
-task 1.1.
+If §2 recovers all four fields on all eight collections, **this change ships against a contracts
+release that already exists** and §1 collapses to the pin catch-up alone.
+
+Separately from this change's needs, contracts is at `0.1.0a8` while this repo pins `0.1.0a6`, so
+the pin has `a7`/`a8` to absorb regardless. The `a3 → a6` bump went through its own change directory
+(`archive/2026-08-05-update-contracts-pin-0-1-0a6`) with a full delta review, and that catch-up
+should follow the same precedent rather than being folded in here silently — see task 1.1.
 
 ## Decisions
 
@@ -104,73 +113,91 @@ carry the `production` alias — only the new ones do.
 `weights_checksum`-style references in downstream consumers. Linking preserves the original
 artifact identity.
 
-### D3: A separate contract-owned `LabelRootType`, not a widened `RootType`
+### D3: Wheat's root type is `crown`. No new vocabulary, on either side.
 
-The wheat collection uses root type `seminal`. **The contract does not accept it today.** Verified
-on the pinned `0.1.0a6` and again at contracts HEAD (`0.1.0a8`, two releases ahead of our pin),
-where `src/sleap_roots_contracts/models.py:266` still reads:
+The wheat collection is *named* `wheat_5-14DAG_seminal_6nodes_labels`, and an earlier draft of this
+document read that name as a root type the contract must learn. Two things were wrong with that.
+
+**The factual claim was false.** The draft asserted the contract's `RootType` "already includes
+`seminal` (confirmed)". It does not, on the pinned `0.1.0a6` or at contracts HEAD (`0.1.0a8`, two
+releases ahead of our pin), where `models.py` reads:
 
 ```python
 RootType = Literal["primary", "lateral", "crown"]
 ```
 
-The string `seminal` does not appear anywhere in that source tree. So
-`LabelCard(root_type="seminal", ...)` raises a pydantic `ValidationError`, and the wheat collection
-— 1 of the 8 this change exists to backfill — cannot be stamped at all. An earlier draft of this
-document claimed the opposite and marked it "(confirmed)"; it was not confirmed, and correcting it
-is what turns this from a version bump into a design fork.
+The string `seminal` does not appear anywhere in that source tree. So `LabelCard(root_type=
+"seminal", ...)` raises a pydantic `ValidationError` today, and the "(confirmed)" was not confirmed.
 
-**Decision: add a new `LabelRootType` to the contract, a superset of `RootType` including
-`seminal`. `RootType` itself is untouched.** `LabelCard.root_type` is re-annotated to
-`LabelRootType`; `ModelCard.root_type` stays `RootType`.
+**And the remedy was wrong too.** Correcting the fact, the draft proposed a new contract-owned
+`LabelRootType` superset. That treats a naming difference as an ontological one.
 
-**Why not widen `RootType`** — the obvious move, and the one that quietly breaks two things:
+**Decision: the card records `root_type: crown`. Nothing upstream changes, and no label-side
+root-type vocabulary is introduced.**
 
-1. **It forces `seminal` into the model side.** After #50, `tests/test_registry_cards.py` asserts
-   `frozenset(cards._ROOT_SLOTS) == chooser.ROOT_TYPE_VOCAB`, with a comment saying a fourth root
-   type upstream that is not added as a slot means every card for it is silently never emitted.
-   Widening `RootType` therefore turns that test red until `_ROOT_SLOTS` grows a `seminal` entry —
-   directly contradicting this change's own requirement that `_ROOT_SLOTS` SHALL NOT be modified.
-2. **It makes `seminal` a legal `experiment.root_type`.** After #50, `ROOT_TYPE_VOCAB` is a *single
-   shared object* backing three surfaces: `config.py:210` (a hand-written training config),
-   `metadata.py:120` (a labeling package's `root_types`), and `skeletons.py:144` (the skeleton
-   table). Widening it does not add a label-only value — it silently authorizes training a model for
-   a root type no model exists for, which is the opposite of what this change wants.
+At the age wheat is studied here the roots are technically seminal, but they are morphologically
+indistinguishable from crown roots, and this project labels them as crown. That is not a new call
+made for this change — it is a decision the project already made and has been operating on:
 
-**Why not exclude wheat.** It backfills 7 of 8 and returns the same decision later with the same
-options, having meanwhile published a registry that is normalized except for one collection.
+- The wheat collection was produced under `D:/SLEAP/20250529_seminal_root_generalist/wheat/`. The
+  **same** `seminal_root_generalist` project also holds `older_rice/` and `younger_rice/` — and rice
+  is registered with `root_type: crown` in `model_selection.yaml` (both
+  `rice/older/crown/221208_113552` and `rice/younger/crown/220821_163331`). Wheat "seminal" and rice
+  "crown" were deliberately trained as one generalist family precisely because they are the same
+  thing to a model.
+- `skeletons.yaml` already carries `root_type: crown` rows, so a wheat row needs no new value.
 
-**Why this is not undoing #50.** #50's principle is *the contract owns membership, this package does
-not restate it* — not *there is exactly one root-type vocabulary*. Both vocabularies here are
-derived from the contract via `typing.get_args`, neither is hand-written, and both carry #50's
-import guard against a `Literal` that stops being a plain `Literal`. What #50 retired was three
-hand-maintained copies of the same set; this adds one contract-derived set with a different
-membership and a stated reason for differing.
+So `seminal` is a **nickname** for a root type the vocabulary already has, not a member missing from
+it. A real nickname/alias concept — one place that records "wheat calls crown roots seminal", so
+each repo stops reinventing a display-time remap — is filed upstream as
+`sleap-roots-contracts#34`. It is **low priority and explicitly not a dependency of this change**;
+this change stores the canonical value and leaves presentation to whatever lands there.
 
-The two vocabularies split across the existing consumers as follows:
+**What this decision costs.** The collection's original name is the only place the word `seminal`
+survives, and the normalized name (D4) drops it. Anyone searching the new registry for "seminal"
+finds nothing. That is why §2's archaeology records the original collection name on every card as
+recovered provenance, and why this footnote exists in the collections table above: the mapping from
+the old name to `crown` must be discoverable by someone who only knows the wheat data by its
+seminal name.
 
-| consumer | today (post-#50) | after this change |
-|---|---|---|
-| `config.py:210` — `experiment.root_type` | `ROOT_TYPE_VOCAB` | `ROOT_TYPE_VOCAB` (unchanged) |
-| `registry/cards.py` — `_ROOT_SLOTS` | pinned to `ROOT_TYPE_VOCAB` | unchanged |
-| `metadata.py:120` — package `root_types` | `ROOT_TYPE_VOCAB` | `LABEL_ROOT_TYPE_VOCAB` |
-| `skeletons.py:144` — skeleton table | `ROOT_TYPE_VOCAB` | `LABEL_ROOT_TYPE_VOCAB` |
+**Why not add `seminal` to the contract anyway, label-side only.** It would encode a
+species-specific nickname as a distinct anatomical category in the shared contract, and then every
+consumer joining labels to models has to know that label `seminal` and model `crown` describe the
+same roots. The generalist model above is exactly that join, and it would have to special-case it.
+The naming problem is real; a vocabulary member is the wrong shape for it, which is what #34 is for.
+
+**What this removes from the change.** No `LabelRootType`, no `LABEL_ROOT_TYPE_VOCAB`, no
+`Label Root-Type Vocabulary` requirement, no unconditional contracts release, and no second
+root-type vocabulary co-existing with the one #50 just consolidated. `metadata.py` and
+`skeletons.py` keep using `ROOT_TYPE_VOCAB` exactly as #50 leaves them; only the *species*
+vocabulary splits (D5).
 
 ### D4: Collection naming convention
 
-Normalized names follow: `{species}-{mode}-{root_type}` with hyphens, matching the model
-registry's convention. Age is omitted from label collection names — unlike models, which are
-trained for specific age windows, a label set covers whatever ages were annotated and the age
-range is metadata on the card, not part of the collection identity.
+Normalized names follow `{species}-{mode}-{root_type}` with hyphens. This matches the model
+registry's convention **except for age, which is deliberately dropped** — the model side's
+`collection_id()` carries an age suffix, and this one does not. Unlike a model, which is trained and
+validated for a specific age window, a label set covers whatever ages were annotated; the range is
+metadata on the card (`age_min`/`age_max`), not part of the collection's identity. Claiming full
+parity would be wrong, and the difference is the one thing a reader comparing the two registries
+will notice first.
 
 Examples:
 - `soybean-cylinder-lateral` (was `soybean_lateral_4nodes_v007_labels`)
 - `arabidopsis-cylinder-primary` (was `cyl_arabidopsis_7-11DAG_primary_6nodes_labels`)
-- `wheat-cylinder-seminal` (was `wheat_5-14DAG_seminal_6nodes_labels`)
+- `wheat-cylinder-crown` (was `wheat_5-14DAG_seminal_6nodes_labels` — see D3 on the name change)
+
+Dropping age from the name is what makes the uniqueness guard load-bearing rather than incidental:
+two label collections for the same species/mode/root type at different ages would collide where the
+model side would not. Nothing in the current eight collides, which is exactly why the guard needs a
+synthetic fixture rather than the real data to be exercised (task 4.6).
 
 ### D5: A label-side species vocabulary, not a widened `SPECIES_VOCAB`
 
-`wheat`, `sorghum`, and `medicago` all have published label data and none has a trained model. An
+`wheat`, `sorghum`, and `medicago` all have published label data and none has a model **in
+`wandb-registry-sleap-roots-models`**. That is not the same as never having been modelled — the
+`seminal_root_generalist` work in D3 trained on wheat — so the criterion here is registry presence
+and a `model_selection.yaml` row, not the absence of any model anywhere. An
 earlier draft added all three to `SPECIES_VOCAB`. **That vocabulary is not label-side**, and
 widening it reaches further than intended:
 
@@ -211,10 +238,11 @@ Migrate one collection first as a canary (verify the consumer can read the new-s
 then migrate the rest. Same pattern `seed-registry --only` established for models.
 
 The canary is **`arabidopsis-cylinder-primary`** (was
-`cyl_arabidopsis_7-11DAG_primary_6nodes_labels`): it is a species already in both vocabularies, a
-root type already in `RootType`, and an age already in its name — so it exercises the link-and-alias
-path without also depending on D3's or D7's outcome. A canary that needed the contract bump would
-conflate two failures.
+`cyl_arabidopsis_7-11DAG_primary_6nodes_labels`): a species already in `SPECIES_VOCAB`, a root type
+already in `RootType`, and an age already in its name — so it exercises the link-and-alias path
+without also depending on D5's vocabulary split or D7's outcome. A canary that needed either would
+conflate two failures. (Since D3 no longer changes any vocabulary, it is no longer a source of
+canary risk at all.)
 
 ### D7: The required-field gate — archaeology decides, with a stated fallback
 
@@ -226,7 +254,7 @@ n_frames  n_instances  n_plants  n_scans  images_embedded   (+ registry_id, vers
 ```
 
 Most are fine. `n_frames`, `n_instances`, `node_count`, `node_names`, `skeleton_name` and
-`images_embedded` are all derivable from the artifact blob, which §2.4 already plans to read. Four
+`images_embedded` are all derivable from the artifact blob, which §2.1 and §2.4 already plan to read. Four
 are not:
 
 - **`age_min` / `age_max`** — required `int`s. Six collection names carry an age; the two soybean
@@ -243,10 +271,13 @@ fallback.** Concretely:
 1. §2 attempts recovery for all four fields on all eight collections — artifact `description` free
    text, the lab share, and Bloom (task 2.1), recorded per collection with a confidence level
    (task 2.2).
-2. **If every collection yields all four**, no further contract change is needed and D3's
-   `LabelRootType` is the whole of the bump.
-3. **If any collection does not**, the four fields are relaxed to `Optional` in the *same* contracts
-   release as `LabelRootType`, and the unrecoverable ones are set to `null` under D1's rule.
+2. **If every collection yields all four**, no contract change is needed at all — D3 no longer
+   requires one, so this branch means the change ships against an existing release and §1 reduces
+   to the `a7`/`a8` pin catch-up.
+3. **If any collection does not**, those fields — and only those — are relaxed to `Optional` in a
+   contracts release, and the unrecoverable ones are set to `null` under D1's rule. This is now the
+   *only* thing that could make a release necessary, so §2's report decides whether §1 has a
+   contracts change in it at all.
 
 **Why gate rather than relax now.** Relaxing re-litigates a line the contract drew deliberately and
 with this change named in the comment. Six of eight collections have an age in the name, so the
@@ -274,13 +305,19 @@ and the task list now enforces that ordering.
   are required `int`s, so "null and flagged" is *not* available for them without the upstream
   relaxation D7 describes. This is the risk that can extend the change's scope into a second
   contracts release; it is the reason §2 gates §3.
-- **This change is blocked on a contracts release.** D3 is unconditional, so `0.1.0a9` must ship
-  before §3 can construct a wheat card. The pin bump also carries `a7`/`a8`, which this repo has
-  not yet absorbed.
-- **Two vocabularies where #50 left one.** `ROOT_TYPE_VOCAB` and `LABEL_ROOT_TYPE_VOCAB` will
-  co-exist, and a reader who remembers #50 may read that as regression. Both are contract-derived
-  and guarded, and the split is asserted by test at each consumer — but the *naming* is the
-  mitigation that matters, and `LABEL_`-prefixing both new vocabularies is deliberate.
+- **A contracts release may still be needed, but only D7 can require it.** If §2 recovers all four
+  gated fields, none is needed. The pin still has `a7`/`a8` to absorb either way, independently of
+  this change.
+- **One vocabulary splits where #50 consolidated.** `SPECIES_VOCAB` and `LABEL_SPECIES_VOCAB` will
+  co-exist, and a reader who remembers #50 may read that as regression. It is not the same case:
+  #50 retired three hand-maintained copies of *one* set, while this defines a second set with a
+  different membership and a stated reason for differing, derived from the first
+  (`SPECIES_VOCAB | {...}`) so the relation cannot drift. Root type does **not** split — D3 is what
+  keeps that side at exactly one vocabulary.
+- **The word `seminal` disappears from the registry.** D3 records wheat's root type as `crown` and
+  D4's normalized name drops the nickname, so someone who knows this data only as "the wheat seminal
+  labels" cannot find it by that name. Mitigated by recording the original collection name on every
+  card (§2) rather than by keeping the nickname in a vocabulary.
 - **Old collection names remain.** They are not deleted, only de-aliased. Consumers using the old
   names directly (not via `production` alias) will still resolve, but won't get `LabelCard`
   metadata.
@@ -292,9 +329,18 @@ deleted**, and re-points `production` aliases. The forward order is D6's; what f
 rollback story for each step, since a failed `--execute` partway through the eight is the realistic
 bad case.
 
+**The live steps do not ship in this PR.** They run against production wandb after the code lands,
+as their own PR with no CI, run by hand with a resolvable credential and explicit sign-off. That is
+the precedent `update-model-card-selectors` set — its `## 6. Migration` is headed "gated, and a
+separate PR after this change archives", and it carries a `6.0` rollback-prep task that snapshots
+the current collection → aliased-version mapping *and rehearses the rollback on the canary* before
+anything is touched. §7 here mirrors both: 7.0 is the snapshot and rehearsal, and §7 is the
+follow-up PR's scope. This PR is §0–§6: code, offline tests, and the recorded archaeology.
+
 **Forward:**
 
-1. Contracts `0.1.0a9` ships (D3, plus D7's relaxation if §2 requires it); this repo's pin bumps.
+1. **Only if §2's report requires it** (D7): a contracts release relaxing the unrecovered fields.
+   Otherwise this step is the `a7`/`a8` pin catch-up alone, which is not gated on anything here.
 2. Dry run (`seed-label-registry`, no `--execute`) — prints all eight planned collections and their
    card metadata, contacting nothing. Reviewed by hand against §2's recorded findings.
 3. Canary: `--execute --only arabidopsis-cylinder-primary`. Verify the downstream consumer reads the
@@ -336,7 +382,10 @@ bad case.
   **Resolved:** `medicago` is in scope, added to `LABEL_SPECIES_VOCAB` (not `SPECIES_VOCAB`) along
   with `wheat` and `sorghum`. See D5.
 - ~~**Q3:** Does the contract's `RootType` accept `seminal`?~~
-  **Resolved:** no, on the pin and at HEAD. See D3.
+  **Resolved:** no, on the pin and at HEAD — and the question turned out to be the wrong one. Wheat's
+  roots at this age are labeled `crown` in this project, so no vocabulary needs `seminal`. The
+  nickname problem is real and tracked upstream as `sleap-roots-contracts#34`, low priority and not
+  a dependency. See D3.
 - **Q4 (open, settled by §2):** Are `age_min`/`age_max` recoverable for the two soybean collections,
   and are `n_plants`/`n_scans` recoverable for any of the eight? This is D7's gate. It is listed as
   open deliberately — §2 exists to answer it, and §3 cannot begin until it does.

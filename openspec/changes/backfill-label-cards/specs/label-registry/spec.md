@@ -3,9 +3,15 @@
 ### Requirement: Label Collection Backfill onto LabelCard
 
 The package SHALL map each of the 8 existing `wandb-registry-sleap-roots-labels` collections onto
-the `LabelCard` contract from `sleap-roots-contracts`, constructing metadata from the artifact's
-existing description, metadata keys, and `.slp` content. Provenance fields that cannot be recovered
-from the artifact or cross-referenced against Bloom SHALL be set to `null` — no values SHALL be
+the `LabelCard` contract from `sleap-roots-contracts`. Provenance is reconstructed **once, by hand**
+(the archaeology pass) and **committed to the repository as a checked-in mapping**; the package
+SHALL then build every card from that committed mapping plus values read programmatically from the
+artifact's `.slp` content, and SHALL NOT depend on a human repeating the reconstruction. Where the
+two disagree — a committed count against the same count read from the blob — the backfill SHALL
+fail naming the collection and the field rather than silently preferring either.
+
+Provenance fields that cannot be recovered from the artifact or cross-referenced against Bloom
+SHALL be set to `null` — no values SHALL be
 fabricated to satisfy the schema. This applies to the fields the contract declares `Optional`; a
 required field SHALL NOT be satisfied with a placeholder, and a collection whose required fields
 cannot all be sourced SHALL fail loudly rather than be stamped. Each collection SHALL be verified as
@@ -35,9 +41,18 @@ single-species content before a `LabelCard` is stamped onto it.
 
 #### Scenario: Single-species verification rejects mixed content
 
-- **WHEN** a collection is found to contain frames from more than one species
-- **THEN** the backfill process rejects that collection with a clear error
+- **WHEN** the backfill runs against a collection whose committed mapping records more than one
+  species, or whose blob-derived species set has more than one member
+- **THEN** the backfill rejects that collection by name with a clear error
 - **AND** no `LabelCard` is stamped onto it
+- **AND** the check runs as code on every invocation, not as a one-time manual inspection
+
+#### Scenario: The committed mapping and the blob must agree
+
+- **WHEN** a value present in both the committed mapping and the artifact blob disagrees between
+  them (for example `node_count`, `n_frames`, or species)
+- **THEN** the backfill fails naming the collection and the field
+- **AND** neither value is silently preferred
 
 ### Requirement: Normalized Label Collection Naming
 
@@ -66,38 +81,39 @@ SHALL NOT carry the `production` alias — only the normalized collections SHALL
 - **THEN** every card maps to a unique collection id
 - **AND** duplicate ids fail the migration before any artifact is linked
 
-### Requirement: Label Root-Type Vocabulary
+### Requirement: Canonical Root Types, With No Label-Side Vocabulary
 
-The label-side root-type vocabulary SHALL be a strict superset of the model-side vocabulary, adding
-`seminal` to `primary`, `lateral`, and `crown`. It SHALL be derived from the contract-owned
-`sleap_roots_contracts.LabelRootType`, not a value list restated here or in this package, and SHALL
-carry the same import guard the other contract-derived vocabularies use — a `LabelRootType` that
-stops being a plain `Literal` SHALL raise at import naming the symbol, rather than degrading to an
-empty vocabulary. A label collection MAY describe a root type for which no trained model exists.
+Every backfilled `LabelCard` SHALL record a `root_type` drawn from the contract-owned
+`sleap_roots_contracts.RootType` — `primary`, `lateral`, or `crown`. A collection whose *name*
+carries a species-specific nickname for one of those root types SHALL be recorded under the
+canonical value, not the nickname: the wheat collection named `seminal` is stamped `crown`. This
+change SHALL NOT introduce a label-side root-type vocabulary, SHALL NOT widen `RootType`, and SHALL
+NOT re-annotate `LabelCard.root_type`. `chooser.ROOT_TYPE_VOCAB`, `registry/cards.py`'s
+`_ROOT_SLOTS`, and the `experiment.root_type` field of a training config SHALL all continue to
+accept exactly `primary`, `lateral`, and `crown`, on both the label and the model side.
 
-The model-side vocabulary SHALL NOT be widened to accommodate this.
-`sleap_roots_contracts.RootType`, `chooser.ROOT_TYPE_VOCAB`, `registry/cards.py`'s `_ROOT_SLOTS`,
-and the `experiment.root_type` field of a training config SHALL all continue to accept exactly
-`primary`, `lateral`, and `crown`.
+Because the nickname is dropped from the normalized collection name, the original collection name
+SHALL be recorded on the card as recovered provenance, so a collection remains discoverable by the
+name it was published under.
 
-#### Scenario: Seminal is a valid label root type
+#### Scenario: A nickname root type is recorded under its canonical value
 
-- **WHEN** a label collection is built for root type `seminal`
-- **THEN** the root type validates against the label vocabulary
-- **AND** a `LabelCard` can be constructed with `root_type="seminal"`
+- **WHEN** the collection named `wheat_5-14DAG_seminal_6nodes_labels` is backfilled
+- **THEN** its `LabelCard` records `root_type` `crown`
+- **AND** the card validates against the `LabelCard` contract with no contract change
+- **AND** its original collection name is recorded on the card
 
-#### Scenario: The two vocabularies differ by exactly seminal
+#### Scenario: No root type outside the contract vocabulary is emitted
 
-- **WHEN** the label-side and model-side root-type vocabularies are compared
-- **THEN** the label-side vocabulary is a strict superset of the model-side one
-- **AND** their difference is exactly `{"seminal"}`
-- **AND** both are derived from the contract rather than restated in this package
+- **WHEN** the full set of label cards is expanded
+- **THEN** every card's `root_type` is a member of `sleap_roots_contracts.RootType`
+- **AND** no card carries `seminal`
 
-#### Scenario: Model vocabulary is unchanged
+#### Scenario: Root-type vocabularies are unchanged on both sides
 
-- **WHEN** a model card is expanded from the selection matrix
-- **THEN** only `primary`, `lateral`, and `crown` are valid root types
-- **AND** `seminal` is not accepted in the model-side vocabulary
+- **WHEN** the label-side and model-side root-type vocabularies are compared after this change
+- **THEN** they are the same object, `chooser.ROOT_TYPE_VOCAB`, derived from the contract
+- **AND** `seminal` is rejected as a labeling package `root_types` entry
 - **AND** `seminal` is rejected as an `experiment.root_type` in a training config
 
 ### Requirement: Label Species Vocabulary
@@ -133,8 +149,11 @@ The package SHALL provide a `seed-label-registry` subcommand that reads the back
 constructs `LabelCard` metadata, and — by default — runs a dry run printing planned collections
 and metadata without contacting wandb. Publishing SHALL require `--execute`, which SHALL check for
 a resolvable wandb credential before proceeding. The CLI SHALL accept `--only <collection_id>` for
-canary migration and `--verify` for read-back, following the same patterns as the model
-`seed-registry` command.
+canary migration, `--verify` for read-back, and `--force` to re-link and re-point an
+already-migrated collection, following the same patterns as the model `seed-registry` command.
+The network layer SHALL accept an injected wandb API object (defaulting to `None` and created
+lazily) and SHALL import `wandb` only on the network path, so every behaviour above is testable
+without a live registry — the same seam `registry/publish.py` already uses.
 
 #### Scenario: Dry run prints plan without network
 
