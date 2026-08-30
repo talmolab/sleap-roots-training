@@ -28,7 +28,7 @@ publishing rule.
 ### Requirement: ModelCard Selection Metadata
 
 Each card SHALL produce a metadata mapping containing **exactly** the selection dimensions the
-consumer reads — a scalar `root_type` (one of `"primary"`, `"lateral"`, `"crown"`) and a non-empty
+consumer reads — a scalar `root_type` (a member of the contract-owned `RootType` vocabulary) and a non-empty
 `selectors` list, where each selector carries `species` (str), `mode` (a member of the contract-owned
 `Mode` vocabulary, stored raw with its space preserved and never the hyphenated collection-id slug),
 `age_min` (int ≥ 0), and `age_max` (int ≥ 0), and **exactly** those four keys and nothing else —

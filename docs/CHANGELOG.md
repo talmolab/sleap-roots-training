@@ -77,27 +77,33 @@ All notable changes to this project are documented here. The format is based on
   the `Mode` collapse above deliberately left (#38). `chooser.ROOT_TYPE_VOCAB` is now derived from
   `sleap_roots_contracts.RootType`, retiring the two hand-written copies of `{"primary", "lateral",
   "crown"}` that existed only as membership sets — in `config.py` and in `labeling/metadata.py`.
-  Exactly one *ordered* copy remains, `registry/cards.py`'s `_ROOT_SLOTS`, kept deliberately and
-  for its *ordering* rather than its membership (see below) — alongside the slot-to-field mapping
-  four lines below it, which `SelectionRow`'s `primary_model_id` / `lateral_model_id` /
-  `crown_model_id` field names bake in anyway and so cannot be collapsed. The old guard compared
+  Exactly one copy remains, `registry/cards.py`'s `_ROOT_SLOTS`, kept deliberately (see below)
+  because it is the *row's* slot list rather than a vocabulary — `SelectionRow`'s
+  `primary_model_id` / `lateral_model_id` / `crown_model_id` field names bake those three in
+  anyway, and the mapping four lines below it is keyed by exactly them. The old guard compared
   the two retired copies *to each other*, which could
   only ever catch one of them going stale; identity against the contract is asserted at each
   consumer instead. **Nothing accepted or published changes:** `get_args(RootType)` on the pinned
-  `0.1.0a6` is set-identical to the vocabulary it replaces, so no config, package, or card that
-  validated before stops validating. Carries the same import guard as `MODE_VOCAB` — a `RootType`
+  `0.1.0a8` is set-identical to the vocabulary it replaces (re-checked after the #47 bump, which
+  moved the pin from `0.1.0a6`), so no config, package, or card that validated before stops
+  validating. Carries the same import guard as `MODE_VOCAB` — a `RootType`
   that stops being a plain `Literal` raises at import naming `RootType`, rather than degrading to
   "nothing is valid" — with its own fault injection over all six reshapes.
 
   **`registry/cards.py` keeps its own `_ROOT_SLOTS`, on purpose.** Membership is the contract's;
-  *ordering* is not. `_ROOT_SLOTS` is an ordered tuple whose order decides which order
-  `expand_rows_to_cards` emits cards in, and so the order an operator reads them in the
-  `seed-registry` plan. Reordering a `Literal`'s members is a no-op for a type annotation and could
-  land upstream in a patch release; deriving slot order from the contract would turn that no-op into
-  a silent reordering of every published card. The tuple is now pinned by a test, as is the emission
-  order it governs — nothing in the suite constrained cross-root card order before (the card tests
-  use a set, `sorted()`, and `Counter`), so `expand_rows_to_cards` could have stopped honoring it
-  unnoticed.
+  *which slots a selection row carries* is not. `_ROOT_SLOTS` is indexed into a mapping keyed by
+  `SelectionRow`'s three `*_model_id` fields, so deriving it from `get_args(RootType)` would not
+  emit more cards if the contract gained a fourth root type — it would raise `KeyError` inside
+  `seed-registry`, on a row that is perfectly valid. That the tuple spells today's `RootType` is a
+  coincidence worth asserting rather than a derivation worth taking, so two tests pin it from both
+  sides: against `ROOT_TYPE_VOCAB`, and against the row's own field names read off the dataclass.
+
+  This entry is rebased onto #47, which changed the argument: before it, `_ROOT_SLOTS` order also
+  decided card emission order, and that was the reason given for keeping the tuple local. #47 made
+  emission order `sorted((source_model_id, root_type))`, so slot order is now unobservable and that
+  reason is retired. Emission order is pinned by a test anyway, because nothing else in the suite
+  pins the *absolute* order — `test_expansion_is_independent_of_row_order` and the `PYTHONHASHSEED`
+  pair prove only that it is stable, and both pass under a stably-wrong one.
 
   `openspec/specs/training-config/spec.md` and `docs/training.md` now name `ROOT_TYPE_VOCAB` and its
   contract ownership instead of restating `primary` / `lateral` / `crown`, mirroring the
