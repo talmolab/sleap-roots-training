@@ -173,6 +173,30 @@ All notable changes to this project are documented here. The format is based on
 - `tests/test_train_extra.py` (CI-safe pins contract) and `tests/test_gpu.py`
   (integration-marked GPU smoke test, skipped without a CUDA device).
 
+### Fixed
+- `scripts/dump_val_metrics.py` no longer aborts the whole batch on one corrupt `.npz` (#52). Its
+  handler caught `(OSError, ValueError, EOFError, zipfile.BadZipFile)`, but numpy ≥ 2 raises
+  `pickle.UnpicklingError`, which subclasses none of them — so the handler stopped firing and a
+  single unreadable file killed the run. **Runs listed after a corrupt one were silently never
+  dumped**, defeating both the guarantee the handler's comment claims and `main`'s deliberate
+  list-materialization. Older numpy raised `OSError` here, so this is numpy's error surface moving
+  underneath a closed type list rather than a mistake at the time of writing.
+
+  The fix separates reading from formatting: the file read is guarded by `except Exception` and
+  the `_emit` formatting sits outside it. Both halves are load-bearing. `np.load` returns a *lazy*
+  `NpzFile` whose members are unpickled on access, so guarding `np.load` alone would still miss a
+  well-formed archive holding a truncated pickle — the shape an interrupted `sleap-nn train`
+  actually produces, and the likelier failure of the two. Keeping `_emit` outside the guard means a
+  bug in our own formatting crashes loudly instead of being reported to the operator as
+  `CORRUPT (<path>)`, sending them to investigate a data file that is fine.
+
+  **These tests now run in CI.** They were marked `integration` "so they run only where the train
+  extra is installed", but `numpy` is an unconditional requirement of both `pandas` and `sleap-io`,
+  which are *core* dependencies — so the premise was false and the marker only meant the tests ran
+  nowhere (CI runs `-m "not integration"`). That is why the bug survived on `main` with a green
+  badge and a test that caught it. The marker is removed; #53 tracks the 5 integration tests still
+  in that position.
+
 ## [0.0.1a0] - 2026-06-24
 
 ### Added

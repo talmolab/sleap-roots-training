@@ -3,8 +3,16 @@
 Both scripts import their heavy dep lazily (``clean_pkg`` -> ``sleap_io``, ``dump_val_metrics`` ->
 ``numpy``), so the modules import in the base env and the dependency-free logic (video selection,
 the ``inp == out`` / empty-package / arg guards, the MISSING path) is covered on the normal CI
-matrix. The paths that actually touch ``numpy`` (``_emit`` formatting, loading a real ``.npz``) are
-marked ``integration`` so they run only where the train extra is installed.
+matrix.
+
+The ``numpy`` paths (``_emit`` formatting, loading a real ``.npz``) used to be marked
+``integration`` "so they run only where the train extra is installed". That premise was wrong:
+``numpy`` is an unconditional requirement of both ``pandas`` and ``sleap-io``, which are *core*
+dependencies, so it is present in every install including the base CI env
+(``uv sync --locked --group dev``). The marker bought nothing and cost coverage — CI runs
+``-m "not integration"``, so these tests ran nowhere, which is how the corrupt-``.npz`` bug they
+cover survived on ``main``. They are unmarked. See #53 for the integration tests still in that
+position.
 """
 
 from __future__ import annotations
@@ -238,7 +246,7 @@ def test_dump_val_metrics_main_usage_and_exit_codes(tmp_path, monkeypatch):
     assert dump_val_metrics.main(["dump_val_metrics.py", "absent"]) == 1  # a run failed
 
 
-# --- dump_val_metrics (integration: needs numpy) ----------------------------------------------
+# --- dump_val_metrics -------------------------------------------------------------------------
 
 
 def _write_metrics_npz(path: Path, metrics: dict) -> None:
@@ -248,7 +256,30 @@ def _write_metrics_npz(path: Path, metrics: dict) -> None:
     np.savez(path, metrics=np.array(metrics, dtype=object))
 
 
-@pytest.mark.integration
+def _write_npz_with_truncated_pickle(path: Path) -> None:
+    """Write a structurally valid ``.npz`` whose member holds a truncated pickle.
+
+    Byte-flipping a member instead would break the zip CRC and raise ``BadZipFile``, which the
+    handler already caught — so it would not exercise the uncaught path at all. Rewriting the
+    archive with ``zipfile`` recomputes a correct CRC, so the damage survives the zip layer and
+    reaches the unpickler. That is what a ``.npz`` from an interrupted ``sleap-nn train`` (killed
+    job, full disk) actually looks like: the archive is well-formed, the pickle inside is not.
+    """
+    import zipfile
+
+    source = path.parent / "_source_for_truncation.npz"
+    _write_metrics_npz(source, {"distance_metrics": {"avg": 12.3}})
+    # `with` rather than relying on the temporary being refcount-collected before the unlink:
+    # on Windows a still-open handle makes `source.unlink()` raise PermissionError.
+    with zipfile.ZipFile(source) as archive:
+        member = archive.read("metrics.npy")
+    source.unlink()
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
+        # 12 is arbitrary — any cut that removes the pickle's trailing STOP opcode leaves the
+        # unpickler reading past the end. Nothing depends on the exact count.
+        archive.writestr("metrics.npy", member[:-12])
+
+
 def test_emit_unwraps_dicts_scalars_and_summarizes_arrays(capsys):
     import numpy as np
 
@@ -271,7 +302,6 @@ def test_emit_unwraps_dicts_scalars_and_summarizes_arrays(capsys):
     assert "sample=" in out  # the non-numeric path array
 
 
-@pytest.mark.integration
 def test_dump_reads_good_npz_and_reports_corrupt(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     good = tmp_path / "models" / "run_ok" / "metrics.val.0.npz"
@@ -284,6 +314,77 @@ def test_dump_reads_good_npz_and_reports_corrupt(tmp_path, monkeypatch, capsys):
     bad.write_bytes(b"not a real npz")
     assert dump_val_metrics.dump("run_bad") is False
     assert "CORRUPT" in capsys.readouterr().out
+
+
+def test_dump_reports_a_member_that_fails_to_unpickle(tmp_path, monkeypatch, capsys):
+    """The second uncaught path, and the one a narrow guard around ``np.load`` would miss.
+
+    ``np.load`` returns a *lazy* ``NpzFile``: members are decompressed and unpickled on
+    ``__getitem__``, not at load time. So a file whose archive is well-formed but whose member is
+    a truncated pickle raises inside the read loop, well after ``np.load`` has returned happily.
+    Both paths raise ``UnpicklingError``, which subclasses none of ``OSError`` / ``ValueError`` /
+    ``EOFError`` / ``BadZipFile``.
+    """
+    monkeypatch.chdir(tmp_path)
+    truncated = tmp_path / "models" / "run_trunc" / "metrics.val.0.npz"
+    truncated.parent.mkdir(parents=True, exist_ok=True)
+    _write_npz_with_truncated_pickle(truncated)
+
+    assert dump_val_metrics.dump("run_trunc") is False
+    out = capsys.readouterr().out
+    assert "CORRUPT" in out
+    # The exception type is named, so an operator can tell a truncated write apart from a
+    # wholly unreadable file without re-running under a debugger.
+    assert "UnpicklingError" in out
+
+
+def test_a_corrupt_run_does_not_abort_the_batch(tmp_path, monkeypatch, capsys):
+    """The guarantee both comments in the script claim, asserted end-to-end through ``main``.
+
+    ``dump``'s handler says "a truncated/corrupt npz must not abort the rest of the batch", and
+    ``main`` materializes a list "so EVERY run is dumped even if an earlier one fails". Calling
+    ``dump`` directly cannot see whether that holds: a fix that left ``main`` propagating would
+    still pass every other test here. The good run *after* the corrupt one is the whole point —
+    that is the output silently lost before this fix.
+    """
+    monkeypatch.chdir(tmp_path)
+    models = tmp_path / "models"
+    _write_metrics_npz(models / "run_ok" / "metrics.val.0.npz", {"m": {"avg": 12.3}})
+    (models / "run_bad").mkdir(parents=True, exist_ok=True)
+    (models / "run_bad" / "metrics.val.0.npz").write_bytes(b"not a real npz")
+    _write_metrics_npz(models / "run_later" / "metrics.val.0.npz", {"m": {"avg": 45.6}})
+
+    exit_code = dump_val_metrics.main(
+        ["dump_val_metrics.py", "run_ok", "run_bad", "run_later"]
+    )
+    out = capsys.readouterr().out
+
+    assert "12.3" in out
+    assert "CORRUPT" in out
+    assert "45.6" in out, "the run after the corrupt one must still be dumped"
+    assert exit_code == 1  # nonzero, because one of the three failed
+
+
+def test_a_bug_in_emit_is_not_reported_as_a_corrupt_file(tmp_path, monkeypatch, capsys):
+    """The discriminator for guarding the *read* rather than the whole function.
+
+    The untrusted thing is the file, not our own formatting code. If the ``try`` also wrapped
+    ``_emit``, a genuine programming error in formatting would reach the operator as
+    ``CORRUPT (<path>)`` — sending them to investigate a data file that is perfectly fine, while
+    the real bug stays invisible. A broad ``except Exception`` around the whole body passes every
+    other test in this file and fails only this one.
+    """
+    monkeypatch.chdir(tmp_path)
+    good = tmp_path / "models" / "run_ok" / "metrics.val.0.npz"
+    _write_metrics_npz(good, {"distance_metrics": {"avg": 12.3}})
+
+    def _boom(key, value):
+        raise AttributeError("simulated bug in _emit")
+
+    monkeypatch.setattr(dump_val_metrics, "_emit", _boom)
+    with pytest.raises(AttributeError, match="simulated bug"):
+        dump_val_metrics.dump("run_ok")
+    assert "CORRUPT" not in capsys.readouterr().out
 
 
 # --- regen_model_checksums (consumes the Card API) ---------------------------------------------
