@@ -61,6 +61,11 @@ def backend_stub(monkeypatch, tmp_path):
     binary.parent.mkdir(parents=True, exist_ok=True)
     binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     monkeypatch.setattr(backend, "resolve_sleap_nn", lambda: binary)
+    # The version probe shells out through `subprocess.run`, which builds a real `Popen` --
+    # patched below to a recorder that implements only `wait`. Stub the probe itself so the
+    # double stays honest about what it models (the training invocation) instead of being
+    # dragged into standing in for an unrelated call.
+    monkeypatch.setattr(backend, "backend_version", lambda binary: "sleap-nn 0.2.0")
     _Recorder.calls = []
     _Recorder.statuses = [0]
     monkeypatch.setattr(backend.subprocess, "Popen", _Recorder)
@@ -138,7 +143,7 @@ def test_run_stages_artifacts_and_invokes_the_backend(
     assert result.exit_code == 0, result.output
 
     run_dir = tmp_path / "ckpt" / "r1"
-    resolved = run_dir / "resolved_config.yaml"
+    resolved = run_dir / "emitted_config.yaml"
     assert resolved.is_file()
     assert (run_dir / "source_config.yaml").read_bytes() == path.read_bytes()
 
@@ -163,7 +168,7 @@ def test_run_reports_the_run_directory_on_success(backend_stub, run_config, tmp_
     result = _invoke(["run", str(run_config())])
     assert result.exit_code == 0, result.output
     assert str(tmp_path / "ckpt" / "r1") in result.output
-    assert "resolved_config.yaml" in result.output
+    assert "emitted_config.yaml" in result.output
     assert "source_config.yaml" in result.output
 
 
@@ -174,7 +179,7 @@ def test_resolved_config_override_relocates_only_the_emitted_config(
     result = _invoke(["run", str(run_config()), "--resolved-config", str(elsewhere)])
     assert result.exit_code == 0, result.output
     assert elsewhere.is_file()
-    assert not (tmp_path / "ckpt" / "r1" / "resolved_config.yaml").exists()
+    assert not (tmp_path / "ckpt" / "r1" / "emitted_config.yaml").exists()
     assert (tmp_path / "ckpt" / "r1" / "source_config.yaml").is_file()
 
 
@@ -250,6 +255,9 @@ def test_wandb_enabled_without_a_credential_changes_nothing(
     before = _snapshot(tmp_path)
     result = _invoke(["run", str(path)])
     _assert_nothing_happened(result, backend_stub, tmp_path, before)
+    # Assert *why* it failed. Without this the test passes if `use_wandb: true` fails for any
+    # reason at all -- including a bug that breaks every real W&B run.
+    assert "wandb" in result.output.lower() or "api key" in result.output.lower()
 
 
 def test_unusable_run_name_changes_nothing(backend_stub, run_config, tmp_path):
@@ -307,7 +315,7 @@ def test_a_failed_run_keeps_its_artifacts(backend_stub, run_config, tmp_path):
     result = _invoke(["run", str(run_config())])
     assert result.exit_code == 1
     run_dir = tmp_path / "ckpt" / "r1"
-    assert (run_dir / "resolved_config.yaml").is_file()
+    assert (run_dir / "emitted_config.yaml").is_file()
     assert (run_dir / "source_config.yaml").is_file()
 
 
@@ -399,7 +407,7 @@ def test_end_to_end_through_a_real_console_script(run_config, tmp_path, monkeypa
 
     result = _invoke(["run", str(run_config())])
     assert result.exit_code == 0, result.output
-    resolved = tmp_path / "ckpt" / "r1" / "resolved_config.yaml"
+    resolved = tmp_path / "ckpt" / "r1" / "emitted_config.yaml"
     assert sentinel.read_text(encoding="utf-8").split() == [
         "train",
         "--config",
@@ -426,3 +434,129 @@ def test_a_signal_killed_backend_exits_128_plus_n(run_config, tmp_path, monkeypa
     result = _invoke(["run", str(run_config())])
     assert result.exit_code == 137
     assert "signal 9" in result.output + str(result.stderr_bytes or b"")
+
+
+def test_a_backend_that_cannot_launch_is_reported_cleanly(
+    run_config, tmp_path, monkeypatch
+):
+    """A launch failure lands after staging, so it must not arrive as a traceback."""
+    binary = tmp_path / "bin" / "sleap-nn"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    monkeypatch.setattr(backend, "resolve_sleap_nn", lambda: binary)
+    monkeypatch.setattr(backend, "backend_version", lambda binary: None)
+
+    def boom(argv, **kwargs):
+        raise OSError(8, "Exec format error")
+
+    monkeypatch.setattr(backend.subprocess, "Popen", boom)
+    result = _invoke(["run", str(run_config())])
+    assert result.exit_code != 0
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "could not start" in result.output
+    # The artifacts stay: they are the record of what was attempted.
+    assert (tmp_path / "ckpt" / "r1" / "source_config.yaml").is_file()
+
+
+def test_the_success_line_names_the_override_path(backend_stub, run_config, tmp_path):
+    """It used to hard-code both constants, so it named a file that was not there."""
+    elsewhere = tmp_path / "elsewhere" / "emitted.yaml"
+    result = _invoke(["run", str(run_config()), "--resolved-config", str(elsewhere)])
+    assert result.exit_code == 0, result.output
+    assert str(elsewhere.resolve()) in result.output
+    assert "emitted_config.yaml" not in result.output.split("OK:")[-1]
+
+
+def test_wandb_enabled_with_a_credential_reaches_the_backend(
+    backend_stub, run_config, monkeypatch, isolate_wandb_env
+):
+    """The production path: `use_wandb: true` *and* a credential present.
+
+    `conftest.VALID_CONFIG` omits `use_wandb`, so every other test exercises the disabled path.
+    A false positive in the credential pre-flight would break every real run on the GPU box --
+    where every committed baseline example sets `use_wandb: true` -- while CI stayed green.
+    """
+    monkeypatch.setenv("WANDB_API_KEY", "0" * 40)
+    path = run_config(
+        overrides={
+            "trainer_config": {
+                "use_wandb": True,
+                "wandb": {"entity": "e", "project": "p"},
+            }
+        }
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code == 0, result.output
+    assert len(backend_stub.calls) == 1
+
+
+def test_an_unresolvable_interpolation_is_reported_without_a_traceback(
+    backend_stub, run_config
+):
+    """`${oc.env:UNSET}` is an ordinary mistake, not an exotic one.
+
+    `validate` and `emit` never resolve, so they exit 0 on these configs; `run` reads through
+    OmegaConf and used to surface the raw InterpolationResolutionError.
+    """
+    path = run_config(
+        overrides={
+            "trainer_config": {"ckpt_dir": "${oc.env:SLEAP_ROOTS_NOT_SET_ANYWHERE}"}
+        }
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code != 0
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert backend_stub.calls == []
+
+
+def test_staged_config_matches_emit_for_a_hand_written_config(
+    backend_stub, tmp_path, monkeypatch
+):
+    """Byte-identity with teeth on every platform, not only the Windows leg.
+
+    The other byte-identity test feeds machine-generated `to_yaml` output, so a buggy
+    `to_yaml(load(source))` would round-trip to identical bytes and pass on ubuntu/mac. This
+    stages a config carrying a comment and out-of-order keys, which only survives if the
+    emitted file really is `emit`'s output rather than a copy of the input.
+    """
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "hand_written.yaml"
+    source.write_text(
+        "# a comment that must NOT survive into the emitted config\n"
+        "trainer_config:\n"
+        f"  ckpt_dir: {str(tmp_path / 'ckpt')!r}\n"
+        "  run_name: hand1\n"
+        "  seed: 7\n"
+        "experiment:\n"
+        "  species: arabidopsis\n"
+        "  mode: cylinder\n"
+        "  root_type: primary\n"
+        "  dataset:\n"
+        "    name: d\n"
+        "    path: data/d.slp\n"
+        "data_config:\n"
+        "  train_labels_path:\n"
+        "  - data/d.slp\n"
+        "  preprocessing:\n"
+        "    ensure_rgb: false\n"
+        "    ensure_grayscale: false\n"
+        "model_config:\n"
+        "  backbone_config:\n"
+        "    unet:\n"
+        "      filters: 4\n"
+        "  head_configs:\n"
+        "    single_instance:\n"
+        "      confmaps:\n"
+        "        sigma: 1.5\n",
+        encoding="utf-8",
+    )
+    assert _invoke(["run", str(source)]).exit_code == 0
+    emitted = tmp_path / "ckpt" / "hand1" / "emitted_config.yaml"
+    out = tmp_path / "via_emit.yaml"
+    assert _invoke(["emit", str(source), "-o", str(out)]).exit_code == 0
+    assert emitted.read_bytes() == out.read_bytes()
+    assert b"a comment that must NOT survive" not in emitted.read_bytes()
+    # ...while the source copy keeps it verbatim, comment and all.
+    assert (
+        tmp_path / "ckpt" / "hand1" / "source_config.yaml"
+    ).read_bytes() == source.read_bytes()

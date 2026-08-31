@@ -232,7 +232,7 @@ def test_guide_run_command_in_fenced_block():
 
 def test_guide_run_section_documents_the_artifacts_and_the_gate():
     section = _run_section(_read())
-    for token in ("resolved_config.yaml", "source_config.yaml", "[train]", "run_name"):
+    for token in ("emitted_config.yaml", "source_config.yaml", "[train]", "run_name"):
         assert token in section, f"the one-command section must mention {token}"
 
 

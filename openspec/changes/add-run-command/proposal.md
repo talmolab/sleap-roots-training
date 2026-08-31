@@ -28,7 +28,7 @@ for everything except this one composition.
   `training_config.yaml` into `<ckpt_dir>/<run_name>/` — but only after trainer construction, and
   never carrying the repo-owned `experiment` block, which is stripped by construction. So `run`
   writes `source_config.yaml` (the input config, `experiment` block intact — the identity no
-  sleap-nn artifact records) and `resolved_config.yaml` (the emitted config, on disk *before* the
+  sleap-nn artifact records) and `emitted_config.yaml` (the emitted config, on disk *before* the
   backend starts, so a run that dies during setup still has a record). Both LF-normalized and
   written atomically.
 - **Refuse to reuse a run directory.** The backend auto-suffixes to `<run_name>-1` when

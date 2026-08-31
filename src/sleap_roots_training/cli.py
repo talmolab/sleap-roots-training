@@ -652,6 +652,37 @@ def labeling_validate_command(package_dir: Path) -> None:
     )
 
 
+def _warn_on_dataset_mismatch(cfg) -> None:
+    """Note when the recorded dataset identity is not what the backend will actually read.
+
+    ``run`` promotes ``experiment.dataset.path`` into the published lineage record, so a config
+    where it disagrees with ``data_config.train_labels_path`` produces a ``source_config.yaml``
+    that faithfully records the wrong dataset. Pre-existing in ``validate``, but this is the
+    command that makes the field load-bearing, so it is the command that should say something.
+    A note rather than a refusal: the two are not required to be equal (a packaged split can
+    legitimately differ), and failing a run over it would be a step too far.
+
+    Args:
+        cfg: A loaded training config.
+    """
+    dataset = OmegaConf.select(cfg, "experiment.dataset.path", default=None)
+    train_paths = (
+        OmegaConf.select(cfg, "data_config.train_labels_path", default=None) or []
+    )
+    if isinstance(train_paths, str):
+        train_paths = [train_paths]
+    if (
+        dataset
+        and train_paths
+        and str(dataset) not in [str(path) for path in train_paths]
+    ):
+        click.echo(
+            f"note: experiment.dataset.path ({dataset}) is not among "
+            f"data_config.train_labels_path ({[str(p) for p in train_paths]}); "
+            "source_config.yaml will record the former as this run's dataset identity"
+        )
+
+
 @main.command(name="run")
 @click.argument(
     "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
@@ -675,7 +706,7 @@ def run_command(
     base-install safe, so the author-here / train-there workflow still uses them.
 
     Two configs are written into ``<trainer_config.ckpt_dir>/<trainer_config.run_name>/``
-    before training starts: ``resolved_config.yaml`` (what ``sleap-nn`` is given) and
+    before training starts: ``emitted_config.yaml`` (what ``sleap-nn`` is given) and
     ``source_config.yaml`` (what you wrote, ``experiment`` block included -- the identity
     no ``sleap-nn`` artifact records). The backend's own output streams live, and its exit
     status is this command's exit status.
@@ -701,10 +732,17 @@ def run_command(
         click.echo(f"note: {note}")
 
     try:
+        # Every gate below reads through OmegaConf, which *resolves*, while the emitted config is
+        # written unresolved and with the `experiment` block stripped. Reconcile the two before
+        # anything is staged, or `run_name: ${experiment.species}_v1` would gate and stage under
+        # a value the backend can never resolve.
+        backend.check_emitted_config_resolvable(cfg)
         backend.reject_inline_api_key(cfg)
+        wandb_on = backend.wandb_enabled(cfg)
     except backend.BackendError as error:
         raise click.ClickException(str(error))
-    if OmegaConf.select(cfg, "trainer_config.use_wandb", default=False):
+    _warn_on_dataset_mismatch(cfg)
+    if wandb_on:
         # Every committed baseline example sets use_wandb; without a resolvable credential
         # the run dies hours in, at wandb.init(). Fail now instead.
         _require_api_key()
@@ -719,16 +757,28 @@ def run_command(
 
     # Echo the resolved backend before a multi-hour run: this is the only signal that the
     # interpreter-first search picked a different environment than the operator expected.
-    click.echo(f"backend: {binary}")
-    click.echo(f"config:  {destination}")
-    outcome = backend.run_backend(backend.build_argv(binary, destination))
+    version = backend.backend_version(binary)
+    click.echo(f"backend: {binary}" + (f" ({version})" if version else ""))
+    # Absolute: with a relative or drive-relative `ckpt_dir`, the printed path is the only clue
+    # about where the files actually went, and a bare relative path is no clue at all.
+    click.echo(f"config:  {destination.resolve()}")
+    click.echo(f"run dir: {run_dir.resolve()}")
+    try:
+        outcome = backend.run_backend(backend.build_argv(binary, destination))
+    except backend.BackendError as error:
+        # The backend can fail to *launch* (a truncated wheel, a PATHEXT hit on something that
+        # is not executable) after the artifacts are staged. Those stay on disk deliberately --
+        # they record what was attempted -- but the failure is still a clean CLI error.
+        raise click.ClickException(str(error))
     if outcome.note:
         click.echo(outcome.note, err=True)
     if outcome.exit_code != 0:
         ctx.exit(outcome.exit_code)
+    # Name what was actually written. Hard-coding both constants told the operator that both
+    # files were in the run directory even when --resolved-config had put one elsewhere.
     click.echo(
-        f"OK: training finished; {run_dir} holds "
-        f"{backend.RESOLVED_CONFIG_NAME} + {backend.SOURCE_CONFIG_NAME}"
+        f"OK: training finished; {run_dir.resolve()} holds {backend.SOURCE_CONFIG_NAME}, "
+        f"emitted config at {destination.resolve()}"
     )
 
 

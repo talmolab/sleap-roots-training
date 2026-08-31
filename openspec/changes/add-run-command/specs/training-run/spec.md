@@ -45,8 +45,15 @@ same skip note `validate` reports when it is not, without treating the skip as a
 #### Scenario: The resolved backend is named before a long run starts
 
 - **WHEN** `run` has resolved the backend and is about to invoke it
-- **THEN** it prints the absolute path of the resolved `sleap-nn` executable
-- **AND** it prints the path of the config the backend will be given
+- **THEN** it prints the absolute path of the resolved `sleap-nn` executable, together with the
+  version that backend reports when it can be asked
+- **AND** it prints the absolute paths of the config the backend will be given and the run directory
+
+#### Scenario: A candidate outside the searched directory is not accepted
+
+- **WHEN** a platform's executable search returns a match that did not come from the directory being
+  searched (for example a hit from the current working directory)
+- **THEN** `run` does not treat it as that directory's backend
 
 #### Scenario: Invalid config is rejected before anything is written
 
@@ -75,7 +82,7 @@ same skip note `validate` reports when it is not, without treating the skip as a
 ### Requirement: Run Directory Provenance Artifacts
 
 Before invoking the backend, `run` SHALL write two files into the run directory
-`<trainer_config.ckpt_dir>/<trainer_config.run_name>/`: `resolved_config.yaml`, the emitted
+`<trainer_config.ckpt_dir>/<trainer_config.run_name>/`: `emitted_config.yaml`, the emitted
 sleap-nn-native config with the same content `emit` produces for that input; and
 `source_config.yaml`, a verbatim copy of the input config including the repo-owned `experiment`
 block. Neither SHALL be a temporary file, an in-memory pipe, or a file `run` deletes afterwards. The
@@ -86,10 +93,13 @@ leaves no truncated artifact. `trainer_config.ckpt_dir` SHALL default to `"."`,
 matching the backend's own default. `run` SHALL require a usable `trainer_config.run_name` — a
 string that is non-empty after stripping surrounding whitespace, is not the literal `"None"` (which
 the backend itself treats as unset), resolves to exactly **one path component under both POSIX and
-Windows semantics**, and carries no character or device name Windows forbids in a path — and SHALL
-refuse otherwise, naming the field. The rule SHALL be applied identically on every platform, so a
-name that would escape the run directory on the training host is rejected on the authoring host too.
-`run` SHALL also refuse when the run path already exists and is not a directory. `run` SHALL refuse to reuse a run directory that
+Windows semantics**, is not a relative directory reference (`.`, `..`, `...`), does not end in a dot
+or a space, and carries no control character, no character Windows forbids in a path, and no Windows
+device name — and SHALL refuse otherwise, naming the field. Every part of the rule SHALL be applied
+identically on every platform, so a name that would escape or alias the run directory on the training
+host is rejected on the authoring host too. `trainer_config.ckpt_dir` SHALL be a non-empty string
+when present, and SHALL default to `"."` only when absent. `run` SHALL also refuse when the run path
+already exists and is not a directory. Every path `run` reports SHALL be absolute. `run` SHALL refuse to reuse a run directory that
 already holds evidence of a previous run (a `best.ckpt`, or the `training_config.yaml` the backend
 writes on completion), naming the directory and instructing the operator to choose a new
 `trainer_config.run_name`; no flag SHALL override this refusal. `--resolved-config PATH` SHALL
@@ -100,22 +110,22 @@ config itself.
 
 - **WHEN** `run` executes a valid config that sets `trainer_config.ckpt_dir` and a usable
   `trainer_config.run_name`
-- **THEN** `<ckpt_dir>/<run_name>/resolved_config.yaml` and `<ckpt_dir>/<run_name>/source_config.yaml`
+- **THEN** `<ckpt_dir>/<run_name>/emitted_config.yaml` and `<ckpt_dir>/<run_name>/source_config.yaml`
   both exist
-- **AND** the backend is invoked with the absolute path of `resolved_config.yaml`
+- **AND** the backend is invoked with the absolute path of `emitted_config.yaml`
 
 #### Scenario: The persisted configs match their sources exactly
 
 - **WHEN** the same valid config is passed to `emit -o out.yaml` and to `run`
-- **THEN** `resolved_config.yaml` and `out.yaml` hold identical bytes
-- **AND** `resolved_config.yaml` omits the `experiment` block while retaining the `data_config` /
+- **THEN** `emitted_config.yaml` and `out.yaml` hold identical bytes
+- **AND** `emitted_config.yaml` omits the `experiment` block while retaining the `data_config` /
   `model_config` / `trainer_config` blocks
 - **AND** `source_config.yaml` holds the input config's content, including its `experiment` block
 
 #### Scenario: The emitted config uses LF line endings on every platform
 
 - **WHEN** `run` writes its artifacts on Windows
-- **THEN** `resolved_config.yaml` contains no CR byte, and `source_config.yaml` is a byte-for-byte
+- **THEN** `emitted_config.yaml` contains no CR byte, and `source_config.yaml` is a byte-for-byte
   copy of the input
 - **AND** a subsequent invocation recognizes them as unchanged rather than as differing content
 
@@ -139,6 +149,21 @@ config itself.
   discards the checkpoint directory when joined)
 - **THEN** the command exits non-zero naming `trainer_config.run_name`
 - **AND** no file is written outside the checkpoint directory
+
+#### Scenario: A run name that aliases or climbs out of the run directory is refused
+
+- **WHEN** `trainer_config.run_name` is `..` (one path component under both flavours, yet
+  `<ckpt_dir>/..` resolves *above* the checkpoint directory), or ends in a dot or a space (which
+  Windows strips, so the same name identifies a different directory there than here)
+- **THEN** the command exits non-zero naming `trainer_config.run_name`
+- **AND** no file is written outside the checkpoint directory
+
+#### Scenario: A malformed checkpoint directory is refused rather than defaulted
+
+- **WHEN** `trainer_config.ckpt_dir` is present but is not a non-empty string (an empty string,
+  `false`, a number, a list, or a mapping)
+- **THEN** the command exits non-zero naming `trainer_config.ckpt_dir`
+- **AND** it does not silently fall back to the default used for an absent value
 
 #### Scenario: A run name that is not portable to the training host is refused
 
@@ -176,6 +201,13 @@ config itself.
 - **THEN** the emitted config is written to `<path>`
 - **AND** `source_config.yaml` is still written into the run directory
 - **AND** the backend is invoked with `<path>`
+
+#### Scenario: An override may not bypass the run-directory guard
+
+- **WHEN** `--resolved-config` points into a directory that already holds a previous run, or names
+  a file the reuse check reads as evidence of a completed run
+- **THEN** the command exits non-zero naming the path
+- **AND** the backend is not invoked, so `run` cannot fabricate the evidence it later refuses
 
 #### Scenario: A destination that would destroy input or is not a file is refused
 
@@ -230,7 +262,8 @@ run, SHALL NOT emit a traceback, and SHALL NOT delete the artifacts of a failed 
 
 - **WHEN** the backend exits 0
 - **THEN** `run` exits 0
-- **AND** it prints one line naming the run directory and the persisted configs
+- **AND** it prints one line naming the run directory and the **actual** location of each
+  persisted config, including when `--resolved-config` placed one outside the run directory
 
 #### Scenario: Backend failure propagates its exit status
 
@@ -259,11 +292,54 @@ run, SHALL NOT emit a traceback, and SHALL NOT delete the artifacts of a failed 
 - **AND** it waits for the backend's own exit status and reports it
 - **AND** it emits no traceback
 
+#### Scenario: Repeated interrupts escalate rather than waiting forever
+
+- **WHEN** the operator interrupts again after the first interrupt
+- **THEN** `run` tells the operator what a further interrupt will do, then terminates the backend on
+  the second and kills it on the third
+- **AND** a backend that ignores the first interrupt can therefore still be stopped
+
+#### Scenario: A platform interrupt status is reported as an interrupt
+
+- **WHEN** the backend exits with the status a platform uses for a console interrupt rather than a
+  signal (Windows `0xC000013A`)
+- **THEN** `run` reports it as an interrupt with the same exit code as the POSIX signal case
+
 #### Scenario: A failed run keeps its provenance artifacts
 
 - **WHEN** the backend exits non-zero after `run` has written its artifacts
 - **THEN** the artifacts remain on disk as the record of what was attempted
 - **AND** `run` does not delete or roll back the run directory
+
+### Requirement: The Emitted Config Must Stand On Its Own
+
+`run` reads the fields it gates on through OmegaConf, which **resolves** interpolations against the
+full config, while the config it emits is written **unresolved** and with the repo-owned
+`experiment` block removed. Before staging anything, `run` SHALL verify that the emitted config can
+be resolved on its own, and SHALL refuse with a field-named error when it cannot. Any interpolation
+that fails to resolve while reading a gated field SHALL be reported as a clean error naming the
+field, never as an uncaught exception. `run` SHALL NOT resolve interpolations in the file it writes,
+so a credential referenced as `${oc.env:...}` is persisted as the reference rather than its value.
+
+#### Scenario: An interpolation into the stripped experiment block is refused
+
+- **WHEN** a config sets a gated field from the `experiment` block (for example
+  `run_name: ${experiment.species}_v1`)
+- **THEN** the command exits non-zero explaining that the emitted config cannot resolve on its own
+- **AND** nothing is staged, because the gates would otherwise pass on a value the backend can
+  never see
+
+#### Scenario: An unresolvable interpolation is a clean error, not a traceback
+
+- **WHEN** a gated field carries an interpolation that cannot be resolved (such as an unset
+  environment variable)
+- **THEN** the command exits non-zero naming the field
+- **AND** it emits no traceback
+
+#### Scenario: Interpolations survive into the emitted config unresolved
+
+- **WHEN** a config references an environment variable in a field the backend reads
+- **THEN** the emitted config contains the interpolation itself, not the resolved value
 
 ### Requirement: Credential Safety For Persisted Configs
 

@@ -65,7 +65,13 @@ documented GPU box is **native Windows** (`docs/training-backend.md` §1), escap
 `uv venv` happens to put `python.exe` inside `Scripts\`. Getting it wrong produces the worst possible
 diagnostic: "install the `[train]` extra" on a box where it is installed. Step 2 stays as
 belt-and-braces for relocated schemes. `shutil.which` (rather than probing a filename) also handles
-Windows `PATHEXT`.
+Windows `PATHEXT` — but its result is **verified against the directory we asked about** before being
+accepted. On win32 + Python 3.11 (the version `build.yml` pins, on the OS that trains) `which`
+prepends `os.curdir` to the search *even when `path=` is given*, mimicking cmd.exe, and returns a
+relative match. Without that check, a stray `sleap-nn.exe` in the invocation directory would beat
+the interpreter's `Scripts\` — defeating this ordering entirely — and would print as a bare
+filename, so the visibility mitigation below would fail exactly when the hazard fires. 3.12+ honour
+`path=`, which makes this version-scoped rather than universal, and therefore easy to miss.
 
 The interpreter-first rule is **not unconditionally safer**, and we accept that knowingly: if this
 package is installed in a pipx/uvx env while the operator has *activated* a venv holding the pinned
@@ -99,7 +105,7 @@ Two artifacts, each with a distinct reason:
   (species / mode / root_type / dataset). Every config the backend sees has that block stripped by
   construction, so this is the one piece of provenance no sleap-nn artifact can hold. This is the
   part of the change with genuinely new information.
-- **`resolved_config.yaml`** — the emitted sleap-nn-native config, which #34 asks for explicitly. It
+- **`emitted_config.yaml`** — the emitted sleap-nn-native config, which #34 asks for explicitly. It
   earns its place on two counts the backend's files cannot cover: it exists **before** the backend
   starts (sleap-nn writes its two only after trainer construction and only on `global_rank == 0`, so
   a run that dies on a bad `.slp` path or at model init otherwise leaves a directory with no config
@@ -111,8 +117,19 @@ Two artifacts, each with a distinct reason:
 
 The filename is settled, not open: `training_config.yaml` **must not** be used — the backend writes
 that exact name into the same directory and would silently overwrite ours at the end of every
-successful run. Extra dots are also avoided (`resolved_config.yaml`, not `<run>.resolved.yaml`) since
+successful run. Extra dots are also avoided (`emitted_config.yaml`, not `<run>.resolved.yaml`) since
 the name is handed to Hydra as a config name.
+
+It is `emitted_config.yaml` rather than `resolved_config.yaml` because the earlier name was actively
+misleading: this file is written with `resolve=False`, while sleap-nn's neighbouring
+`training_config.yaml` *is* the config after its own resolution. Two files side by side, and the one
+labelled "resolved" being the unresolved one, is the kind of detail a reader trusts and should not.
+
+The backend's reported version is echoed before the run rather than stamped into the artifact —
+stamping would break the byte-identity-with-`emit` guarantee. sleap-nn writes its version into
+`initial_config.yaml`, but only once the trainer is built, which is precisely the window this
+artifact exists to cover, so for a run that dies during setup the console line is the only record of
+what would have trained it.
 
 Destination: `<ckpt_dir>/<run_name>/`, with `ckpt_dir` defaulting to `"."` to match the backend.
 `--resolved-config PATH` relocates the emitted config only (`dir_okay=False`, and refused when it
@@ -149,7 +166,22 @@ character or device name Windows forbids. The component count is deliberate, not
 "C:foo"` evaluates to `C:foo`, because pathlib discards the left-hand side once the right carries a
 drive. That would put the artifacts outside the very directory D4 guards, on the one OS this command
 exists for. Applying the rule under both flavours on every platform means a name that would escape
-on the box is rejected on the laptop that authored it. With none of those, the backend generates a timestamped name we
+on the box is rejected on the laptop that authored it.
+
+The component count is necessary but **not sufficient**, which review established one shape at a
+time and is worth stating as a rule instead of a list. `".."` is exactly one component under both
+flavours, so it cleared the count while `<ckpt_dir>/..` resolved *above* the checkpoint directory —
+the same escape, one shape over. Windows also silently strips a trailing dot or space, so `"r1 "`
+and `"r1"` name **one** directory there and **two** here, which made the reuse refusal answer
+differently on the authoring host and the training host (and let `"NUL "` walk past the device-name
+check). Hence the extra gates: no relative directory reference, no trailing dot or space, no control
+characters. The general lesson lives in the test rather than the code — the invariant is now asserted
+as *containment of the resolved run directory inside the resolved `ckpt_dir`*, which no future shape
+can satisfy while escaping, rather than as an enumerated list of bad names.
+
+`trainer_config.ckpt_dir` is validated for the same reason: it supplies the left-hand side of every
+path this design guards, and `or "."` used to swallow `""`, `false` and `null` alike, so a typo
+silently redirected the run's provenance while reporting success. With none of those, the backend generates a timestamped name we
 cannot predict; dropping artifacts in `<ckpt_dir>` instead would place them one level above the real
 run, next to every other run sharing that directory (every committed example uses `ckpt_dir: models`).
 Refusing costs one config line.
@@ -193,17 +225,43 @@ while True:
         continue                        # the child already got SIGINT; let it shut down
 ```
 
-The loop has **no timeout and no escape hatch**, deliberately: if the backend never responds to the
-interrupt, `run` waits indefinitely rather than escalating to a kill. That is the same trade-off as
-"let the child own the shutdown" — force-killing a trainer after N seconds would reintroduce exactly
-the lost-checkpoint failure this decision exists to prevent, and the operator keeps the real escape
-hatch (a second interrupt, or killing the process tree) either way.
+The loop has **no timeout**, deliberately — force-killing a trainer after N seconds would
+reintroduce exactly the lost-checkpoint failure this decision exists to prevent. It does have a
+ceiling, on a counter rather than a clock. An earlier draft of this section claimed the operator
+"keeps the real escape hatch (a second interrupt…)", which was **false**: every further Ctrl-C hit
+the same `continue`, so a child ignoring SIGINT could not be aborted at all. A documented safety
+property that is not true is worse than an undocumented gap, because it stops the next reviewer
+looking. The ladder is now: the first interrupt is forwarded and says so, the second terminates the
+backend, the third kills it. Escalating only on an explicit repeat keeps the graceful path for the
+ordinary case, where the first interrupt is all it takes.
 
 One honest limit on the automated coverage: the parent-side `KeyboardInterrupt` is exercised with a
 stubbed `wait()` that raises it, because a genuine SIGINT would have to be delivered to the whole
 foreground process group and would take the test runner with it. The real signal path is covered on
 POSIX by a stub that `kill -9`s itself, and on Windows by the recorded manual verification (which
 showed Lightning's own graceful shutdown running, then a clean non-zero exit).
+
+### D5a — Interpolation: the gates resolve, the artifact does not
+
+`backend.py` reads every gated field through `OmegaConf.select`, which **resolves**, while
+`to_sleap_nn_yaml` writes with `resolve=False` and with the `experiment` block stripped. Those two
+facts are individually right and jointly dangerous, in both directions:
+
+- **Unresolvable references reached the operator as tracebacks.** `${oc.env:UNSET}` in `run_name`,
+  `ckpt_dir` or `wandb.api_key` raised an OmegaConf exception straight past the CLI's
+  `except BackendError` — and `${oc.env:WANDB_API_KEY}` is the pattern the credential guidance
+  points operators toward, so an unexported variable is an ordinary mistake, not an exotic one.
+  Every read now goes through a wrapper that names the field.
+- **References that resolve *here* gated on a value the backend can never see.**
+  `run_name: ${experiment.species}_v1` resolves against the full config, so every gate validated
+  `arabidopsis_v1` and staged the artifacts there — while the emitted file kept the interpolation
+  *and* lost the block it points at, so the backend could not load it at all. `run` therefore
+  pre-flights `to_container(to_sleap_nn_config(cfg), resolve=True, throw_on_missing=True)` as a
+  **check only**, before anything is staged.
+
+The emitted file stays unresolved on purpose: that is what keeps `${oc.env:WANDB_API_KEY}` a literal
+interpolation in the artifact rather than a baked secret, and it is a stronger reason than
+byte-identity for D9 refusing an inline key rather than masking one.
 
 ### D6 — Step order is a contract, not an implementation detail
 

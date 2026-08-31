@@ -185,6 +185,12 @@ def test_unusable_run_name_is_refused(write_config, run_name):
         "/tmp/absolute",
         "C:foo",  # drive-RELATIVE: is_absolute() is False and there is no separator...
         "C:\\abs",
+        "..",  # one component under both flavours, yet climbs out of ckpt_dir
+        ".",
+        "...",
+        "r1 ",  # Windows strips the trailing space: names `r1` there, `r1 ` here
+        "r1.",
+        "NUL ",  # the trailing space also walked past the device-name check
     ],
 )
 def test_run_name_that_escapes_the_run_directory_is_refused(write_config, run_name):
@@ -204,6 +210,14 @@ def test_run_name_that_escapes_the_run_directory_is_refused(write_config, run_na
     "run_name", ["has:colon", "star*", 'quo"te', "pipe|d", "lt<gt>"]
 )
 def test_run_name_with_windows_reserved_characters_is_refused(write_config, run_name):
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize("run_name", ["a\tb", "a\nb", "a\x00b"])
+def test_run_name_with_control_characters_is_refused(write_config, run_name):
+    """Rejected up front rather than surfacing later as a raw OSError from mkdir."""
     cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
     with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
         backend.run_directory(cfg)
@@ -231,15 +245,17 @@ def test_non_string_run_name_is_refused(write_config, run_name):
 
 @pytest.mark.parametrize(
     "run_name",
-    ["r1", "runcmd_verify_20260819", "baseline_os4_seed42", "r1.v2", "r-1_2"],
+    ["r1", "runcmd_verify_20260819", "baseline_os4_seed42", "r1.v2", "r-1_2", " lead"],
 )
-def test_the_run_directory_is_always_a_child_of_ckpt_dir(
-    write_config, tmp_path, run_name
-):
-    """The invariant the drive-relative bug broke, asserted directly.
+def test_the_run_directory_is_always_inside_ckpt_dir(write_config, tmp_path, run_name):
+    """The invariant the path-escape bugs broke, asserted so that it can actually fail.
 
-    Every accepted `run_name` must resolve to a directory *inside* `ckpt_dir` -- that is what
-    makes the run-directory refusal (and therefore the provenance guarantee) meaningful.
+    Deliberately a **containment check on resolved paths**, not an assertion about `.parent`.
+    The earlier `.parent` form was written from the implementation rather than from the
+    property, and `Path("ckpt/..").parent` *is* `Path("ckpt")` -- so it passed on the exact
+    input (`run_name: ".."`) that violates the invariant its own docstring stated. Containment
+    cannot be satisfied by a name that climbs out, so it catches the whole family rather than
+    one enumerated shape at a time.
     """
     cfg, _ = _cfg(
         write_config,
@@ -247,7 +263,9 @@ def test_the_run_directory_is_always_a_child_of_ckpt_dir(
             "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": run_name}
         },
     )
-    assert backend.run_directory(cfg).parent == tmp_path / "ckpt"
+    (tmp_path / "ckpt").mkdir(exist_ok=True)
+    run_dir = backend.run_directory(cfg)
+    assert (tmp_path / "ckpt").resolve() in run_dir.resolve().parents
 
 
 def test_a_run_path_that_exists_as_a_file_is_refused(tmp_path):
@@ -288,14 +306,14 @@ def test_run_directory_holding_a_backend_config_is_refused(tmp_path):
 def test_run_directory_without_run_evidence_is_the_retry_case(tmp_path):
     run_dir = tmp_path / "ckpt" / "r1"
     run_dir.mkdir(parents=True)
-    (run_dir / "resolved_config.yaml").write_text("stale", encoding="utf-8")
+    (run_dir / "emitted_config.yaml").write_text("stale", encoding="utf-8")
     backend.check_run_directory(run_dir)  # must not raise
 
 
 def test_resolved_config_path_defaults_into_the_run_directory(tmp_path):
     run_dir = tmp_path / "ckpt" / "r1"
     assert (
-        backend.resolved_config_path(run_dir, None) == run_dir / "resolved_config.yaml"
+        backend.resolved_config_path(run_dir, None) == run_dir / "emitted_config.yaml"
     )
 
 
@@ -438,7 +456,7 @@ def test_stage_rechecks_the_run_directory_before_writing(write_config, tmp_path)
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "best.ckpt").write_bytes(b"weights")  # ...appears in the window
     with pytest.raises(backend.BackendError, match="run_name"):
-        backend.stage_artifacts(cfg, source, run_dir, run_dir / "resolved_config.yaml")
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "emitted_config.yaml")
 
 
 def test_a_run_name_too_long_for_the_filesystem_fails_cleanly(write_config, tmp_path):
@@ -457,7 +475,7 @@ def test_a_run_name_too_long_for_the_filesystem_fails_cleanly(write_config, tmp_
     )
     run_dir = backend.run_directory(cfg)
     with pytest.raises(backend.BackendError):
-        backend.stage_artifacts(cfg, source, run_dir, run_dir / "resolved_config.yaml")
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "emitted_config.yaml")
 
 
 def test_inline_wandb_api_key_is_refused(write_config):
@@ -526,7 +544,7 @@ def fake_popen(monkeypatch):
 
 def test_build_argv_is_exactly_the_documented_vector(tmp_path):
     binary = tmp_path / "bin" / "sleap-nn"
-    dest = tmp_path / "ckpt" / "r1" / "resolved_config.yaml"
+    dest = tmp_path / "ckpt" / "r1" / "emitted_config.yaml"
     assert backend.build_argv(binary, dest) == [
         str(binary),
         "train",
@@ -577,12 +595,16 @@ def test_signal_termination_maps_to_128_plus_n(fake_popen):
 
 
 def test_windows_style_status_is_not_translated(fake_popen):
-    """0xC000013A (Ctrl-C on Windows) is a status, not a signal, and does not fit an exit code."""
-    fake_popen.statuses = [3221225786]
+    """A large NTSTATUS is a status, not a signal, and does not fit an exit code.
+
+    0xC0000005 (access violation) rather than 0xC000013A: the latter is Ctrl-C, which now has
+    its own translation to 130, so it is no longer an example of the pass-through path.
+    """
+    fake_popen.statuses = [3221225477]
     outcome = backend.run_backend(["sleap-nn"])
     assert outcome.exit_code != 0
     assert outcome.exit_code <= 255
-    assert "3221225786" in outcome.note
+    assert "3221225477" in outcome.note
 
 
 def test_status_above_the_exit_code_range_stays_a_failure(fake_popen):
@@ -655,3 +677,239 @@ def test_installed_backend_still_accepts_config_flag():
         [str(binary), "train", "--help"], capture_output=True, text=True, timeout=120
     )
     assert "--config" in (completed.stdout + completed.stderr)
+
+
+# --- interpolation, override gating, resolution hijack, ckpt_dir ---------------------------
+
+
+def test_unresolvable_interpolation_is_a_clean_error_not_a_traceback(write_config):
+    """`${oc.env:UNSET}` in a gated field must not escape as an OmegaConf exception.
+
+    The credential section pushes operators toward `${oc.env:WANDB_API_KEY}`, so an unexported
+    variable is an ordinary mistake, not an exotic one.
+    """
+    cfg, _ = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"run_name": "${oc.env:SLEAP_ROOTS_NOT_SET_ANYWHERE}"}
+        },
+    )
+    with pytest.raises(backend.BackendError):
+        backend.run_directory(cfg)
+
+
+def test_interpolation_into_the_experiment_block_is_refused(write_config, tmp_path):
+    """The load-bearing half: it resolves *here* and cannot resolve for the backend.
+
+    `run_name: ${experiment.species}_v1` resolves against the full config, so every gate would
+    validate `arabidopsis_v1` and stage the artifacts there -- but the emitted config has the
+    `experiment` block stripped and is written unresolved, so the backend cannot reload it. The
+    run would be gated, staged and reported against a value the backend never sees.
+    """
+    cfg, _ = _cfg(
+        write_config,
+        overrides={"trainer_config": {"run_name": "${experiment.species}_v1"}},
+    )
+    with pytest.raises(backend.BackendError, match="experiment"):
+        backend.check_emitted_config_resolvable(cfg)
+
+
+def test_a_resolvable_config_passes_the_emitted_resolvability_check(write_config):
+    cfg, _ = _cfg(write_config)
+    backend.check_emitted_config_resolvable(cfg)  # must not raise
+
+
+def test_override_naming_a_run_evidence_file_is_refused(write_config, tmp_path):
+    """4b: `run` must not be able to fabricate the completion evidence it later refuses.
+
+    Writing the emitted config as `training_config.yaml` makes the next plain retry fail the
+    reuse check forever -- and the design deliberately ships no `--force`, so recovery would be
+    hand-deleting files.
+    """
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    for marker in backend.RUN_EVIDENCE:
+        with pytest.raises(backend.BackendError, match="run"):
+            backend.stage_artifacts(cfg, source, run_dir, run_dir / marker)
+
+
+def test_override_pointing_into_a_finished_run_is_refused(write_config, tmp_path):
+    """4a: the override bypassed `check_run_directory` entirely."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    other = tmp_path / "ckpt" / "otherrun"
+    other.mkdir(parents=True)
+    (other / "best.ckpt").write_bytes(b"weights")
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.stage_artifacts(cfg, source, run_dir, other / "emitted.yaml")
+
+
+def test_resolution_ignores_a_relative_hit_from_the_current_directory(
+    tmp_path, monkeypatch
+):
+    """Python 3.11 on win32 prepends `os.curdir` even when `path=` is passed.
+
+    `build.yml` pins 3.11, and the GPU box is Windows, so a stray `sleap-nn.exe` in the
+    invocation directory would beat the interpreter's `Scripts\\` -- defeating the ordering this
+    module is built around, and printing a bare relative name so the "visibility" mitigation
+    fails exactly when the hazard fires. Simulated here by a `which` that returns a relative hit.
+    """
+    scripts = tmp_path / "scripts"
+    _make_stub(scripts)
+    decoy = "./sleap-nn.exe"
+
+    def fake_which(name, path=None):
+        return decoy if path is not None else None
+
+    monkeypatch.setattr(backend.shutil, "which", fake_which)
+    monkeypatch.setattr(backend, "_interpreter_scripts_dir", lambda: str(scripts))
+    with pytest.raises(backend.BackendError):
+        backend.resolve_sleap_nn()
+
+
+def test_resolved_backend_path_is_absolute(tmp_path, monkeypatch):
+    stub = _make_stub(tmp_path / "scripts")
+    monkeypatch.setattr(backend, "_interpreter_scripts_dir", lambda: str(stub.parent))
+    assert backend.resolve_sleap_nn().is_absolute()
+
+
+@pytest.mark.parametrize("ckpt_dir", [5, True, ["a", "b"], {"a": 1}, "", "   "])
+def test_unusable_ckpt_dir_is_refused(write_config, ckpt_dir):
+    """`ckpt_dir` supplies the left-hand side of every path this design guards.
+
+    `config.py` type-checks `seed`, `use_wandb` and the preprocessing flags; this field was the
+    odd one out, and a falsy value silently fell through to `.` -- so provenance went to a
+    directory the backend would never train into.
+    """
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"ckpt_dir": ckpt_dir}})
+    with pytest.raises(backend.BackendError, match="trainer_config.ckpt_dir"):
+        backend.run_directory(cfg)
+
+
+def test_absent_ckpt_dir_still_follows_the_backend_default(write_config):
+    """Absent is not the same as malformed: the documented `.` default still applies."""
+    cfg, _ = _cfg(write_config, drop=("trainer_config.ckpt_dir",))
+    assert backend.run_directory(cfg) == Path(".") / "arabidopsis_primary_cylinder"
+
+
+@pytest.mark.parametrize("marker", backend.RUN_EVIDENCE)
+def test_every_run_evidence_marker_triggers_the_refusal(tmp_path, marker):
+    """Parametrized over the constant so a new marker cannot be added without coverage."""
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / marker).write_bytes(b"x")
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.check_run_directory(run_dir)
+
+
+def test_a_backend_that_cannot_be_launched_is_a_clean_error(tmp_path, monkeypatch):
+    """`Popen` itself raises for a truncated wheel or a `.PY` PATHEXT hit.
+
+    It is called after the artifacts are staged, so an uncaught OSError here would surface as a
+    traceback on top of a half-completed run.
+    """
+
+    def boom(argv, **kwargs):
+        raise OSError(8, "Exec format error")
+
+    monkeypatch.setattr(backend.subprocess, "Popen", boom)
+    with pytest.raises(backend.BackendError, match="sleap-nn"):
+        backend.run_backend([str(tmp_path / "sleap-nn"), "train"])
+
+
+def test_windows_ctrl_c_status_is_reported_as_an_interrupt(fake_popen):
+    """0xC000013A is STATUS_CONTROL_C_EXIT -- an interrupt, not an opaque 10-digit status."""
+    fake_popen.statuses = [3221225786]
+    outcome = backend.run_backend(["sleap-nn"])
+    assert outcome.exit_code == 130
+    assert "interrupt" in outcome.note.lower()
+
+
+def test_a_second_interrupt_escalates_instead_of_looping_forever(fake_popen):
+    """design.md promised an escape hatch that did not exist: every Ctrl-C hit the same
+    `continue`, so a child ignoring SIGINT could not be aborted at all."""
+    fake_popen.statuses = [KeyboardInterrupt(), KeyboardInterrupt(), -15]
+    outcome = backend.run_backend(["sleap-nn"])
+    (call,) = fake_popen.instances
+    assert call.terminated  # the second interrupt escalated...
+    assert not call.killed  # ...without jumping straight to SIGKILL
+    assert outcome.exit_code == 143
+
+
+def test_the_first_interrupt_still_lets_the_backend_shut_down(fake_popen):
+    fake_popen.statuses = [KeyboardInterrupt(), -2]
+    outcome = backend.run_backend(["sleap-nn"])
+    (call,) = fake_popen.instances
+    assert not call.terminated and not call.killed
+    assert outcome.exit_code == 130
+
+
+def test_the_source_config_is_written_before_the_emitted_one(
+    write_config, tmp_path, monkeypatch
+):
+    """Ordering matters when the second write fails.
+
+    `source_config.yaml` is the only artifact carrying the `experiment` block, so a failure that
+    left the run directory holding just the emitted config would lose the one thing nothing else
+    records.
+    """
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    calls = []
+    real_write = backend._atomic_write
+
+    def failing_write(path, payload):
+        calls.append(path)
+        if len(calls) == 2:
+            raise OSError(28, "No space left on device")
+        real_write(path, payload)
+
+    monkeypatch.setattr(backend, "_atomic_write", failing_write)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "emitted_config.yaml")
+    assert calls[0].name == backend.SOURCE_CONFIG_NAME
+    assert (run_dir / backend.SOURCE_CONFIG_NAME).is_file()
+
+
+def test_backend_version_reports_what_the_binary_prints(tmp_path):
+    """A real probe, not a stub: this is the only record of the backend for an early death."""
+    if os.name == "nt":
+        pytest.skip("POSIX: fabricating an executable stub")
+    stub = tmp_path / "sleap-nn"
+    stub.write_text("#!/bin/sh\necho 'sleap-nn 9.9.9'\n", encoding="utf-8")
+    stub.chmod(0o755)
+    assert backend.backend_version(stub) == "sleap-nn 9.9.9"
+
+
+def test_backend_version_is_a_diagnostic_and_never_a_gate(tmp_path):
+    """A backend that cannot report a version still runs -- this must not raise."""
+    assert backend.backend_version(tmp_path / "does_not_exist") is None
+
+
+def test_a_third_interrupt_kills(fake_popen):
+    """The ladder has a floor: forwarded, then terminate, then kill."""
+    fake_popen.statuses = [
+        KeyboardInterrupt(),
+        KeyboardInterrupt(),
+        KeyboardInterrupt(),
+        -9,
+    ]
+    outcome = backend.run_backend(["sleap-nn"])
+    (call,) = fake_popen.instances
+    assert call.terminated and call.killed
+    assert outcome.exit_code == 137

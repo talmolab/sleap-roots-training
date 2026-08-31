@@ -154,14 +154,22 @@ All notable changes to this project are documented here. The format is based on
   is required, and each run needs its own:** sleap-nn auto-suffixes the run directory to
   `<run_name>-1` when a `best.ckpt` is already there, so `run` refuses a directory that already holds
   a run rather than leaving your configs beside a different run's results — there is no `--force`,
-  and the fix is a new name. **The run directory gains two files** — `resolved_config.yaml` (what
+  and the fix is a new name. **The run directory gains two files** — `emitted_config.yaml` (what
   sleap-nn was given, written before training starts, so it survives a run that dies during setup)
   and `source_config.yaml` (your config verbatim, `experiment` block included, which is the one
   thing no sleap-nn artifact records) — alongside the `initial_config.yaml` and
   `training_config.yaml` sleap-nn writes itself. **A `trainer_config.wandb.api_key` written into the
   config is refused**, because the run directory is uploaded whole when a model is published; use
-  `WANDB_API_KEY` or `wandb login`. None of this changes what a run produces or how it is graded,
-  and `run` records no config hash or dataset checksum — that gap (#10/#11) is unchanged.
+  `WANDB_API_KEY` or `wandb login`. **`trainer_config.run_name` must be one plain directory name**,
+  checked identically on every platform so a config authored on a laptop cannot fail only on the
+  Windows training box: no separators, nothing absolute or drive-relative, nothing that climbs out
+  (`..`), no trailing dot or space, and no Windows-reserved character or device name.
+  `trainer_config.ckpt_dir` must be a non-empty string when you set it. Interpolations are preserved
+  **unresolved** in the emitted config, so `${oc.env:WANDB_API_KEY}` stays a reference rather than a
+  baked secret in a file that is uploaded with the model — and a config whose emitted form cannot
+  resolve on its own (an interpolation pointing into the stripped `experiment` block) is refused
+  before anything is staged. None of this changes what a run produces or how it is graded, and `run`
+  records no config hash or dataset checksum — that gap (#10/#11) is unchanged.
 - Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)
   run on the exact original v000 held-out split (Arabidopsis primary-root, multi-plant cylinder,
   bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:

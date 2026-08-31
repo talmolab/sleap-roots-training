@@ -97,14 +97,14 @@ commit.
       proceeds, overwriting only our two artifacts. Include the TOCTOU case: if the refusal
       condition appears *between* the check and the write, the write must still not clobber a
       checkpoint — assert the artifact write refuses to overwrite anything it did not expect.
-- [x] 3.4 Write the failing content tests: `resolved_config.yaml` equals `emit -o`'s output
+- [x] 3.4 Write the failing content tests: `emitted_config.yaml` equals `emit -o`'s output
       **file-for-file** (compare artifact bytes to artifact bytes, never bytes to
       `to_sleap_nn_yaml(cfg).encode()` — `Path.write_text` translates `\n` to `os.linesep`, so the
       latter is red on Windows by construction; group 1 has already made both sides LF);
-      `resolved_config.yaml` has no `experiment` block and retains the three sleap-nn blocks;
+      `emitted_config.yaml` has no `experiment` block and retains the three sleap-nn blocks;
       `source_config.yaml` is a byte-for-byte copy of the input file, `experiment` block
       included (a provenance copy is verbatim, so it is *not* LF-normalized); and
-      `resolved_config.yaml` contains no CR byte on any platform.
+      `emitted_config.yaml` contains no CR byte on any platform.
 - [x] 3.5 Write the failing write-robustness tests: missing parents are created; a destination whose
       parent is a file is refused cleanly (portable — `chmod(0o555)` does not deny writes on Windows
       or for root); `--resolved-config` naming a directory is refused (`dir_okay=False`);
@@ -196,7 +196,7 @@ gate.
 - [x] 6.1 Write the failing doc-contract tests first (`tests/test_training_docs.py`): a fenced
       `sleap-roots-training run` command exists **inside** the new section (section-scoped, following
       `test_backend_docs.py`'s `_arch_findings_section` precedent); the section names
-      `resolved_config.yaml`, `source_config.yaml`, and `[train]`; and — the assertion that actually
+      `emitted_config.yaml`, `source_config.yaml`, and `[train]`; and — the assertion that actually
       matters — the `validate` / `emit` / `sleap-nn train --config` commands are each still present
       among the fenced blocks that do **not** mention `run`. The three existing whole-document
       assertions would otherwise be satisfied from inside an "equivalent to…" comment in the `run`
@@ -210,7 +210,7 @@ gate.
       `sleap-nn` 0.2.0"** with the file:line citation, matching how `docs/training-backend.md`
       version-qualifies its backend findings so this does not silently rot at the Tier 6 bump
       (`initial_config.yaml` and `training_config.yaml` written by the backend,
-      `resolved_config.yaml` and `source_config.yaml` written by `run`); the one-`run_name`-per-run
+      `emitted_config.yaml` and `source_config.yaml` written by `run`); the one-`run_name`-per-run
       rule and why; the note that the three-command path stays canonical for the author-here /
       train-there workflow; and the unchanged #10/#11 provenance caveat. No `TODO` / `TBD` (a doc
       test forbids them) and no `**range**` token (the baseline test parses the first line containing
@@ -261,7 +261,7 @@ gate.
       never the published baseline's name or directory, whose run directory exists on that box and
       whose numbers are in `docs/training.md` — and run `sleap-roots-training run` on it against the
       real v000 split. Confirm exit 0, the four configs in the run directory, and
-      `resolved_config.yaml` byte-identical to `emit`'s output. Paste the console output, including
+      `emitted_config.yaml` byte-identical to `emit`'s output. Paste the console output, including
       the echoed resolved backend path, into the PR.
 - [x] 7.5 On the same box, re-run against a `run_name` whose directory already holds a `best.ckpt`
       and confirm `run` **refuses**, leaving that directory unchanged (checksum before/after). This
@@ -292,6 +292,42 @@ gate.
       `openspec` binary is not installed globally; `openspec/**` is outside CI's paths filter, so
       this gate is manual by construction.)
 - [x] 8.7 Update this checklist to `- [x]` only once every item above is actually done.
+
+## 9. Review-driven hardening (rounds 2 and 3)
+
+Recorded after the fact rather than planned: these came out of review of the implementation, and
+the change document should say what was actually built.
+
+- [x] 9.1 Reject a `run_name` that is not a single path component under **both** POSIX and Windows
+      semantics (a drive-relative `C:foo` silently discarded `ckpt_dir`), and extend that to the
+      rest of the family review found one shape at a time: `..`/`.`/`...`, trailing dot or space,
+      control characters, Windows-reserved characters and device names.
+- [x] 9.2 Rewrite the invariant test as **containment of the resolved run directory inside the
+      resolved `ckpt_dir`**. The `.parent` form was written from the implementation and passed on
+      the exact input (`..`) that violated the property it named.
+- [x] 9.3 Validate `trainer_config.ckpt_dir` (non-empty string when present) instead of letting
+      `or "."` swallow `""` / `false` / `null`.
+- [x] 9.4 Handle OmegaConf interpolation: wrap every gated read so an unresolvable reference is a
+      field-named error rather than a traceback, and pre-flight that the **emitted** config resolves
+      on its own, so an interpolation into the stripped `experiment` block cannot gate and stage
+      against a value the backend never sees.
+- [x] 9.5 Apply the run-directory guard to `--resolved-config`, and refuse an override that names a
+      run-evidence file (which would fabricate the completion evidence the next run refuses).
+- [x] 9.6 Report the paths actually written, rather than the two constants.
+- [x] 9.7 Verify that an executable-search hit came from the directory searched (Python 3.11 on
+      win32 prepends `os.curdir` even when `path=` is given), and echo absolute paths.
+- [x] 9.8 Bound the interrupt loop (forward → terminate → kill) and correct the design's claim of an
+      escape hatch that did not exist; map the Windows console-interrupt status to the same exit
+      code as the POSIX signal; wrap a failed backend launch.
+- [x] 9.9 Write `source_config.yaml` before the emitted config, and clean up the temp file on any
+      exception rather than only `OSError`.
+- [x] 9.10 Rename `resolved_config.yaml` to `emitted_config.yaml` (it is emitted unresolved, while
+      sleap-nn's neighbouring `training_config.yaml` is the resolved one) and echo the backend's
+      reported version, which cannot be stamped into the artifact without breaking byte-identity.
+- [x] 9.11 Close the named test gaps: the W&B-enabled happy path, an assertion on *why* the
+      no-credential case failed, `RUN_EVIDENCE` parametrized over the constant, and a byte-identity
+      test with teeth on every platform (a hand-written config carrying a comment and unordered
+      keys, not machine-generated YAML).
 
 ## Commit Plan
 
