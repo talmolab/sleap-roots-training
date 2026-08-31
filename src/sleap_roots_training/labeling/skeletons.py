@@ -29,8 +29,11 @@ from typing import Optional
 import sleap_io as sio
 from omegaconf import OmegaConf
 
-from sleap_roots_training.labeling.metadata import ROOT_TYPE_VOCAB
-from sleap_roots_training.registry.chooser import SPECIES_VOCAB, parse_age_window
+from sleap_roots_training.registry.chooser import (
+    ROOT_TYPE_VOCAB,
+    SPECIES_VOCAB,
+    parse_age_window,
+)
 
 logger = logging.getLogger(__name__)
 

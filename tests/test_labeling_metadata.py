@@ -79,6 +79,24 @@ def test_crown_is_in_the_vocabulary():
     assert metadata(species="rice", root_types=("crown",)).root_types == ("crown",)
 
 
+def test_root_type_vocab_is_not_forked_from_the_contract():
+    """This module's docstring claimed to match ``RootType``; now it defers to it.
+
+    ``ROOT_TYPE_VOCAB`` was a third hand-written copy of the contract literal, annotated
+    "Matches the contract's ``RootType``" -- a claim nothing checked. It is what
+    ``#10``'s ``LabelCard`` validates ``root_types`` against, so a copy that drifted
+    would accept a package here and reject it at publish, which is the most expensive
+    place to find out.
+
+    Identity, not equality: an equal-but-separate frozenset is exactly the state this
+    change removed, and ``==`` cannot tell the two apart.
+    """
+    from sleap_roots_training.labeling import metadata as metadata_module
+    from sleap_roots_training.registry import chooser
+
+    assert metadata_module.ROOT_TYPE_VOCAB is chooser.ROOT_TYPE_VOCAB
+
+
 def test_metadata_is_frozen():
     """A build must not be able to change the identity it validated."""
     meta = metadata()

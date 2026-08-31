@@ -24,7 +24,11 @@ from typing import Mapping, Optional, Sequence
 
 from omegaconf import OmegaConf
 
-from sleap_roots_training.registry.chooser import MODE_VOCAB, SPECIES_VOCAB
+from sleap_roots_training.registry.chooser import (
+    MODE_VOCAB,
+    ROOT_TYPE_VOCAB,
+    SPECIES_VOCAB,
+)
 
 #: The package metadata file's name inside a labeling package. Decision 3 makes the package
 #: directory a named contract, so the filename is part of it: ``#10``'s ``publish-labels``
@@ -44,10 +48,6 @@ _HEADER = (
     "# The provenance block records what they were chosen *from* -- the parameters are\n"
     "# only reproducible against the same inputs, and new waves land between re-runs.\n"
 )
-
-#: Root types a labeling package can be built for. Matches the contract's ``RootType``
-#: literal, which is what ``#10``'s ``LabelCard`` validates against.
-ROOT_TYPE_VOCAB = frozenset({"primary", "lateral", "crown"})
 
 #: What an ``experiment`` slug may contain. It becomes part of a filename, so anything a
 #: shell or a filesystem treats specially is rejected at construction rather than

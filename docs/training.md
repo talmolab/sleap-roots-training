@@ -23,7 +23,7 @@ An experiment is one YAML file: `sleap-nn`'s own `data_config` / `model_config` 
 experiment:
   species: arabidopsis      # a known species (registry/chooser.py SPECIES_VOCAB)
   mode: cylinder            # a known mode (MODE_VOCAB)
-  root_type: primary        # primary | lateral | crown
+  root_type: primary        # a known root type (ROOT_TYPE_VOCAB, from the contract's RootType)
   dataset:
     name: cyl_arabidopsis_primary
     path: data/arabidopsis_primary_cylinder.train.pkg.slp

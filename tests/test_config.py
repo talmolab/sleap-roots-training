@@ -318,14 +318,18 @@ def test_deep_validation_import_failure_is_clean(write_config, monkeypatch):
 # --- Vocab drift guard ------------------------------------------------------------------
 
 
-def test_root_type_vocab_mirrors_cards_slots():
-    # ROOT_TYPE_VOCAB is a hand-maintained local mirror of registry/cards.py's private
-    # _ROOT_SLOTS (kept local, not imported, per the PR #20 review). Guard against silent
-    # drift the same way _SLEAP_NN_KEYS is guarded against TrainingJobConfig drift — so if
-    # cards.py ever adds/removes a root slot, this module does not go stale unnoticed.
-    from sleap_roots_training.registry import cards
+def test_root_type_vocab_is_not_forked_from_the_contract():
+    # This guard used to compare ROOT_TYPE_VOCAB against registry/cards.py's _ROOT_SLOTS
+    # — two hand-maintained local copies, checked against each other. That could only ever
+    # catch one of them going stale; both being wrong together passed it. The vocabulary
+    # now has one owner (sleap_roots_contracts.RootType, derived in chooser), so what is
+    # worth asserting is that this module did not re-fork it.
+    #
+    # Identity, not equality: an equal-but-separate frozenset is exactly the state this
+    # change removed, and `==` cannot tell the two apart.
+    from sleap_roots_training.registry import chooser
 
-    assert config.ROOT_TYPE_VOCAB == frozenset(cards._ROOT_SLOTS)
+    assert config.ROOT_TYPE_VOCAB is chooser.ROOT_TYPE_VOCAB
 
 
 @pytest.mark.parametrize(

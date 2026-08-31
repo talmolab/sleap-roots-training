@@ -354,6 +354,76 @@ def test_mode_is_stored_raw_not_slugged():
     assert "multiplant-cylinder" not in modes
 
 
+# --- root slots: two owners meet here, and neither of them is the slot list ------------
+
+#: The slots spelled out, for the same reason `_EXPECTED_MODES` below is: an independent
+#: witness, so a future "just use `get_args(RootType)`" edit cannot slip through unnoticed.
+#: Order is not asserted anywhere -- since #47 it is unobservable (see the emission-order
+#: test below) -- so this is a membership witness only.
+_EXPECTED_ROOT_SLOTS = ("primary", "lateral", "crown")
+
+#: `SelectionRow`'s three model-id slots, derived from the dataclass rather than restated,
+#: so this test cannot agree with `_ROOT_SLOTS` by both being edited in the same commit.
+_ROW_MODEL_ID_SLOTS = frozenset(
+    name[: -len("_model_id")]
+    for name in SelectionRow.__dataclass_fields__
+    if name.endswith("_model_id")
+)
+
+
+def test_root_slot_membership_is_the_contract_vocabulary():
+    # Membership has one owner -- `sleap_roots_contracts.RootType`, via
+    # `chooser.ROOT_TYPE_VOCAB`. Adding a fourth root type upstream without adding a slot
+    # here means every card for it is silently never emitted, which is exactly the drift
+    # that made three hand-maintained copies of this vocabulary a problem.
+    assert frozenset(cards._ROOT_SLOTS) == chooser.ROOT_TYPE_VOCAB
+    assert len(cards._ROOT_SLOTS) == len(chooser.ROOT_TYPE_VOCAB)  # no duplicate slot
+    assert frozenset(_EXPECTED_ROOT_SLOTS) == frozenset(cards._ROOT_SLOTS)
+
+
+def test_root_slots_are_the_rows_model_id_fields_not_a_derived_vocabulary():
+    """Why `_ROOT_SLOTS` stays a local literal, restated for the shape #47 left behind.
+
+    `expand_rows_to_cards` indexes `_ROOT_SLOTS` into a mapping keyed by `SelectionRow`'s
+    three `*_model_id` fields. So the tuple is really the *row's* slot list, and only
+    happens to spell the contract's vocabulary today. Derive it from `get_args(RootType)`
+    and a contract that gains a member does not emit more cards -- it raises `KeyError`
+    inside the seed, on a row that is perfectly valid. The two-owner check is therefore
+    the point: the test above pins the coincidence, this one pins where the list comes
+    from, and a divergence reddens both rather than passing silently.
+    """
+    assert frozenset(cards._ROOT_SLOTS) == _ROW_MODEL_ID_SLOTS
+
+
+def test_card_emission_order_is_sorted_by_model_id_not_slot_order():
+    """The absolute order, which nothing else in the suite pins.
+
+    #47 made emission order `sorted((source_model_id, root_type))`, replacing the
+    row-then-slot order this section originally asserted. `test_expansion_is_independent_
+    of_row_order` and the PYTHONHASHSEED pair both prove the order is *stable* and both
+    pass under a stably-wrong one -- the same argument
+    `test_shared_primary_selectors_are_in_the_exact_expected_order` makes for selectors.
+
+    The fixture is the discriminator: model ids are chosen so sorted order (`r/c`, `r/l`,
+    `r/p`) is the exact reverse of `_ROOT_SLOTS` order, so a regression to iterating slots
+    reddens instead of coinciding.
+    """
+    rows = [
+        _row("rice", "cylinder", "2, 3", primary="r/p", lateral="r/l", crown="r/c"),
+        _row("soybean", "cylinder", "2, 3", primary="s/p", lateral="s/l", crown="s/c"),
+    ]
+    result = cards.expand_rows_to_cards(rows)
+    assert [(c.source_model_id, c.root_type) for c in result] == [
+        ("r/c", "crown"),
+        ("r/l", "lateral"),
+        ("r/p", "primary"),
+        ("s/c", "crown"),
+        ("s/l", "lateral"),
+        ("s/p", "primary"),
+    ]
+    assert tuple(c.root_type for c in result[:3]) != cards._ROOT_SLOTS
+
+
 # --- 3.20: every accepted mode still round-trips through the real ModelCard ---
 
 #: The vocabulary spelled out, NOT `sorted(chooser.MODE_VOCAB)`. Parametrizing over the

@@ -23,7 +23,16 @@ from sleap_roots_contracts import Selector
 
 from sleap_roots_training.registry.chooser import SelectionRow, parse_age_window
 
-#: The three root types, in the order their slots appear on a selection row.
+#: The three root types, in the order their slots appear on a selection row. Card emission
+#: order does *not* follow from this — since #47 the result is sorted on
+#: ``(source_model_id, root_type)`` — so this tuple is read only to walk a row's slots.
+#:
+#: Deliberately *not* ``get_args(RootType)``, though its members are exactly
+#: ``chooser.ROOT_TYPE_VOCAB`` and a test holds them to that. It is indexed into a mapping
+#: keyed by ``SelectionRow``'s three ``*_model_id`` fields, so it is really the *row's*
+#: slot list: a contract that gained a fourth root type would not emit more cards here, it
+#: would raise ``KeyError`` on a valid row. Membership is the contract's to own; which
+#: slots a row carries is this repo's.
 _ROOT_SLOTS = ("primary", "lateral", "crown")
 
 

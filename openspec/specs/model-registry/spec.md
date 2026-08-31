@@ -104,12 +104,12 @@ across species yields one card per species. Empty (`null`) root-type slots SHALL
 Each card SHALL produce a flat metadata mapping containing exactly the selection dimensions the
 consumer reads — `species` (str), `mode` (a member of the contract-owned `Mode` vocabulary, stored
 raw with its space preserved and never the hyphenated collection-id slug), `age_min` (int ≥ 0),
-`age_max` (int ≥ 0), `root_type` (one of `"primary"`, `"lateral"`, `"crown"`) — plus a non-contract
-`source_model_id` for traceability, and SHALL NOT include the wandb-intrinsic keys `registry_id`,
-`version`, or `weights_checksum`. This mapping is the **complete** stored artifact metadata
-(producer lineage lives in the run config, not per-artifact — see Seed Run Lineage). The metadata
-SHALL validate against the `ModelCard` schema from `sleap-roots-contracts`, which matches `mode`
-exactly and normalizes neither case nor whitespace.
+`age_max` (int ≥ 0), `root_type` (a member of the contract-owned `RootType` vocabulary) — plus a
+non-contract `source_model_id` for traceability, and SHALL NOT include the wandb-intrinsic keys
+`registry_id`, `version`, or `weights_checksum`. This mapping is the **complete** stored artifact
+metadata (producer lineage lives in the run config, not per-artifact — see Seed Run Lineage). The
+metadata SHALL validate against the `ModelCard` schema from `sleap-roots-contracts`, which matches
+`mode` exactly and normalizes neither case nor whitespace.
 
 #### Scenario: Metadata validates against the ModelCard contract
 
