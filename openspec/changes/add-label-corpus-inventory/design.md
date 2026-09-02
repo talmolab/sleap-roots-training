@@ -85,6 +85,11 @@ This file carries the decisions that shape the spec deltas.
   Note `src/` cannot import from `scripts/`, which has no `__init__.py`; the rule is defined
   in `inventory/redact.py` and a test loads the script by path — the way
   `tests/test_scripts.py` already does — to assert the two agree.
+  Scope note: discovery is confined to the project owner's SLEAP directory, so every
+  *walked* path carries one user segment. The structural rule earns its keep on **recorded**
+  paths from registry metadata, which this capability does not control and cannot re-scope.
+  `genotype`, `accession_id` and `experiment_name` are approved for the public repo
+  (eberrigan, 2026-09-02); the excluded class is fields naming a person.
 - **D13. Bloom is reached over `requests`, not a client library.** `bloomctl` reaches
   `cyl_scans_extended` through supabase-py, which is not here and caps at `<3`; this
   capability needs two `GET` shapes. `requests` is declared **direct** rather than leaned on

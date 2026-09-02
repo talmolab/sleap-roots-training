@@ -95,6 +95,8 @@ Deriving from two sources and requiring them to agree is the point — see `desi
   (supabase, httpx, realtime, cryptography and the rest) to import a 22-string constant.
   The Bloom column names are transcribed into a committed fixture with recorded provenance,
   guarded by an `integration`-marked drift test.
+- **Scope on the share:** only the project owner's SLEAP directory is walked. Other users'
+  directories are out of scope and are not read.
 - **Requires:** the `Z:` share, `WANDB_API_KEY`, and a Bloom credentials profile. The
   available credentials belong to a person and **carry write authority**; the read-only
   guarantee is therefore enforced by the `GET`-only client (see the

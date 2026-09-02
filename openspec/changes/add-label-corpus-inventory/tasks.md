@@ -1,15 +1,21 @@
 # Tasks
 
-**TDD.** `(RED)` / `(GREEN)` label the *authoring order within a commit*, not separate
-commits. Each group lands as **one commit carrying its tests and its implementation**, per
-`.claude/commands/tdd.md` Phase 6 and `openspec/project.md`'s "Keep `main` green: `pytest`
-must pass before every commit". Write the tests first, confirm they fail for the right
-reason (`ImportError`, `AttributeError` or `AssertionError` — not an unexpected error, per
-`tdd.md` Phase 2), then implement, then commit both.
+**TDD, as separate commits.** `(RED)` lands the tests and is **expected to be red**;
+`(GREEN)` lands the implementation that turns it green. Commit subjects use
+`test(RED): …` / `feat(GREEN): …`, matching `sleap-roots-contracts`, so the red state is
+visible in history rather than asserted in a PR description. Confirm each RED fails for the
+right reason — `ImportError`, `AttributeError` or `AssertionError`, not an unexpected error,
+per `.claude/commands/tdd.md` Phase 2 — before writing the implementation.
 
-**Never land a module without its tests in the same commit.** `--cov-fail-under=95` is
-repo-wide, and the measured baseline is 97% (1545 statements, 39 missed) — so an
-under-covered module can redden CI even when every test passes.
+This requires amending `openspec/project.md`'s "`pytest` must pass before every commit",
+which forbids a deliberate red. Task 0.4 does that; it is a convention change affecting
+every future change in this repo, and it brings training into line with contracts, where
+`test(RED)`/`feat(GREEN)` is already the practice.
+
+**The bar is green at every `(GREEN)` boundary and at the PR head**, never mid-pair. Note
+RED-first is *easier* on the repo-wide `--cov-fail-under=95` (measured baseline 97%: 1545
+statements, 39 missed) than a combined commit would be: at RED the module does not exist yet,
+so it contributes no uncovered statements, and by GREEN its tests already exist.
 
 **No CI on the proposal commit.** `openspec/**` is outside `ci.yml`'s paths filter, so the
 proposal commit produces *no checks*, which is absence of signal rather than green.
@@ -28,6 +34,13 @@ proposal commit produces *no checks*, which is absence of signal rather than gre
 - [ ] 0.3 Confirm `#48` has merged, or place the `inventory` group before the `labeling`
       group in `cli.py` rather than at end of file. `#48`'s final hunk is an EOF append; two
       EOF appends conflict for whoever rebases second.
+- [ ] 0.4 Amend `openspec/project.md`'s Testing Strategy: replace "`pytest` must pass before
+      every commit" with a rule that permits a labelled `test(RED)` commit on a feature
+      branch, requiring green at every `feat(GREEN)` boundary and at the PR head, and keeping
+      `black --check` and `ruff check` green on every commit. Cite
+      `sleap-roots-contracts`' existing `test(RED)`/`feat(GREEN)` history as the pattern
+      being adopted. **Its own commit**, since it changes a convention every future change
+      inherits and should be revertable independently of this capability.
 
 ## 1. Path resolution and digest verification
 
@@ -182,6 +195,9 @@ proposal commit produces *no checks*, which is absence of signal rather than gre
       path** the way `tests/test_scripts.py` already does — `scripts/` has no `__init__.py`,
       so `src/` cannot import from it, and this is what keeps the two from drifting.
 - [ ] 6.2 **(RED)** Test that person-identifying Bloom fields appear in no emitted artifact.
+      Note `genotype`, `accession_id` and `experiment_name` are **approved for the public
+      repo** (eberrigan, 2026-09-02) and are emitted — they describe plants and experiments,
+      not people. The excluded class is fields naming a person, such as the phenotyper.
 - [ ] 6.3 **(RED)** Test that per-scan CSV columns are grouped by source; that
       `species_name` and `plant_age_days` are asserted against
       `sleap_roots_contracts.params`'s `SPECIES_NAME_FIELD` / `PLANT_AGE_DAYS_FIELD` rather

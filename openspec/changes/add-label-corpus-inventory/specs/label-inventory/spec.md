@@ -470,14 +470,15 @@ Every path recorded in an emitted artifact SHALL have its internal host segment 
 segment redacted. The artifacts are committed to a **public** repository, and the recorded
 source paths contain an internal SMB hostname and a username.
 
-Redaction SHALL be **structural, not a list of known strings**. The share holds the
-directories of several people, so a rule enumerating one hostname and one username would
-pass every path belonging to anyone else through verbatim — the same leak with a narrower
-blast radius, and one that a test built on the enumerated username would still report as
-clean. The rule SHALL therefore redact the segment following a user-directory marker
-whatever its value, and SHALL redact any host segment of a UNC path. The substitutions the
-repository already applies when committing captured payloads are a floor to remain
-compatible with, not the mechanism.
+Redaction SHALL be **structural, not a list of known strings** — but for a narrower reason
+than the walk scope. Discovery is confined to one user's directory, so every *walked* path
+carries the same user segment. The paths the capability emits are not all walked paths: a
+registry artifact's **recorded** source path is historical metadata that this capability
+does not control and cannot re-scope, and it may name a host or a user segment that no
+enumerated substitution covers. The rule SHALL therefore redact the segment following a
+user-directory marker whatever its value, and SHALL redact any host segment of a UNC path.
+The substitutions the repository already applies when committing captured payloads are a
+floor to remain compatible with, not the mechanism.
 
 Redaction SHALL be applied on every run, so a re-run remains identical, and SHALL preserve
 the distinction between the recorded prefixes so a reader can still tell which of them a
@@ -519,7 +520,9 @@ train/test split describes a training run, not a corpus, and counting one as a c
 would report a subset's frame count as the corpus's.
 
 The root the capability walks SHALL be a supplied parameter rather than a fixed location, so
-discovery can be exercised without the production share.
+discovery can be exercised without the production share. In production that root is the
+project owner's SLEAP directory; **other users' directories on the share are out of scope**
+and SHALL NOT be walked. Discovery SHALL NOT ascend above the supplied root.
 
 #### Scenario: A folder with a top-level labels file is inventoried
 
