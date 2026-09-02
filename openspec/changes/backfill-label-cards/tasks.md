@@ -2,9 +2,11 @@
 
 - [x] 0.1 ~~Verify `LabelCard` schema permits `null` for provenance fields~~ — **resolved:** the
       seven provenance fields are `Optional`; the other 15 are required and non-nullable.
-      Confirmed against the pinned `0.1.0a6`. See D1 (the seven) and D7 (the four required ones
-      that are not recoverable from the blob). The earlier "no contracts bump needed" reading
-      answered only the provenance half of this question.
+      Confirmed against `0.1.0a6` when the question was first asked, and re-confirmed against
+      `0.1.0a8` — the release `main` now pins since #47 — where the 7/15 split is unchanged. See
+      D1 (the seven) and D7 (the four required ones that are not recoverable from the blob). The
+      earlier "no contracts bump needed" reading answered only the provenance half of this
+      question.
 - [x] 0.2 ~~Decide disposition of medicago~~ — **resolved:** `medicago` is in scope.
 - [x] 0.3 ~~Confirm `wheat`, `sorghum`, `medicago` should be added to `SPECIES_VOCAB`~~ —
       **resolved: no.** They go into a new label-side `LABEL_SPECIES_VOCAB`; `SPECIES_VOCAB` is
@@ -21,18 +23,27 @@
 
 ## 1. Upstream: contracts pin (no new release unless §2 requires one)
 
-D3 no longer needs a contract change, so this section is **only** the `a7`/`a8` pin catch-up plus
-whatever D7's gate turns out to require. 1.3 is conditional on 2.5 and therefore completes after §2.
+D3 no longer needs a contract change, and the `a7`/`a8` pin catch-up that used to sit here is
+**already done** — #47 (`b102d43`) landed `sleap-roots-contracts==0.1.0a8` on `main`. So this
+section is now *only* whatever D7's gate turns out to require, and if 2.5 reports all four fields
+recovered it is empty. 1.3 is conditional on 2.5 and therefore completes after §2.
 
-- [ ] 1.1 Open a change directory in `sleap-roots-contracts` for the pin catch-up, following the
-      `archive/2026-08-05-update-contracts-pin-0-1-0a6` precedent (proposal + design + `a6 → a8`
-      delta review). This is independent of the backfill and can land first.
-- [ ] 1.2 Bump the pin in `pyproject.toml` here; confirm the full suite passes unfiltered, not
-      only under CI's `-m "not integration"` (#53).
+- [x] 1.1 ~~Open a change directory in `sleap-roots-contracts` for the pin catch-up~~ — **struck:**
+      #47 bumped the pin to `0.1.0a8` on `main` directly, so there is no `a6 → a8` delta left to
+      review. (Correction to the struck text: the
+      `archive/2026-08-05-update-contracts-pin-0-1-0a6` precedent it cited lives in **this** repo,
+      not in `sleap-roots-contracts` — contracts has no pin change in its archive.)
+- [x] 1.2 ~~Bump the pin in `pyproject.toml` here~~ — **struck:** `pyproject.toml:46` already reads
+      `sleap-roots-contracts==0.1.0a8`.
 - [ ] 1.3 **Conditional on 2.5** — if any of `age_min`/`age_max`/`n_plants`/`n_scans` is
       unrecoverable for any collection, relax that field (and only that field) to `Optional` in a
       contracts release, with the reason recorded in the contracts change's design. If 2.5 reports
       all four recovered everywhere, this task is struck, not deferred.
+- [ ] 1.4 **Conditional on 1.3, and ordered before §4** — if 1.3 cuts a contracts release, bump this
+      repo's pin in `pyproject.toml` to *that* release and confirm the full suite passes unfiltered,
+      not only under CI's `-m "not integration"` (#53). Without this task §4 builds cards against
+      `a8`, where the relaxed fields are still required, and the fallback never takes effect here.
+      If 1.3 is struck, so is this.
 
 ## 2. Provenance reconstruction (archaeology) — gates §3
 
@@ -65,9 +76,9 @@ so anything not written down here does not exist downstream.
 
 ## 3. Species vocabulary split
 
-Depends on **#50** having landed — this section edits `labeling/metadata.py` and
-`labeling/skeletons.py`, both of which #50 rewrites. Check its merge state before starting, and
-rebase rather than resolving a conflict in either file by hand.
+#50 has landed (`54609a9`), so `labeling/metadata.py` and `labeling/skeletons.py` are already on
+the single contract-derived `ROOT_TYPE_VOCAB` this section is written against. No coordination is
+left; this branch is rebased onto it.
 
 Root type does **not** split (D3). Only species does.
 
@@ -75,19 +86,26 @@ Root type does **not** split (D3). Only species does.
       difference is exactly `{"wheat", "sorghum", "medicago"}` (red).
 - [ ] 3.2 Add `LABEL_SPECIES_VOCAB` to `registry/chooser.py`, defined as `SPECIES_VOCAB | {...}`
       so the superset relation cannot drift (green).
-- [ ] 3.3 **Test, not a docstring:** assert the superset relation holds and that
-      `LABEL_SPECIES_VOCAB` is *defined in terms of* `SPECIES_VOCAB` rather than restated — a
-      literal copy that happens to match today passes a set comparison and drifts silently later.
-      This repo has watched exactly that happen: #40 landed a third `ROOT_TYPE_VOCAB` copy whose
-      docstring claimed to match the contract with nothing checking it.
+- [ ] 3.3 **Test — a source check, because a set comparison cannot see this.** 3.1 already compares
+      the sets, and that is all a runtime assertion can do: both vocabularies are module-level
+      `frozenset`s computed at import, so monkeypatching `SPECIES_VOCAB` and reloading `chooser`
+      re-executes the original source either way. A literal copy that happens to match today is
+      indistinguishable from a derived superset at runtime. Assert on the **source** instead —
+      parse `chooser.py` with `ast` and assert the `LABEL_SPECIES_VOCAB` assignment references the
+      name `SPECIES_VOCAB`. This repo has watched the copy-drift happen: #40 landed a third
+      `ROOT_TYPE_VOCAB` copy whose docstring claimed to match the contract with nothing checking
+      it.
 - [ ] 3.4 **Test:** `PackageMetadata` accepts `species="wheat"`, and the skeleton-table loader
       accepts a `wheat` row (red).
 - [ ] 3.5 Point `labeling/metadata.py` and `labeling/skeletons.py` at `LABEL_SPECIES_VOCAB` for
       `species` only. Their `root_type` / `root_types` validation stays on `ROOT_TYPE_VOCAB`,
       untouched (green).
 - [ ] 3.6 **Test — the half that must NOT change:** `experiment.species: wheat` is still rejected
-      by `config.validate`; the selection-matrix loader still rejects a `wheat` row;
-      `frozenset(cards._ROOT_SLOTS) == chooser.ROOT_TYPE_VOCAB` still holds; and
+      by `config.validate_config` (`config.py:112` — the public name; there is no `config.validate`);
+      the selection-matrix loader still rejects a `wheat` row;
+      `frozenset(cards._ROOT_SLOTS) == chooser.ROOT_TYPE_VOCAB` still holds — that one already
+      exists at `tests/test_registry_cards.py:379-381`, so reference it rather than restating it;
+      and
       `experiment.root_type: seminal`, a labeling package with `root_types: [seminal]`, and a
       `seminal` skeleton-table row are all still rejected. This is the test that makes the split a
       split rather than a widening — and the last three are what stop `seminal` creeping back in
@@ -113,6 +131,8 @@ Root type does **not** split (D3). Only species does.
       exercised with a **synthetic** pair — two cards differing only in age. The real eight are
       already unique under `{species}-{mode}-{root_type}`, so a test over live data asserts nothing
       about the guard. D4 drops age from the name, which is precisely what makes this collidable.
+      **Implemented in 5.4** — this is the one §4 test whose implementer was in neither 5.4's nor
+      6.7's "against" list.
 - [ ] 4.7 **Test:** every card's `mode` validates against `MODE_VOCAB`, `species` against
       `LABEL_SPECIES_VOCAB`, and `root_type` against `chooser.ROOT_TYPE_VOCAB` — the model-side
       vocabulary, unchanged (D3). No card carries `seminal`.
@@ -130,17 +150,22 @@ Root type does **not** split (D3). Only species does.
 
 Every task here is offline. `label_publish.py` takes an injected `api` defaulting to `None` and
 imports `wandb` only on the network path — the seam `registry/publish.py` already uses
-(`publish.py:111,141,167,183`). Without it these become live-network tests with no marker to skip
-them, which is how #53's unrun-integration problem starts.
+(`publish.py:28-29,86` in `publish_card`, `:163-168,208-209` in `seed_registry`, and
+`:275-278,302-303` in `verify_registry`). Without it these become live-network tests with no marker
+to skip them, which is how #53's unrun-integration problem starts.
 
 - [ ] 5.1 **Test:** linking an existing artifact version into a new collection preserves the
       artifact digest (no re-publish), driven through an injected fake `api`.
 - [ ] 5.2 **Test:** the old collection's artifact remains resolvable (not orphaned).
 - [ ] 5.3 **Test:** the new collection carries the `production` alias and `LabelCard` metadata;
       the old one does not carry `production`.
-- [ ] 5.4 Implement `label_publish.py` against 5.1–5.3: create normalized collections, link
-      existing artifact versions, attach `LabelCard` metadata, set `production` on the new
-      collection only. Signature takes `api=None` and imports `wandb` lazily.
+- [ ] 5.4 Implement `label_publish.py` against 5.1–5.3 **and 4.6**: create normalized collections,
+      link existing artifact versions, attach `LabelCard` metadata, and set `production` on the new
+      collection only. The 4.6 duplicate-id guard runs **first**, before any collection is created
+      or artifact linked — the model side's precedent is `registry/publish.py:196-206` at the top of
+      `seed_registry()`, which builds `{collection_id: [owner, ...]}` and raises naming the
+      offending **cards**, not just the collapsed id. Signature takes `api=None` and imports
+      `wandb` lazily.
 - [ ] 5.5 **Test:** re-running skips collections already carrying `production`, and reports them
       as skipped.
 - [ ] 5.6 **Test:** `--force` re-links and re-points the alias on an already-migrated collection.
@@ -162,11 +187,22 @@ Tests precede the implementation they cover.
       the `production` alias, against an injected fake registry.
 - [ ] 6.4 **Test:** credential guard — `--execute` and `--verify` require a resolvable wandb
       credential (same contract as model `seed-registry`).
-- [ ] 6.5 **Test:** `--force` is accepted and reaches `label_publish` (CLI wiring for 5.6).
-- [ ] 6.6 Implement `seed-label-registry` against 6.1–6.5: dry-run by default, `--execute`,
-      `--only`, `--verify`, `--force`.
-- [ ] 6.7 Update `docs/CHANGELOG.md` under `[Unreleased]`.
-- [ ] 6.8 Full suite unfiltered, `black --check`, `ruff check`, `openspec validate --all --strict`.
+- [ ] 6.5 **Test:** `--execute` confirms the target before doing anything, and `--yes` skips the
+      prompt. Declining exits non-zero with no collection created, no artifact linked and no wandb
+      run minted. This is the parity `seed-registry` actually has and the spec claims: the flag is
+      `cli.py:56`, the prompt `cli.py:179-183` (`click.confirm(..., abort=True)`, after the
+      credential check so it fails fast first), and the decline test
+      `tests/test_registry_cli.py:104-115`. It matters more here than there — these collections are
+      the ones D4 treats as uncreatable twice.
+- [ ] 6.6 **Test:** `--force` is accepted and reaches `label_publish` (CLI wiring for 5.6).
+- [ ] 6.7 Implement `seed-label-registry` against 6.1–6.6: dry-run by default, `--execute`,
+      `--only`, `--verify`, `--force`, `--yes`.
+- [ ] 6.8 Update `docs/CHANGELOG.md` under `[Unreleased]`.
+- [ ] 6.9 Full suite unfiltered **with the coverage gate CI enforces** — `pytest
+      --cov=src/sleap_roots_training --cov-fail-under=95` (`ci.yml:89`), run without the
+      `-m "not integration"` filter — plus `black --check`, `ruff check`, and
+      `openspec validate --all --strict`. Two new modules whose network paths are deliberately
+      unexercised are the likeliest place to breach 95%.
 
 ## 7. Live migration — gated, and a separate PR after this one merges
 

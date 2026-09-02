@@ -7,12 +7,13 @@ The `wandb-registry-sleap-roots-labels` registry holds 8 label collections publi
 metadata models already have via `ModelCard` — but the existing 8 collections must be retrofitted
 onto it.
 
-This document is written against the **post-#50 world**. #50 collapsed the root-type vocabulary into
-the contract-owned `sleap_roots_contracts.RootType`: `ROOT_TYPE_VOCAB` no longer exists as a
+This document is written against the **post-#50 world**, which is now simply `main`: #50 merged as
+`54609a9` and this branch is rebased onto it. #50 collapsed the root-type vocabulary into the
+contract-owned `sleap_roots_contracts.RootType` — `ROOT_TYPE_VOCAB` no longer exists as a
 hand-written set in `labeling/metadata.py` or `config.py`, and is instead a single object derived
-from the contract in `registry/chooser.py` and imported by all three consumers. An earlier draft of
-this design targeted the pre-#50 layout and proposed editing a symbol that will not exist; D3 and D5
-below are written against what `main` will actually hold.
+from the contract in `registry/chooser.py` (`chooser.py:100-101`) and imported by all three
+consumers. An earlier draft of this design targeted the pre-#50 layout and proposed editing a symbol
+that no longer exists; D3 and D5 below are written against what `main` holds.
 
 ### The 8 collections
 
@@ -73,12 +74,13 @@ decided by §2's findings rather than up front:
 | relax `age_min`/`age_max`/`n_plants`/`n_scans` to `Optional` | D7 | yes — only if §2 cannot recover them |
 
 If §2 recovers all four fields on all eight collections, **this change ships against a contracts
-release that already exists** and §1 collapses to the pin catch-up alone.
+release that already exists** and §1 is empty.
 
-Separately from this change's needs, contracts is at `0.1.0a8` while this repo pins `0.1.0a6`, so
-the pin has `a7`/`a8` to absorb regardless. The `a3 → a6` bump went through its own change directory
-(`archive/2026-08-05-update-contracts-pin-0-1-0a6`) with a full delta review, and that catch-up
-should follow the same precedent rather than being folded in here silently — see task 1.1.
+The `a7`/`a8` pin catch-up an earlier draft carried here is **done**: #47 (`b102d43`) landed
+`sleap-roots-contracts==0.1.0a8` on `main` (`pyproject.toml:46`), so this repo and contracts are now
+on the same release and there is no delta left to review. What remains conditional is only the
+release D7 might cut — and if it does, task 1.4 is what brings this repo's pin forward to it, since
+nothing else would.
 
 ## Decisions
 
@@ -119,8 +121,8 @@ The wheat collection is *named* `wheat_5-14DAG_seminal_6nodes_labels`, and an ea
 document read that name as a root type the contract must learn. Two things were wrong with that.
 
 **The factual claim was false.** The draft asserted the contract's `RootType` "already includes
-`seminal` (confirmed)". It does not, on the pinned `0.1.0a6` or at contracts HEAD (`0.1.0a8`, two
-releases ahead of our pin), where `models.py` reads:
+`seminal` (confirmed)". It does not, at `0.1.0a8` — the release this repo now pins — nor at the
+`0.1.0a6` the claim was originally checked against, where `models.py` reads:
 
 ```python
 RootType = Literal["primary", "lateral", "crown"]
@@ -174,13 +176,24 @@ vocabulary splits (D5).
 
 ### D4: Collection naming convention
 
-Normalized names follow `{species}-{mode}-{root_type}` with hyphens. This matches the model
-registry's convention **except for age, which is deliberately dropped** — the model side's
-`collection_id()` carries an age suffix, and this one does not. Unlike a model, which is trained and
-validated for a specific age window, a label set covers whatever ages were annotated; the range is
-metadata on the card (`age_min`/`age_max`), not part of the collection's identity. Claiming full
-parity would be wrong, and the difference is the one thing a reader comparing the two registries
-will notice first.
+Normalized names follow `{species}-{mode}-{root_type}` with hyphens — the *shape* the model
+registry reads as a collection name, but not the same derivation, and the difference is now larger
+than an earlier draft of this section claimed.
+
+That draft said the label side matches the model convention "except for age", because at this
+branch's base `cards.collection_id()` returned `{species}-{mode}-{root_type}-age{min}-{max}`. **#47
+replaced it.** Post-#47 (`cards.py:204-215`) a model collection id is
+`card.source_model_id.replace("/", "-").replace("=", "-")` — e.g.
+`rice-older-crown-221208_113552.multi_instance.n-574` — which carries neither age *nor* mode, and
+adds a run timestamp and frame count. #47's reason is in its docstring: a card with several species
+has no single species to name itself after.
+
+So the honest statement is that the two registries derive their collection names differently. A
+label collection has no `source_model_id` to name itself after, and its identity really is the
+selection tuple, so it keeps the descriptive form. What stays true from the original argument is why
+age is not in it: unlike a model, which is trained and validated for a specific age window, a label
+set covers whatever ages were annotated, so the range is metadata on the card
+(`age_min`/`age_max`), not part of the collection's identity.
 
 Examples:
 - `soybean-cylinder-lateral` (was `soybean_lateral_4nodes_v007_labels`)
@@ -188,9 +201,12 @@ Examples:
 - `wheat-cylinder-crown` (was `wheat_5-14DAG_seminal_6nodes_labels` — see D3 on the name change)
 
 Dropping age from the name is what makes the uniqueness guard load-bearing rather than incidental:
-two label collections for the same species/mode/root type at different ages would collide where the
-model side would not. Nothing in the current eight collides, which is exactly why the guard needs a
-synthetic fixture rather than the real data to be exercised (task 4.6).
+two label collections for the same species/mode/root type at different ages collide. The model side
+is not exposed to *that* collision — post-#47 its ids carry a run timestamp — but it is not immune
+to collision in general either, which is why `seed_registry()` keeps its own guard
+(`publish.py:196-206`, over a lossy `/`-and-`=` slug). Both sides need one; they need it for
+different reasons. Nothing in the current eight collides, which is exactly why the guard needs a
+synthetic fixture rather than the real data to be exercised (task 4.6, implemented in 5.4).
 
 ### D5: A label-side species vocabulary, not a widened `SPECIES_VOCAB`
 
@@ -203,10 +219,13 @@ widening it reaches further than intended:
 
 | site | what it validates | side |
 |---|---|---|
-| `chooser.py:207` | the **model selection matrix** | model |
+| `chooser.py:254` | the **model selection matrix** | model |
 | `config.py:208` | `experiment.species` in a **training config** | model |
 | `metadata.py:96` | a labeling package's `species` | label |
-| `skeletons.py:139` | the **skeleton table** rows | label |
+| `skeletons.py:142` | the **skeleton table** rows | label |
+
+(Line numbers re-checked against `main` at `54609a9`; `SPECIES_VOCAB` itself is defined at
+`chooser.py:79`.)
 
 So "add three species with published labels" would also make `species: wheat` a legal training
 config and a legal selection-matrix row, for a species with no model, no matrix row, and no verified
@@ -240,9 +259,18 @@ then migrate the rest. Same pattern `seed-registry --only` established for model
 The canary is **`arabidopsis-cylinder-primary`** (was
 `cyl_arabidopsis_7-11DAG_primary_6nodes_labels`): a species already in `SPECIES_VOCAB`, a root type
 already in `RootType`, and an age already in its name — so it exercises the link-and-alias path
-without also depending on D5's vocabulary split or D7's outcome. A canary that needed either would
-conflate two failures. (Since D3 no longer changes any vocabulary, it is no longer a source of
-canary risk at all.)
+without depending on D5's vocabulary split. A canary that needed the split would conflate two
+failures. (Since D3 no longer changes any vocabulary, it is no longer a source of canary risk at
+all.)
+
+**It is not independent of D7, and an earlier draft of this section wrongly said it was.** The age
+in the name immunises it against 2 of D7's 4 gated fields, not 4: task 2.5 expects `n_plants` and
+`n_scans` to be unrecoverable from any blob, which includes this collection, and both are required
+on `LabelCard`. On that expectation no card is constructible for the canary either — so if 2.5
+confirms it, §7's canary step runs *after* D7's fallback release and 1.4's pin bump, not before.
+This does not change which collection the canary is; it changes what the canary is waiting on. If
+2.5 recovers all four everywhere, the original independence claim becomes true and this paragraph
+is moot.
 
 ### D7: The required-field gate — archaeology decides, with a stated fallback
 
@@ -272,18 +300,21 @@ fallback.** Concretely:
    text, the lab share, and Bloom (task 2.1), recorded per collection with a confidence level
    (task 2.2).
 2. **If every collection yields all four**, no contract change is needed at all — D3 no longer
-   requires one, so this branch means the change ships against an existing release and §1 reduces
-   to the `a7`/`a8` pin catch-up.
+   requires one, so this branch means the change ships against the `0.1.0a8` release already pinned
+   on `main`, and §1 is empty.
 3. **If any collection does not**, those fields — and only those — are relaxed to `Optional` in a
    contracts release, and the unrecoverable ones are set to `null` under D1's rule. This is now the
    *only* thing that could make a release necessary, so §2's report decides whether §1 has a
    contracts change in it at all.
 
 **Why gate rather than relax now.** Relaxing re-litigates a line the contract drew deliberately and
-with this change named in the comment. Six of eight collections have an age in the name, so the
-question is genuinely open for two collections and four fields — small enough that guessing wrong in
-either direction is worse than looking. Relaxing pre-emptively would loosen the contract for every
-future consumer on the strength of a gap we had not yet confirmed existed.
+with this change named in the comment. The exposure is not uniform across the four fields, and an
+earlier draft collapsed it into one number: **`age_min`/`age_max` are open for two collections**
+(the two soybean sets, the only two with no age in the name), while **`n_plants`/`n_scans` are open
+for all eight** — nothing in a `.slp` yields an experiment-design count. Either way the question is
+small enough that guessing wrong in either direction is worse than looking. Relaxing pre-emptively
+would loosen the contract for every future consumer on the strength of a gap we had not yet
+confirmed existed.
 
 **Why not exclude the two soybean collections instead.** They are the two with the `Z:`-drive
 `data_path` — the least discoverable label sets in the registry, and the ones whose provenance most
@@ -306,8 +337,8 @@ and the task list now enforces that ordering.
   relaxation D7 describes. This is the risk that can extend the change's scope into a second
   contracts release; it is the reason §2 gates §3.
 - **A contracts release may still be needed, but only D7 can require it.** If §2 recovers all four
-  gated fields, none is needed. The pin still has `a7`/`a8` to absorb either way, independently of
-  this change.
+  gated fields, none is needed and §1 is empty. The `a7`/`a8` catch-up that used to sit alongside
+  this is done — #47 landed the `0.1.0a8` pin on `main`.
 - **One vocabulary splits where #50 consolidated.** `SPECIES_VOCAB` and `LABEL_SPECIES_VOCAB` will
   co-exist, and a reader who remembers #50 may read that as regression. It is not the same case:
   #50 retired three hand-maintained copies of *one* set, while this defines a second set with a
@@ -339,8 +370,9 @@ follow-up PR's scope. This PR is §0–§6: code, offline tests, and the recorde
 
 **Forward:**
 
-1. **Only if §2's report requires it** (D7): a contracts release relaxing the unrecovered fields.
-   Otherwise this step is the `a7`/`a8` pin catch-up alone, which is not gated on anything here.
+1. **Only if §2's report requires it** (D7): a contracts release relaxing the unrecovered fields,
+   followed by task 1.4's pin bump to that release. Otherwise this step is empty — the `a7`/`a8`
+   catch-up it used to carry landed in #47.
 2. Dry run (`seed-label-registry`, no `--execute`) — prints all eight planned collections and their
    card metadata, contacting nothing. Reviewed by hand against §2's recorded findings.
 3. Canary: `--execute --only arabidopsis-cylinder-primary`. Verify the downstream consumer reads the

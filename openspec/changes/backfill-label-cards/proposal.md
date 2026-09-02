@@ -42,9 +42,9 @@ single-species content — so labels become queryable and joinable to models.
 - **New spec:** `specs/label-registry/spec.md`
 - **Upstream:** *conditional, and possibly none.* A contracts release is needed only if §2's
   archaeology cannot recover `age_min`/`age_max`/`n_plants`/`n_scans`, in which case those fields
-  relax to `Optional` (D7). Separately and regardless, the pin has `a7`/`a8` to absorb (this repo is
-  on `0.1.0a6`, contracts is at `0.1.0a8`); that catch-up follows the
-  `archive/2026-08-05-update-contracts-pin-0-1-0a6` precedent.
+  relax to `Optional` (D7) and task 1.4 brings this repo's pin forward to that release. The
+  `a7`/`a8` catch-up an earlier draft carried here is **done** — #47 landed
+  `sleap-roots-contracts==0.1.0a8` on `main` — so with D7 unrequired, §1 is empty.
 - **Affected code:**
   - `src/sleap_roots_training/registry/chooser.py` — new `LABEL_SPECIES_VOCAB`, defined as
     `SPECIES_VOCAB | {...}` so the superset relation cannot drift. **No** new root-type vocabulary
@@ -66,8 +66,9 @@ single-species content — so labels become queryable and joinable to models.
 - **External:** reads from `wandb-registry-sleap-roots-labels` (existing); writes normalized
   collections back to the same registry. `sleap-roots-predict`'s parity harness is a downstream
   consumer.
-- **Blocked by:** #10 (`LabelCard` contract — shipped); #50 (root-type vocabulary collapse — D5 and
-  the §3 tasks are written against the post-#50 layout, and §3 edits files #50 touches). A contracts
+- **Blocked by:** nothing outstanding. #10 (`LabelCard` contract) shipped; #50 (root-type
+  vocabulary collapse) merged as `54609a9` and this branch is rebased onto it, so D5 and the §3
+  tasks now describe `main` rather than anticipating it; #47 landed the `0.1.0a8` pin. A contracts
   release is **not** a blocker unless §2's report triggers D7.
 - **Ships in two PRs:** this one is §0–§6 (code, offline tests, recorded archaeology). §7 — the live
   production migration against `wandb-registry-sleap-roots-labels` — is a separate, manually run PR

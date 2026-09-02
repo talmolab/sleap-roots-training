@@ -119,9 +119,12 @@ name it was published under.
 ### Requirement: Label Species Vocabulary
 
 The label-side species vocabulary SHALL be a strict superset of the model-side `SPECIES_VOCAB`,
-adding `wheat`, `sorghum`, and `medicago` — species with published label data and no trained model.
-It SHALL be defined in terms of `SPECIES_VOCAB` rather than as an independent list, so the superset
-relation cannot drift. Both vocabularies remain owned by this package, as the contract models no
+adding `wheat`, `sorghum`, and `medicago` — species with published label data, no collection in
+`wandb-registry-sleap-roots-models`, and no `model_selection.yaml` row. The criterion is registry
+presence, **not** the absence of any model anywhere: wheat has been trained (the
+`seminal_root_generalist` work in design.md D3); it is simply not in that registry. It SHALL be
+defined in terms of `SPECIES_VOCAB` rather than as an independent list, so the superset relation
+cannot drift. Both vocabularies remain owned by this package, as the contract models no
 species vocabulary for either card type.
 
 The label-side vocabulary SHALL govern a labeling package's `species` and the labeling skeleton
@@ -148,9 +151,12 @@ table. The model-side `SPECIES_VOCAB` SHALL continue to govern the model selecti
 The package SHALL provide a `seed-label-registry` subcommand that reads the backfill mapping,
 constructs `LabelCard` metadata, and — by default — runs a dry run printing planned collections
 and metadata without contacting wandb. Publishing SHALL require `--execute`, which SHALL check for
-a resolvable wandb credential before proceeding. The CLI SHALL accept `--only <collection_id>` for
-canary migration, `--verify` for read-back, and `--force` to re-link and re-point an
-already-migrated collection, following the same patterns as the model `seed-registry` command.
+a resolvable wandb credential and SHALL then confirm the target registry interactively before
+proceeding, aborting without creating a collection, linking an artifact, or minting a wandb run if
+the operator declines. `--yes` SHALL skip that confirmation. The CLI SHALL accept
+`--only <collection_id>` for canary migration, `--verify` for read-back, and `--force` to re-link
+and re-point an already-migrated collection, following the same patterns as the model
+`seed-registry` command — which has this same prompt-and-`--yes` gate.
 The network layer SHALL accept an injected wandb API object (defaulting to `None` and created
 lazily) and SHALL import `wandb` only on the network path, so every behaviour above is testable
 without a live registry — the same seam `registry/publish.py` already uses.
@@ -160,6 +166,13 @@ without a live registry — the same seam `registry/publish.py` already uses.
 - **WHEN** `seed-label-registry` is run without `--execute`
 - **THEN** the planned normalized collection names and per-card metadata are printed
 - **AND** no wandb network call is made
+
+#### Scenario: --execute confirms before anything is created
+
+- **WHEN** `seed-label-registry --execute` is run without `--yes` and the operator declines the
+  confirmation
+- **THEN** the command exits non-zero
+- **AND** no collection is created, no artifact is linked, and no wandb run is created
 
 #### Scenario: Canary migration with --only
 
