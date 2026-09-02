@@ -225,19 +225,47 @@ The audit is a data-producing script, so tests target the deterministic parts:
 - **Bloom coverage.** Legacy scans may predate Bloom ingestion or have been re-keyed;
   those become `unresolved` rather than errors.
 
-## Open questions
+## Decisions (resolved 2026-09-02, eberrigan)
 
-1. **Tip models.** `RootType` is `primary | lateral | crown`. A tip model has no slot in
-   `ModelCard`, `LabelCard`, `skeletons.yaml`, or `model_selection.yaml`. Contract-level
-   gap — needs a decision before D can classify them.
-2. **Alfalfa** is not in `SPECIES_VOCAB`, like medicago. Needs the label-side species
-   widening #49's D5 proposes.
-3. **`skeleton_name`.** Files carry inconsistent values — real ones like
-   `soybean_primary`, auto-generated ones like `Skeleton-2`. Record the literal and flag,
-   or normalise to a canonical `{species}_{root_type}`?
-4. **Share walk boundary.** Which of the ~30 folders are in scope? Some are clearly
-   abandoned; a date or naming cutoff would help.
-5. **Where the artifacts live.** Committed to this repo, published as W&B artifacts, or
-   both? Affects whether visualisations need a checkout.
-6. **Sorghum crown, wheat primary/crown age split.** Named in the expected corpus but not
-   in any current table — do collections for these exist, or are they planned?
+1. **Tip models: inventory, do not classify.** Deliverable D lists them with `root_type`
+   blank and `status: unclassified`, so they are visible and counted without putting a
+   contract change on the audit's critical path. File a separate issue for the `RootType`
+   gap. Note there is currently **zero prior art** for tip models anywhere in
+   `src/`, `docs/`, or `openspec/` across these repos.
+2. **Alfalfa: include, flag for widening.** Walk alfalfa folders and report what is
+   there, flagging that it needs the label-side species widening. `SPECIES_VOCAB` is
+   `{soybean, canola, pennycress, arabidopsis, rice}`; #49's D5 already proposes adding
+   wheat, sorghum and medicago label-side, and alfalfa would be a fourth. Report-only —
+   this effort does not edit that vocabulary or #49.
+3. **Share walk boundary: structural filter.** Walk every folder under
+   `Z:\users\eberrigan\SLEAP`, but inventory only those containing a **top-level labels
+   file** — the superset-per-collection rule. Abandoned and scratch folders drop out
+   without a judgement call, and the filter is reproducible rather than a hand-maintained
+   list that would only encode what we already remember.
+4. **Artifacts: repo now, W&B later.** Commit them to this repo so they are reviewable in
+   the PR and diffable over time. W&B publishing is a follow-up once the shape has
+   settled. This matches what #49's §2 already expects and keeps the change
+   self-contained.
+5. **`skeleton_name`: record the literal value and flag it.** Files carry inconsistent
+   values — real ones like `soybean_primary`, auto-generated ones like `Skeleton-2`. The
+   literal goes in deliverable B; deliverable C carries the diff against
+   `skeletons.yaml`. No silent normalisation.
+
+## Resolved by execution
+
+- **Sorghum crown, wheat primary/crown age split.** Named in the expected corpus but
+  absent from every current table. Whether collections exist is answered by the walk
+  itself, so it is an output rather than a prerequisite.
+
+## Change split
+
+Two OpenSpec changes, per repo convention (one change per PR) and because they have
+different consumers:
+
+- **Change 1 — label corpus inventory.** Deliverables A, B, C. Feeds #49's §2 directly.
+- **Change 2 — model inventory.** Deliverable D. Feeds #3 and the roadmap.
+
+They share the share walk but land independently. Framed as a **re-runnable capability**
+("the repo can inventory and verify its label corpus against the registry, the share, and
+Bloom"), not a one-time script — anything one-shot rots the moment a ninth collection
+appears.
