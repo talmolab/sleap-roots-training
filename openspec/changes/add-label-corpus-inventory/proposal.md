@@ -41,9 +41,15 @@ Deriving from two sources and requiring them to agree is the point — see `desi
 
 ### Deliverables
 
+It emits **evidence, not cards.** A `LabelCard` needs `registry_id` and `version`, which are
+meaningless for a collection that was never registered — and the corpus holds more
+unregistered collections than registered ones. `mode` and `root_type` have no source in scan
+metadata either. So the aggregate carries what is evidenced, and `#49` builds cards from it,
+supplying the rest from its own decision record.
+
 - **Per-scan CSV, one per collection**, committed to `inventory/`.
-- **Aggregate YAML, all collections** — the `LabelCard` fields, per-field confidence, and
-  the reconciliation tally. Consumed directly by `#49`'s §2.
+- **Aggregate YAML, all collections** — species, counts, the observed age window with its
+  epoch, skeleton facts, per-field confidence, and the reconciliation tally.
 - **Skeleton-table diff** — which rows each collection verifies, contradicts, or is missing,
   including the `mode`-keying gap.
 
@@ -85,16 +91,17 @@ Deriving from two sources and requiring them to agree is the point — see `desi
   digests instead of gigabytes of downloads, Bloom-sourced species instead of skeleton-name
   parsing). Retiring the workflow is deliberately deferred so this change stays additive;
   the duplication is recorded here so the two do not silently diverge.
-- **New dependency: one.** Bloom's PostgREST surface is reached over `requests`, declared
-  **DIRECT** per the precedent already written into `pyproject.toml` for `pandas` — it is
-  currently importable only via `wandb`, and relying on that would break silently the day
-  `wandb` drops it. `supabase-py` is deliberately **not** added: this capability needs two
-  `GET` shapes, not a client library, and `bloomctl` caps supabase at `<3`. `bloomctl`
-  itself is **not** added either — it resolves cleanly against `main`'s contracts pin, so
-  this is a weight decision rather than a compatibility one: ~40 transitive packages
-  (supabase, httpx, realtime, cryptography and the rest) to import a 22-string constant.
-  The Bloom column names are transcribed into a committed fixture with recorded provenance,
-  guarded by an `integration`-marked drift test.
+- **New dependency: `bloomctl`.** An earlier draft declined it to save ~40 transitive
+  packages and reached Bloom over `requests` instead. That was a weight trade-off made
+  against a read path whose shape had never been established: the base path, the token
+  exchange and the header contract appear nowhere in this repo, and are **not** recoverable
+  from `bloomctl` either, because it delegates HTTP entirely to `supabase-py`. Depending on
+  it instead inherits the authenticated client, session refresh, the batching helper with its
+  measured character budget, the filter-quoting rule, the scan-export column names as an
+  importable constant, and a **plate** read path — four of which the earlier draft promised
+  to specify here and one of which it could not. It resolves cleanly against `main`'s
+  contracts pin. The cost is real (`supabase`, `httpx`, `realtime`, `cryptography` and the
+  rest) and is accepted rather than paid in reimplemented production authentication.
 - **Scope on the share:** only the project owner's SLEAP directory is walked. Other users'
   directories are out of scope and are not read.
 - **Requires:** the `Z:` share, `WANDB_API_KEY`, and a Bloom credentials profile. The

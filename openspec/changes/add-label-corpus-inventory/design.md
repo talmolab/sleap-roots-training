@@ -19,12 +19,15 @@ This file carries the decisions that shape the spec deltas.
 - **D2. A capability, not a script.** The corpus grows, so a one-time pass is stale the day
   a further collection is published. Determinism and idempotence are specified normatively
   so the artifacts can be regenerated and diffed instead of hand-audited.
-- **D3. Two derivations, reconciled — not one source preferred.** Filenames give a guess at
-  species (a folder named `SLEAP_wheat`) and a proxy for plants (human-assigned QR codes);
-  Bloom gives `species_name` and `plant_id`. Computing both and requiring agreement is what
-  makes a reported value evidence rather than an assumption. Preferring Bloom silently would
-  produce the same numbers with none of the assurance, and would hide the cases worth looking
-  at.
+- **D3. Two derivations, reconciled — but only one of them is genuinely independent.**
+  For **species** the derivations are independent: a human typed `SLEAP_wheat`, and Bloom
+  records `species_name` from experiment metadata. Agreement there is real corroboration.
+  For **age and date** they are not: `bloomctl` *wrote* `Day{plant_age_days}_{date_scanned}`
+  from the very columns we later read back, so agreement is a **staleness check** — did the
+  record change after download, through a re-key or a correction. Since age and date are the
+  only per-scan facts compared, the reconciliation tally's assurance value is weaker than the
+  first draft of this decision claimed. Both checks are worth running; the spec now says
+  which is which rather than presenting them as one argument.
 - **D4. Aggregates from agreed rows only, gated per collection.** A total computed across
   verified and unverified rows looks authoritative and is not. The gate is scoped to the
   collection rather than the run: a global halt would let one poorly-covered collection
@@ -90,18 +93,36 @@ This file carries the decisions that shape the spec deltas.
   paths from registry metadata, which this capability does not control and cannot re-scope.
   `genotype`, `accession_id` and `experiment_name` are approved for the public repo
   (eberrigan, 2026-09-02); the excluded class is fields naming a person.
-- **D13. Bloom is reached over `requests`, not a client library.** `bloomctl` reaches
-  `cyl_scans_extended` through supabase-py, which is not here and caps at `<3`; this
-  capability needs two `GET` shapes. `requests` is declared **direct** rather than leaned on
-  transitively through `wandb`, per the `pandas is DIRECT, not transitive` precedent already
-  written into `pyproject.toml`. `bloomctl` itself is not added, and the reason is **weight,
-  not incompatibility** — it resolves cleanly against `main`'s contracts pin, bringing ~40
-  transitive packages (supabase, httpx, realtime, cryptography and the rest) to import a
-  22-string constant. The column names are transcribed into a committed fixture with
-  recorded provenance, guarded by an `integration`-marked drift test — the same shape as the
-  committed TF reference payloads. The cost of not depending on it is that `bloomctl`'s
-  batching budget, its `in.(…)` quoting rule, and its expired-session retry must be
-  specified here rather than inherited; all three now are.
+- **D13. Depend on `bloomctl`. This reverses an earlier decision, and the reversal is the
+  most consequential change in this proposal.** The earlier version reached Bloom over
+  `requests` to avoid ~40 transitive packages, on the stated grounds that "this capability
+  needs two `GET` shapes, not a client library." That was a weight trade-off made against a
+  read path whose shape was never established. The two shapes are written down nowhere — not
+  here, and not in `bloomctl`, which issues no HTTP of its own and delegates to `supabase-py`
+  (`auth.py` is `client.auth.sign_in_with_password(...)` over `create_client(...)`). So the
+  saving was measured against work that had not been scoped.
+  It also promised to specify three inherited behaviours. Two were specified (the batching
+  budget, the `in.(…)` quoting rule); the third — the expired-session signal — could not be,
+  because `bloomctl`'s only expiry handling is free-text matching on *storage* errors and its
+  PostgREST layer has no expiry retry at all. Depending on `supabase-py` through `bloomctl`
+  makes that requirement disappear rather than need specifying: its auth client refreshes on
+  a timer.
+  What the dependency buys: the authenticated client, session refresh, `fetch_in_batches`
+  with its measured budget, the quoting rule, `CSV_COLUMNS` as an importable constant instead
+  of a transcribed fixture with a drift guard, and a **plate** read path — which the
+  cylinder-only view could not serve, and without which this change cannot verify the plate
+  half of the `mode` keying gap that is its own headline. It resolves cleanly against
+  `main`'s contracts pin.
+  What it costs, stated plainly: `supabase`, `httpx`, `realtime`, `cryptography` and the rest,
+  in a repo that has been careful about its dependency surface. Accepted, rather than paid in
+  reimplemented production authentication.
+- **D14. Emit evidence, not cards.** A `LabelCard` requires `registry_id` and `version`,
+  which are meaningless for a collection that was never registered — and the unregistered
+  collections outnumber the registered ones. `mode` and `root_type` have no source in scan
+  metadata at all; the only available source is the collection name, which this capability
+  exists to distrust. So the aggregate stops claiming to carry "the card fields". It carries
+  what is evidenced, `#49` builds cards from it, and name-derived root type and mode are used
+  **only** to select a skeleton row to compare against — never emitted as provenance.
 
 ## Alternatives considered
 
