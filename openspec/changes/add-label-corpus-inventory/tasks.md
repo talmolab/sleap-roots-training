@@ -97,11 +97,23 @@ proposal commit produces *no checks*, which is absence of signal rather than gre
       `plant_age_days`, `experiment_id`, against a fake speaking the **`cyl_scans_extended`
       row keys** (`qr_code`) while the emitter uses the **`scans.csv` column names**
       (`plant_qr_code`) — the two differ and conflating them breaks the join.
-- [ ] 3.4 **(RED)** Test that lookups are **batched** so no rendered filter exceeds the
-      gateway's URL limit, and that every scan in an over-limit collection still resolves.
-      Unbatched, this succeeds on small collections and fails only on the largest.
-- [ ] 3.5 **(RED)** Test that a failure indicating an **expired session** is retried once
-      after re-authenticating, and that a scan resolving on retry is not left unresolved.
+- [ ] 3.4 **(RED)** Test that lookups are **batched** against the **rendered,
+      percent-encoded** URL length, not the sum of identifier lengths, and that every scan in
+      an over-limit collection still resolves. The identifiers are strings needing quoting,
+      and the quote and bracket characters are themselves percent-encoded, so
+      `len(str(v)) + 1` under-counts. `bloomctl`'s `_postgrest.py` measured the real ceiling
+      (1,312 ids passed, 1,343 did not, ≈5.4 KB) and budgets 4,000 characters — reuse the
+      budget, not the counting method, since it only ever batched bigints.
+- [ ] 3.4a **(RED)** Test the `in.(…)` quoting rule for string identifiers — supabase-py
+      wrapped any value containing `,:()` in quotes and we no longer get that for free.
+- [ ] 3.5 **(RED)** Test that an **expired session** is detected by the gateway's own signal
+      — an unauthorized status carrying its JWT-expiry code, not by matching free text — and
+      that the lookup is retried once after obtaining a fresh session, with a scan that
+      resolves on retry not left unresolved.
+- [ ] 3.5a **(RED)** Test that the token exchange is the **only** non-`GET` request: assert
+      every PostgREST-base request used `GET`, that the sole non-`GET` in the recorded log is
+      the token endpoint, and that a second non-`GET` elsewhere fails the run. A client-wide
+      `GET`-only rule would forbid logging in — the read path is `GET`, the login is a `POST`.
 - [ ] 3.6 **(RED)** Test that a QR code absent from Bloom yields `unresolved` with the
       "no record" reason, distinct from the malformed-path reason, and does not raise.
 - [ ] 3.7 **(RED)** Test that loaded credentials appear in **no** repr, log line, exception
@@ -153,10 +165,22 @@ proposal commit produces *no checks*, which is absence of signal rather than gre
 
 ## 6. Redaction, emission, determinism
 
-- [ ] 6.1 **(RED)** Test that no un-redacted internal host segment or user segment survives
-      into **any** emitted artifact, and that redacted paths remain distinguishable by
-      prefix. Reuse the substitutions in `scripts/pull_tf_reference.py`'s `_REDACTIONS`
-      rather than restating them — this repo is **public**.
+- [ ] 6.0 **(GREEN, first)** Define the three closed vocabularies — per-scan status,
+      per-field confidence (`verified` / `share_only` / `unverified` / `absent`), and
+      collection outcome — as constants in a **leaf** `inventory/vocab.py`, importable
+      without the registry or Bloom client libraries. Nothing else creates these, and 8.9's
+      doc-lock has nothing to lock without them.
+- [ ] 6.1 **(RED)** Test that redaction is **structural**: a user segment whose name appears
+      in no enumerated substitution is still redacted, and any UNC host segment is redacted.
+      The share holds several people's directories, so a literal denylist redacts one person
+      and passes the rest through into a **public** repo — and a test written around the
+      enumerated name would call that clean. Assert additionally that no un-redacted host or
+      user segment survives into **any** artifact, and that redacted paths remain
+      distinguishable by prefix.
+- [ ] 6.1a **(RED)** Test that `inventory/redact.py`'s rule still covers
+      `scripts/pull_tf_reference.py`'s `_REDACTIONS` as a floor, loading that script **by
+      path** the way `tests/test_scripts.py` already does — `scripts/` has no `__init__.py`,
+      so `src/` cannot import from it, and this is what keeps the two from drifting.
 - [ ] 6.2 **(RED)** Test that person-identifying Bloom fields appear in no emitted artifact.
 - [ ] 6.3 **(RED)** Test that per-scan CSV columns are grouped by source; that
       `species_name` and `plant_age_days` are asserted against
@@ -186,8 +210,10 @@ proposal commit produces *no checks*, which is absence of signal rather than gre
 ## 7. CLI
 
 - [ ] 7.1 **(RED)** Test `inventory labels --out` end to end against injected registry and
-      Bloom clients, asserting the three artifacts are written, that every Bloom request was
-      a `GET`, and that no download occurred.
+      Bloom clients, **passing a `tmp_path` walk root** and applying `isolate_wandb_env`, so
+      the CLI test cannot reach the share or build a real client from a contributor's ambient
+      `wandb login`. Assert the three artifacts are written, that every PostgREST-base request
+      was a `GET`, and that no download occurred.
 - [ ] 7.2 **(RED)** Test that an absent **registry** or absent **share** exits naming which
       source is missing and emits nothing, and that absent **Bloom** classifies every row
       unresolved, emits the per-scan output, and emits no aggregate. Note `wandb.Api()`
@@ -235,14 +261,21 @@ proposal commit produces *no checks*, which is absence of signal rather than gre
       --cov-fail-under=95 -m "not integration" tests/`, plus `uv run black --check src tests`,
       `uv run ruff check src tests`, `uv lock --check`, and
       `openspec validate add-label-corpus-inventory --strict`. Re-measure coverage of the new
-      tree before declaring the gate met — the floor leaves roughly 43 uncovered new
-      statements of headroom.
+      tree before declaring the gate met. Headroom grows with the tree, so budget from the
+      real arithmetic rather than a fixed number: for `N` new statements the allowance is
+      roughly `46 + 0.055·N` misses — about 78 at `N=600`, 89 at `N=800`, implying the new
+      tree needs ~87-89%. Forecast ~3 uncovered statements per lazily-constructed client,
+      which is what `registry/publish.py`'s four uncovered lines are.
 - [ ] 9.2 Run the unfiltered suite separately, as a credentialed step, and record that it
-      requires the share and credentials — it is not part of the CI-equivalent gate.
-- [ ] 9.3 Archive with `openspec` **≥ 1.7.0** and confirm the live spec's `Purpose` is the
-      real text, not the `TBD - created by archiving change …` stub. Verified: 1.5.0 and
-      1.6.0 clobber it; 1.7.0+ preserve it. Four of the five live specs currently carry the
-      stub.
+      requires the share and credentials. **Every new `integration` test SHALL skip cleanly
+      when its credentials or the share are absent** — there is no `addopts`, and
+      `.claude/commands/coverage.md` runs the suite unfiltered, so a hard failure there breaks
+      `/coverage` for anyone without production access.
+- [ ] 9.3 Archive with `@fission-ai/openspec` **≥ 1.7.0**, which means an explicit upgrade:
+      the CLI currently on `PATH` is **0.13.0**. Confirm the live spec's `Purpose` is the real
+      text, not the `TBD - created by archiving change …` stub. Verified by bisection: 1.5.0
+      and 1.6.0 clobber it; 1.7.0+ preserve it. Four of the five live specs carry the stub
+      today.
 - [ ] 9.4 Reconcile implementation against this proposal per `/new-feature` step 9: verify
       2.1 really calls `sio.save_slp`/`sio.load_slp`; that 3.1 asserts the HTTP method rather
       than a method name on a mock; that 6.3 reads the contracts constants and the committed

@@ -90,11 +90,11 @@ Deriving from two sources and requiring them to agree is the point — see `desi
   currently importable only via `wandb`, and relying on that would break silently the day
   `wandb` drops it. `supabase-py` is deliberately **not** added: this capability needs two
   `GET` shapes, not a client library, and `bloomctl` caps supabase at `<3`. `bloomctl`
-  itself is **not** added either — its published releases require
-  `sleap-roots-contracts>=0.1.0a7`, which this repo's `==0.1.0a8` pin permits only by
-  backtracking to a version that predates the requirement, pulling ~40 transitive packages
-  for a 22-string constant. The Bloom column names are transcribed into a committed fixture
-  with recorded provenance, guarded by an `integration`-marked drift test.
+  itself is **not** added either — it resolves cleanly against `main`'s contracts pin, so
+  this is a weight decision rather than a compatibility one: ~40 transitive packages
+  (supabase, httpx, realtime, cryptography and the rest) to import a 22-string constant.
+  The Bloom column names are transcribed into a committed fixture with recorded provenance,
+  guarded by an `integration`-marked drift test.
 - **Requires:** the `Z:` share, `WANDB_API_KEY`, and a Bloom credentials profile. The
   available credentials belong to a person and **carry write authority**; the read-only
   guarantee is therefore enforced by the `GET`-only client (see the

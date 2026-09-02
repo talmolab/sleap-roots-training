@@ -39,13 +39,18 @@ This file carries the decisions that shape the spec deltas.
   different questions, so the spec names which value comes from which.
 - **D7. Read-only is enforced by HTTP method, not by trust.** The available Bloom
   credentials belong to a person and carry write authority, so no permission boundary
-  protects us and "performs no write" is unassertable. The client issues **only `GET`**:
-  every table write and every remote procedure call — including the ingest procedure —
-  requires another method, so a `GET`-only client cannot perform one whatever its credentials
-  allow. Injected clients remain a regression control layered on top, mirroring
-  `registry/publish.py`'s `api=None` seam rather than inventing a pattern. A dedicated
-  non-writer Bloom account would be stronger still and is worth pursuing separately; it is
-  not available now, and the design does not depend on it.
+  protects us and "performs no write" is unassertable. The **data plane** issues only `GET`:
+  every table write and every volatile remote procedure requires another method, so a
+  `GET`-only data plane cannot perform one whatever its credentials allow. The rule is scoped
+  to the data plane rather than the whole client because the session token exchange is a
+  `POST` — a client-wide rule would forbid logging in, which the first draft of this decision
+  did, and would have contradicted its own re-authentication rule two requirements later.
+  Note also that a read-only remote procedure *can* be served over `GET`; the guarantee rests
+  on the gateway refusing `GET` for a volatile one, not on procedures being writes. Injected
+  clients remain a regression control layered on top, mirroring `registry/publish.py`'s
+  `api=None` seam rather than inventing a pattern. A dedicated non-writer Bloom account would
+  be stronger still and is worth pursuing separately; it is not available now, and the design
+  does not depend on it.
 - **D8. Structural discovery over a maintained list.** A list encodes what is already
   remembered, which is what an audit exists to get past. A folder qualifies when it holds a
   top-level labels file; split directories are excluded because a split describes a training
@@ -67,22 +72,31 @@ This file carries the decisions that shape the spec deltas.
   pinned in the docs rather than left to whoever passes `--out`, because "regenerate and
   diff" only works if everyone regenerates to the same place. W&B publishing is a follow-up
   once the shape settles.
-- **D12. Emitted artifacts are redacted, because the repo is public.** The recorded source
-  paths carry an internal SMB hostname and a username, and `scripts/pull_tf_reference.py`
-  already redacts exactly those two strings before committing captured payloads, for exactly
-  this reason. The same substitutions are reused rather than restated. Person-identifying
-  Bloom fields are not emitted at all, and the accession/genotype columns need an owner's
-  call before they are committed.
+- **D12. Emitted artifacts are redacted structurally, because the repo is public.** The
+  recorded source paths carry an internal SMB hostname and a username, and
+  `scripts/pull_tf_reference.py` already redacts exactly those two strings before committing
+  captured payloads, for exactly this reason. But reusing its literal substitutions is not
+  enough: the share holds several people's directories, so an enumerated username redacts one
+  person and passes everyone else through — and a test built on the enumerated name would
+  report that as clean. Redaction is therefore structural (the segment after a user-directory
+  marker, whatever its value; any UNC host segment), with the existing substitutions kept as
+  a compatibility floor. Person-identifying Bloom fields are not emitted at all, and the
+  accession/genotype columns need an owner's call before they are committed.
+  Note `src/` cannot import from `scripts/`, which has no `__init__.py`; the rule is defined
+  in `inventory/redact.py` and a test loads the script by path — the way
+  `tests/test_scripts.py` already does — to assert the two agree.
 - **D13. Bloom is reached over `requests`, not a client library.** `bloomctl` reaches
   `cyl_scans_extended` through supabase-py, which is not here and caps at `<3`; this
   capability needs two `GET` shapes. `requests` is declared **direct** rather than leaned on
   transitively through `wandb`, per the `pandas is DIRECT, not transitive` precedent already
-  written into `pyproject.toml`. `bloomctl` itself is not added: its published releases
-  require `sleap-roots-contracts>=0.1.0a7`, which this repo's pin permits only by backtracking
-  to a version predating that requirement and pulling ~40 transitive packages for a 22-string
-  constant. The column names are transcribed into a committed fixture with recorded
-  provenance, guarded by an `integration`-marked drift test — the same shape as the committed
-  TF reference payloads.
+  written into `pyproject.toml`. `bloomctl` itself is not added, and the reason is **weight,
+  not incompatibility** — it resolves cleanly against `main`'s contracts pin, bringing ~40
+  transitive packages (supabase, httpx, realtime, cryptography and the rest) to import a
+  22-string constant. The column names are transcribed into a committed fixture with
+  recorded provenance, guarded by an `integration`-marked drift test — the same shape as the
+  committed TF reference payloads. The cost of not depending on it is that `bloomctl`'s
+  batching budget, its `in.(…)` quoting rule, and its expired-session retry must be
+  specified here rather than inherited; all three now are.
 
 ## Alternatives considered
 

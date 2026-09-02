@@ -51,6 +51,11 @@ strength of a matching filename or byte count. Being unreadable SHALL be reporte
 distinctly from mismatching, so an I/O failure is not recorded as an accusation against a
 file that may be intact.
 
+Two collections whose recorded paths resolve to the same file SHALL both be reported,
+naming the shared path; neither SHALL silently replace the other's row. Publishing one file
+under two collection names is possible, and a keyed-by-path implementation would drop one
+of them without saying so.
+
 Collections SHALL be processed in isolation: one collection failing verification SHALL NOT
 prevent the others from being inventoried.
 
@@ -100,6 +105,12 @@ prevent the others from being inventoried.
   including the drive-relative `D:name` form
 - **THEN** both produce the same resolved share path
 
+#### Scenario: Two collections resolving to one file are both reported
+
+- **WHEN** two collections' recorded paths resolve to the same share file
+- **THEN** both are reported, naming the shared path, and neither silently replaces the
+  other's row
+
 #### Scenario: One failing collection does not block the rest
 
 - **WHEN** one collection fails verification and the others succeed
@@ -141,10 +152,11 @@ scan's QR code — and SHALL classify the result as one of exactly three states:
 
 - **agreed** — both sources produced values and they match
 - **disagreed** — both produced values and they differ
-- **unresolved** — no Bloom record could be obtained for the scan, either because the video
-  path yields no usable QR code or because Bloom holds no record of that code. The reason
-  SHALL be recorded per row, so a malformed path is distinguishable from a scan Bloom has
-  never seen.
+- **unresolved** — one or both sides produced no comparable value: the video path yields no
+  usable QR code, Bloom holds no record of that code, or Bloom resolved the scan but the
+  labels side yields no age or date to compare against. The reason SHALL be recorded per
+  row, so a malformed path, a scan Bloom has never seen, and a scan with nothing to compare
+  are distinguishable from one another.
 
 The compared facts SHALL be the scan's age and its scan date. Species SHALL NOT be compared
 per scan; it is a collection-level property with its own requirement.
@@ -156,15 +168,21 @@ An unresolved scan SHALL NOT be an error. Legacy scans may predate Bloom ingesti
 been re-keyed, and a run that aborts on the first one cannot inventory the corpus that
 motivated it.
 
-Bloom lookups SHALL be batched so that no request's rendered filter exceeds the gateway's
-URL length limit. A single collection can hold more scans than one filter can carry, so an
-unbatched implementation succeeds on small collections and fails only on the largest — the
-failure mode that survives testing.
+Bloom lookups SHALL be batched so that no request's **rendered, percent-encoded** URL
+exceeds the gateway's length limit. A single collection can hold more scans than one filter
+can carry, so an unbatched implementation succeeds on small collections and fails only on
+the largest — the failure mode that survives testing. The budget SHALL be measured against
+the encoded URL rather than the sum of identifier lengths: the identifiers here are strings
+requiring quoting, and quote and bracket characters are themselves percent-encoded, so a
+count of raw identifier lengths under-estimates the rendered size.
 
-A failure that indicates an expired session SHALL be retried once after re-authenticating,
-rather than reported as a missing scan. Hashing a large corpus takes long enough to outlive
-a session token, and a token expiry that presented as `unresolved` would silently
-misreport the corpus as unverifiable.
+A lookup that fails because the session has expired SHALL be retried once after obtaining a
+fresh session, rather than reported as a missing scan. Hashing a large corpus takes long
+enough to outlive a session token, and a token expiry that presented as `unresolved` would
+silently misreport the corpus as unverifiable. The expired-session condition SHALL be
+identified by the gateway's own signal — an unauthorized status carrying the gateway's
+JWT-expiry code — and not by matching free text, so the retry fires on the documented
+condition rather than on a message that may be reworded.
 
 #### Scenario: Matching sources yield an agreed row
 
@@ -292,9 +310,11 @@ from video count overcounts, and the proxy itself is only an estimate of what Bl
 `plant_id` states.
 
 Because a plant is never imaged fewer than once, the scan count SHALL be greater than or
-equal to the plant count. The capability SHALL assert this before emitting and SHALL fail
-loudly if it is violated, as a guard against an internally inconsistent intermediate rather
-than as an expected outcome of well-formed data.
+equal to the plant count. The capability SHALL assert this before emitting. A violation
+SHALL be reported against **that collection**, whose aggregate is then withheld, leaving the
+other collections unaffected — consistent with per-collection isolation, and not a reason to
+abort the run. It is a guard against an internally inconsistent intermediate rather than an
+expected outcome of well-formed data.
 
 #### Scenario: A plant imaged at two ages is one plant and two scans
 
@@ -313,10 +333,11 @@ than as an expected outcome of well-formed data.
   differ in number
 - **THEN** the reported plant count is the count of Bloom plant identities
 
-#### Scenario: An inconsistent count fails loudly
+#### Scenario: An inconsistent count withholds that collection only
 
 - **WHEN** a collection's computed scan count is lower than its computed plant count
-- **THEN** the capability fails, naming the collection, and emits no aggregate for it
+- **THEN** it is reported, naming the collection, and no aggregate is emitted for it
+- **AND** the other collections are inventoried and emitted unaffected
 
 ### Requirement: Provenance Is Read From The Originally Uploaded Version
 
@@ -342,15 +363,72 @@ artifacts in a repaired collection.
 - **WHEN** a collection has exactly one version
 - **THEN** provenance and the images-embedded value are both read from it
 
+### Requirement: The Facts Read And The Facts Emitted Are Specified
+
+The capability SHALL read from each collection's labels file: the skeleton's literal name,
+its node names and node count, the labeled-frame count, the instance count, and the list of
+recorded video paths. It SHALL derive from each video path the scan's identifying code, its
+day, its date, and the scanner that produced it.
+
+It SHALL emit, per collection, a **per-scan record** carrying — grouped so the origin of
+each field is visible — the values derived from the video path, the values read from the
+labels file, the values resolved from Bloom, and the reconciliation status with its reason.
+It SHALL emit an **aggregate record** carrying the card fields, the per-field confidence,
+the reconciliation tally, and the verification outcome.
+
+Bloom-derived fields SHALL carry the names the scan-export vocabulary gives them, so the
+output joins to that export without translation — note this differs from the underlying
+row key for the scan's identifying code, and conflating the two breaks the join. The
+emitted set SHALL be a documented **subset** of that vocabulary: fields identifying a person
+SHALL be excluded, and a field that is derived rather than carried on the scan row SHALL be
+resolved through its own lookup or omitted, never read from the scan row.
+
+Specifying this here rather than leaving it to a golden file matters because the artifacts
+are committed and consumed by another change: a schema defined only by an example is a
+schema no reader can check a change against.
+
+#### Scenario: The labels file's facts are read
+
+- **WHEN** a verified labels file is read
+- **THEN** the skeleton name, node names, node count, frame count, instance count and video
+  paths are all available to the reconciliation
+
+#### Scenario: Emitted records carry their fields grouped by origin
+
+- **WHEN** a per-scan record is emitted
+- **THEN** its fields are grouped by the source that produced them
+- **AND** the reconciliation status and its reason are present
+
+#### Scenario: A person-identifying field is excluded from the emitted subset
+
+- **WHEN** the scan-export vocabulary contains a field identifying a person
+- **THEN** that field is not among the emitted Bloom-derived fields
+
+#### Scenario: The scan code uses the export's column name, not the row key
+
+- **WHEN** a per-scan record carries the scan's identifying code
+- **THEN** it uses the name the scan export gives that column, not the underlying row key
+
 ### Requirement: Only Read Operations Are Issued
 
 The capability SHALL issue only read operations against the registry and against Bloom.
 
-For Bloom the prohibition SHALL be enforced by HTTP method: the client SHALL issue **only
-`GET`** requests. Every write path — a table insert, an update, a delete, and every remote
-procedure call, including the ingest procedure — requires a method other than `GET`, so a
-`GET`-only client cannot perform one regardless of what authority its credentials carry.
+For Bloom the prohibition SHALL be enforced by HTTP method on the **data plane**: every
+request to the PostgREST base SHALL use `GET`. Every write path — a table insert, update or
+delete, and any volatile remote procedure — requires a method other than `GET`, so a
+`GET`-only data plane cannot perform one regardless of what authority its credentials carry.
 This is enforceable and assertable, where "performs no write" is neither.
+
+Exactly one non-`GET` request SHALL be permitted: the token exchange that mints a session.
+It writes no application data, and without it the capability cannot read at all, since
+every documented read of this data goes through an authenticated session. Scoping the rule
+to the data plane rather than to the client as a whole is what makes it both true and
+implementable — a client-wide `GET`-only rule would forbid logging in, and would contradict
+the re-authentication this specification requires elsewhere.
+
+Not every remote procedure is a write: a read-only procedure can be served over `GET`. The
+guarantee rests on the gateway refusing `GET` for a volatile procedure, not on the claim
+that procedures are writes.
 
 The credentials available in practice belong to a person and carry write authority. The
 prohibition is therefore on the **effect**, not on a named function, and the capability
@@ -361,11 +439,17 @@ Loaded credentials SHALL be kept out of every representation, log line, exceptio
 and emitted artifact. The emitted artifacts are committed to a public repository, so a
 credential reaching a traceback is a published credential.
 
-#### Scenario: The Bloom client issues only GET
+#### Scenario: The Bloom data plane issues only GET
 
 - **WHEN** the capability runs to completion against a supplied Bloom client
-- **THEN** every request it issued used the `GET` method
-- **AND** a client that would issue any other method fails the run
+- **THEN** every request it issued to the PostgREST base used the `GET` method
+- **AND** a data-plane request using any other method fails the run
+
+#### Scenario: The token exchange is the only permitted non-GET
+
+- **WHEN** the recorded requests from a completed run are inspected
+- **THEN** the only non-`GET` request is the token exchange
+- **AND** a second non-`GET` request to any other endpoint fails the run
 
 #### Scenario: A run performs no registry write
 
@@ -383,9 +467,17 @@ credential reaching a traceback is a published credential.
 ### Requirement: Emitted Artifacts Are Redacted Before They Are Committed
 
 Every path recorded in an emitted artifact SHALL have its internal host segment and user
-segment redacted, using the same substitutions the repository already applies when
-committing captured payloads. The artifacts are committed to a **public** repository, and
-the recorded source paths contain an internal SMB hostname and a username.
+segment redacted. The artifacts are committed to a **public** repository, and the recorded
+source paths contain an internal SMB hostname and a username.
+
+Redaction SHALL be **structural, not a list of known strings**. The share holds the
+directories of several people, so a rule enumerating one hostname and one username would
+pass every path belonging to anyone else through verbatim — the same leak with a narrower
+blast radius, and one that a test built on the enumerated username would still report as
+clean. The rule SHALL therefore redact the segment following a user-directory marker
+whatever its value, and SHALL redact any host segment of a UNC path. The substitutions the
+repository already applies when committing captured payloads are a floor to remain
+compatible with, not the mechanism.
 
 Redaction SHALL be applied on every run, so a re-run remains identical, and SHALL preserve
 the distinction between the recorded prefixes so a reader can still tell which of them a
@@ -398,6 +490,12 @@ Fields that identify a person SHALL NOT be emitted at all.
 - **WHEN** a recorded path contains the internal host segment or the user segment
 - **THEN** the emitted artifact carries the redacted form
 - **AND** the un-redacted value appears in no emitted artifact
+
+#### Scenario: A user segment the rule has never seen is still redacted
+
+- **WHEN** a recorded path's user segment is a name that appears in no enumerated
+  substitution
+- **THEN** it is redacted, so the rule does not depend on knowing the name in advance
 
 #### Scenario: Redaction preserves prefix distinguishability
 
@@ -439,11 +537,6 @@ discovery can be exercised without the production share.
   it
 - **THEN** only the top-level file is inventoried
 - **AND** the reported frame count is the top-level file's, not a split's
-
-#### Scenario: Two collections resolving to one file are both reported
-
-- **WHEN** two collections' recorded paths resolve to the same share file
-- **THEN** both are reported, naming the shared path
 
 #### Scenario: Discovery runs against a supplied root
 
@@ -525,18 +618,28 @@ for scan metadata.
 
 ### Requirement: Every Emitted Artifact Is Written Atomically
 
-An artifact SHALL be rendered in full and then moved into place, so an interrupted run
-leaves the previous artifact intact rather than a truncated one, and leaves no partial file
-beside it.
+An artifact SHALL be rendered in full and then moved into place, so a run that fails during
+emission leaves the previous artifact intact rather than a truncated one. A failure the
+capability observes SHALL also remove its staging file; a staging file orphaned by a process
+that was killed outright SHALL be overwritten by the next run rather than treated as state.
+
+An atomic replace requires the staging file to sit beside its destination, so a hard kill
+can leave one there. That is accepted rather than prevented — the guarantee is that the
+*destination* is never partial, which is what a reader depends on.
 
 There SHALL be no resume. A re-run is a full re-run, which the determinism requirement makes
 cheap to verify and which avoids inheriting partial state from a run that died halfway.
 
-#### Scenario: An interrupted emission leaves the previous artifact intact
+#### Scenario: A failure during emission leaves the previous artifact intact
 
-- **WHEN** a run is interrupted during emission
-- **THEN** the previously emitted artifact is unchanged
-- **AND** no partial file remains beside it
+- **WHEN** emission raises partway through
+- **THEN** the previously emitted artifact is byte-identical to what it was before the run
+- **AND** the staging file is removed
+
+#### Scenario: An orphaned staging file does not survive the next run
+
+- **WHEN** a staging file is present from a previous run that was killed outright
+- **THEN** the next run overwrites it and emits normally
 
 ### Requirement: Output Is Deterministic And Re-Running Is Idempotent
 
@@ -572,20 +675,39 @@ audited by hand.
 
 ### Requirement: The Artifact Schemas And Their Vocabularies Are Documented And Locked
 
-The repository SHALL document the emitted artifacts' schemas and the closed vocabularies
-they use — the per-scan reconciliation status and the per-field confidence — and a test
-SHALL lock the documented vocabularies against the values the emitter actually writes.
+The repository SHALL document the emitted artifacts' schemas and **all three** closed
+vocabularies they use — the per-scan reconciliation status, the per-field confidence, and
+the collection-level outcome — and a test SHALL lock each documented vocabulary against the
+values the emitter actually writes.
+
+The three are distinct and all three are load-bearing. The per-scan status classifies one
+scan's reconciliation. The per-field confidence records how a single aggregate field was
+established: **verified** where two derivations agreed, **share-only** where no registry
+counterpart existed to verify against, **unverified** where the corroborating source was
+unavailable or silent, and **absent** where the field could not be derived. The
+collection-level outcome records what happened to the collection as a whole — inventoried,
+unregistered, excluded for a digest mismatch, excluded as unmappable or unreadable, withheld
+for exceptions, or skipped during discovery. A reader who cannot distinguish "unregistered"
+from "excluded" cannot tell an un-verifiable collection from a suspect one.
+
+The vocabularies SHALL be defined as constants in a leaf module, so the locking test can
+import them without pulling in the emitter's dependencies.
 
 A committed artifact outlives the conversation that produced it. A reader encountering
 `unresolved` must be able to learn that it means no Bloom record was obtained, not that the
 scan is absent from the corpus, and that such rows are excluded from every aggregate — so a
 per-scan row count and a reported scan count are expected to differ.
 
-#### Scenario: The documented vocabularies match the emitter
+#### Scenario: All three documented vocabularies match the emitter
 
-- **WHEN** the documented status and confidence vocabularies are compared with the values
-  the emitter writes
-- **THEN** they are equal
+- **WHEN** the documented per-scan status, per-field confidence and collection-outcome
+  vocabularies are each compared with the values the emitter writes
+- **THEN** each is equal to its counterpart
+
+#### Scenario: The vocabularies are importable without the emitter's dependencies
+
+- **WHEN** the module defining the vocabularies is imported
+- **THEN** it imports without requiring the registry or Bloom client libraries
 
 #### Scenario: The documentation states what each status implies
 
