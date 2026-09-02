@@ -25,7 +25,9 @@ uv run sleap-roots-training --help
 To install the optional `sleap-nn` keypoint training backend and run/predict a model, see
 [docs/training-backend.md](docs/training-backend.md) (the `sleap-roots-training[train]` extra
 + GPU install). For config-driven training + evaluation (authoring a config, `validate`, running
-a model, reading results), see [docs/training.md](docs/training.md).
+a model, reading results), see [docs/training.md](docs/training.md) — including the one-command
+`sleap-roots-training run <config.yaml>` shortcut for a host that has the `[train]` extra
+installed alongside this package.
 
 ## Seeding the production model registry
 

@@ -202,3 +202,66 @@ def test_documented_experiment_modes_stay_contract_valid():
             f"docs/training.md tells users to write experiment.mode: {mode!r}, which "
             f"the contract vocabulary no longer accepts (allowed: {sorted(MODE_VOCAB)})"
         )
+
+
+#: The one-command section's heading, matched exactly so the assertions below are scoped to
+#: it rather than to the whole guide (the guide-wide command assertions above would
+#: otherwise be satisfiable from inside this section alone -- see the canonical-path test).
+_RUN_SECTION_HEADING = "One command (same machine)"
+
+
+def _run_section(text: str) -> str:
+    """Return the body of the one-command section, up to the next heading."""
+    # Stops at the next level-2/3 heading, not level-4: the section's own `####`
+    # subsections (the run-directory inventory, the run_name rule) are part of it.
+    match = re.search(
+        rf"\n#{{2,3}} {re.escape(_RUN_SECTION_HEADING)}\n(.*?)(?=\n#{{2,3}} |\Z)",
+        text,
+        re.DOTALL,
+    )
+    assert match, f"guide missing a '{_RUN_SECTION_HEADING}' section"
+    return match.group(1)
+
+
+def test_guide_run_command_in_fenced_block():
+    blocks = _fenced_blocks(_run_section(_read()))
+    assert any(
+        "sleap-roots-training run" in block for block in blocks
+    ), "no fenced `sleap-roots-training run ...` command in the one-command section"
+
+
+def test_guide_run_section_documents_the_artifacts_and_the_gate():
+    section = _run_section(_read())
+    for token in ("emitted_config.yaml", "source_config.yaml", "[train]", "run_name"):
+        assert token in section, f"the one-command section must mention {token}"
+
+
+def test_guide_run_section_uses_no_sync():
+    """A bare `uv run` re-syncs the project env and uninstalls the `[train]` extra.
+
+    Same rule `scripts/clean_pkg.py` and `scripts/dump_val_metrics.py` already document;
+    getting it wrong makes the gate fire on a box where the backend *was* installed.
+    """
+    assert "--no-sync" in _run_section(
+        _read()
+    ), "the one-command section must show the `uv run --no-sync` form"
+
+
+def test_guide_keeps_the_canonical_path_outside_the_run_section():
+    """The shortcut must not become the only place the three commands appear.
+
+    ``test_guide_{validate,emit,train}_command_in_fenced_block`` scan the whole document,
+    so an "equivalent to ..." comment inside the ``run`` block would satisfy all three --
+    letting sections 1-3 be deleted while the suite stayed green. This scopes them to the
+    blocks that do *not* mention ``run``.
+    """
+    blocks = [b for b in _fenced_blocks(_read()) if "sleap-roots-training run" not in b]
+    for command in (
+        "sleap-roots-training validate",
+        "sleap-roots-training emit",
+        "sleap-nn train --config",
+    ):
+        assert any(command in block for block in blocks), (
+            f"`{command}` survives only inside the `run` block -- the canonical "
+            "three-command path must stay documented in its own right"
+        )

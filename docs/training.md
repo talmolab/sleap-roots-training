@@ -12,6 +12,13 @@ mechanics (GPU setup, sample data, `sleap-nn track`), see
 > emitted config trains + runs eval (writing `metrics.*.npz`) with no post-fit `preprocessing`
 > crash; and a short `use_wandb=true` run's `run.scan_history()` returned per-epoch rows carrying
 > `epoch` + `loss` (the legacy TF runs returned zero) — closing the observability gap.
+>
+> **The one-command `run` path was verified on the same box on 2026-08-19** (`sleap-nn` 0.2.0,
+> torch 2.8.0+cu129, native Windows): a short run on the real v000 split staged both configs and
+> exited 0, with `emitted_config.yaml` **byte-identical** to `emit -o`'s output (SHA-256 match on
+> Windows, where the line-ending fix matters); re-running into the same `run_name` was refused with
+> the existing run directory unchanged; and Ctrl-C reached the backend, which ran Lightning's
+> graceful shutdown and exited non-zero with no traceback.
 
 ## The config file
 
@@ -83,6 +90,107 @@ sleap-nn train --config resolved.yaml
 `sleap-nn train` runs train → inference → eval in one call, writing the checkpoint plus
 `labels_pr.*.slp` and `metrics.*.npz` into `<ckpt_dir>/<run_name>`. (Needs the `[train]` extra;
 see the runbook.)
+
+### One command (same machine)
+
+On a host that has **both** this package and the `[train]` extra — the GPU box — steps 1–3
+collapse into one:
+
+```bash
+uv run --no-sync sleap-roots-training run examples/arabidopsis_primary_cylinder.yaml
+```
+
+`run` resolves the `sleap-nn` console script (failing with the install command from
+[training-backend.md](training-backend.md) if it cannot), runs the same checks as `validate`,
+writes the configs described below, then invokes `sleap-nn train --config` on the emitted one.
+The backend's output streams live and its exit code becomes `run`'s exit code.
+
+Two things you will see that are expected. Lightning logs `Checkpoint directory ... exists and is
+not empty` — `run` writes its configs *before* training starts, so the directory is never empty by
+the time the trainer looks; this is why the reuse check below keys on `best.ckpt` /
+`training_config.yaml` rather than on the directory being non-empty. And Ctrl-C is handed to the
+backend rather than intercepted: sleap-nn/Lightning runs its own graceful shutdown, and `run` then
+reports the backend's exit status (`128 + N` on POSIX, a plain non-zero on Windows, which has no
+signal exit codes) with no traceback.
+
+**Use `--no-sync`** (or an absolute path into the venv, `.venv/bin/sleap-roots-training`). A bare
+`uv run` re-syncs the project environment and *uninstalls* the `[train]` extra you installed with
+`uv pip install ".[train]"`, so the gate would fire on a box where the backend was installed a
+moment earlier. Same rule [`scripts/clean_pkg.py`](../scripts/clean_pkg.py) already documents.
+
+**Steps 1–3 stay canonical.** `validate` and `emit` are base-install safe, so the
+author-on-a-Mac / train-on-the-A5000 workflow — and every `examples/*.yaml` header — still uses
+them. `run` is a shortcut for the co-installed case, not a different pipeline: the config it
+stages is byte-identical to what `emit -o` writes for the same input.
+
+#### What ends up in the run directory
+
+A finished run directory holds four configs, two from each side (as of `sleap-nn` 0.2.0 —
+`sleap_nn/training/model_trainer.py:1269,1313`):
+
+```
+models/cyl_arabidopsis_primary/
+  best.ckpt                 # the trained weights
+  initial_config.yaml       # sleap-nn: the config as submitted, stamped with sleap_nn_version
+  training_config.yaml      # sleap-nn: the config actually used, after its own resolution
+  emitted_config.yaml       # run: what sleap-nn was given, written *before* training started
+  source_config.yaml        # run: your config, verbatim, `experiment` block included
+  labels_pr.*.slp           # predictions from the built-in eval pass
+  metrics.*.npz             # eval metrics
+```
+
+`source_config.yaml` is the one no `sleap-nn` artifact can replace: every config the backend sees
+has the repo-owned `experiment` block stripped by construction, so nothing else in that directory
+records which species / mode / root_type / dataset the run was for. `emitted_config.yaml` earns
+its place by existing *before* the backend starts — sleap-nn writes its two only after the trainer
+is built, so a run that dies on a bad `.slp` path or at model init leaves a directory with no
+config at all. **Once a run completes, `initial_config.yaml` supersedes it**: same content, plus the
+`sleap_nn_version` stamp. So read `emitted_config.yaml` for a run that died early and
+`initial_config.yaml` for one that finished. Stage it elsewhere with `--emitted-config <path>` if
+you prefer.
+
+#### One `run_name` per run
+
+`run` refuses to start when `<ckpt_dir>/<run_name>/` already holds a `best.ckpt` or a
+`training_config.yaml`, and tells you to change `trainer_config.run_name`. This is not
+fussiness: sleap-nn auto-suffixes the run directory to `<run_name>-1` when a checkpoint is
+already there (`model_trainer.py:522`), so it would train *elsewhere* while the configs landed
+next to the older run — describing results they did not produce. There is no `--force`; the fix
+for a name collision is a new name. (The check also covers `save_ckpt: false` runs, where no
+checkpoint is ever written and sleap-nn would silently reuse the directory.)
+
+For the same reason `run` requires an explicit `trainer_config.run_name`: with none, sleap-nn
+generates a timestamped directory (`model_trainer.py:513`) that `run` cannot predict. Vary the
+name per run the way the baseline configs do — `..._seed42`, `..._seed43`, `..._seed44`.
+
+The name has to be one plain directory name, and `run` checks that the same way on every platform
+so a config authored on a laptop cannot fail only on the box: no separators, no absolute or
+drive-relative form (`C:foo` looks harmless and silently discards `ckpt_dir`), nothing that climbs
+out (`..`), no trailing dot or space (Windows strips those, so `r1 ` and `r1` would be the same
+directory there and different ones here), and no Windows-reserved character or device name.
+`trainer_config.ckpt_dir` must likewise be a non-empty string when you set it.
+
+**Interpolations are kept, not resolved — but do not put secrets behind `oc.env` anyway.** The
+emitted config preserves `${...}` verbatim, and so do the two configs sleap-nn writes into the run
+directory (`OmegaConf.save` defaults to `resolve=False`), so nothing on disk bakes a resolved value.
+The W&B run config is a different story: sleap-nn uploads a **fully resolved** copy
+(`model_trainer.py:1310`). `trainer_config.wandb.api_key` is masked before that happens, but any
+*other* `${oc.env:...}` value is resolved and shipped to the run — so keep secrets out of the config
+entirely and let `WANDB_API_KEY` / `wandb login` supply the credential. The flip side is that an interpolation pointing at the `experiment` block —
+`run_name: ${experiment.species}_v1` — cannot work, because that block is stripped from the config
+the backend receives; `run` checks for this and refuses before staging anything rather than letting
+the run fail later against a value it already reported.
+
+**Ctrl-C goes to the backend.** The first interrupt is forwarded so sleap-nn/Lightning can save and
+shut down cleanly; press it again to terminate the backend, and a third time to kill it. `run` then
+reports the backend's own status.
+
+A W&B key written into `trainer_config.wandb.api_key` is refused as well, since the run directory
+is uploaded whole when a model is published. Use `WANDB_API_KEY` or `wandb login`.
+
+The provenance caveat above is unchanged by `run`: it records no config hash, git commit, or
+dataset checksum (still #10/#11). It makes a run directory self-describing as to *which
+experiment* it was, not *which bytes* it consumed.
 
 ## 4. Read the metrics
 
