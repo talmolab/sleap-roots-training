@@ -265,7 +265,11 @@ def test_the_run_directory_is_always_inside_ckpt_dir(write_config, tmp_path, run
     )
     (tmp_path / "ckpt").mkdir(exist_ok=True)
     run_dir = backend.run_directory(cfg)
+    # Containment is the property that catches every escaping shape; the direct-child assertion
+    # beside it pins the single-component rule, which containment alone does not (a/b is
+    # contained too). Both, so neither half rests on the refusal list next door.
     assert (tmp_path / "ckpt").resolve() in run_dir.resolve().parents
+    assert run_dir.resolve().parent == (tmp_path / "ckpt").resolve()
 
 
 def test_a_run_path_that_exists_as_a_file_is_refused(tmp_path):
@@ -312,15 +316,13 @@ def test_run_directory_without_run_evidence_is_the_retry_case(tmp_path):
 
 def test_resolved_config_path_defaults_into_the_run_directory(tmp_path):
     run_dir = tmp_path / "ckpt" / "r1"
-    assert (
-        backend.resolved_config_path(run_dir, None) == run_dir / "emitted_config.yaml"
-    )
+    assert backend.emitted_config_path(run_dir, None) == run_dir / "emitted_config.yaml"
 
 
 def test_resolved_config_path_honors_the_override(tmp_path):
     run_dir = tmp_path / "ckpt" / "r1"
     override = tmp_path / "elsewhere" / "cfg.yaml"
-    assert backend.resolved_config_path(run_dir, override) == override
+    assert backend.emitted_config_path(run_dir, override) == override
 
 
 def test_stage_writes_both_artifacts(write_config, tmp_path):
@@ -331,7 +333,7 @@ def test_stage_writes_both_artifacts(write_config, tmp_path):
         },
     )
     run_dir = backend.run_directory(cfg)
-    dest = backend.resolved_config_path(run_dir, None)
+    dest = backend.emitted_config_path(run_dir, None)
     backend.stage_artifacts(cfg, source, run_dir, dest)
 
     resolved_bytes = dest.read_bytes()
@@ -357,7 +359,7 @@ def test_stage_creates_missing_parent_directories(write_config, tmp_path):
         },
     )
     run_dir = backend.run_directory(cfg)
-    dest = backend.resolved_config_path(run_dir, None)
+    dest = backend.emitted_config_path(run_dir, None)
     backend.stage_artifacts(cfg, source, run_dir, dest)
     assert dest.is_file()
 
@@ -431,7 +433,7 @@ def test_stage_leaves_no_truncated_artifact_when_the_write_fails(
         },
     )
     run_dir = backend.run_directory(cfg)
-    dest = backend.resolved_config_path(run_dir, None)
+    dest = backend.emitted_config_path(run_dir, None)
 
     def _boom(*args, **kwargs):
         raise OSError(28, "No space left on device")
@@ -913,3 +915,106 @@ def test_a_third_interrupt_kills(fake_popen):
     (call,) = fake_popen.instances
     assert call.terminated and call.killed
     assert outcome.exit_code == 137
+
+
+# --- review round 4: case-folding and ancestor walking ------------------------------------
+
+
+@pytest.mark.parametrize("marker", backend.RUN_EVIDENCE)
+@pytest.mark.parametrize("case", [str.lower, str.upper, str.capitalize])
+def test_an_override_naming_run_evidence_in_any_case_is_refused(
+    write_config, tmp_path, marker, case
+):
+    """NTFS is case-insensitive, so `Best.ckpt` *is* the evidence file the guard reads.
+
+    An exact string match let `--resolved-config <run_dir>/Best.ckpt` write the guard's own
+    marker, which then refused the directory forever -- with no `--force`, recovery would mean
+    deleting files by hand.
+    """
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError, match="run"):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / case(marker))
+
+
+def test_an_override_inside_a_finished_runs_subtree_is_refused(write_config, tmp_path):
+    """`add_dir` is recursive, so a nested file is published with that run's artifact.
+
+    The guard looked one level up only, so `ckpt/otherrun/sub/emitted.yaml` slipped through
+    while `ckpt/otherrun/emitted.yaml` was refused.
+    """
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    other = tmp_path / "ckpt" / "otherrun"
+    (other / "sub").mkdir(parents=True)
+    (other / "best.ckpt").write_bytes(b"weights")
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.stage_artifacts(cfg, source, run_dir, other / "sub" / "emitted.yaml")
+
+
+def test_an_override_outside_the_checkpoint_tree_is_still_allowed(
+    write_config, tmp_path
+):
+    """The ancestor walk is bounded: staging somewhere unrelated stays legal."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    elsewhere = tmp_path / "elsewhere" / "emitted.yaml"
+    backend.stage_artifacts(cfg, source, run_dir, elsewhere)
+    assert elsewhere.is_file()
+
+
+def test_a_failed_version_probe_is_not_reported_as_a_version(tmp_path):
+    """A non-zero probe used to echo its own usage text *as* the backend version.
+
+    That matters because the echo is the substitute for stamping the version into a file, so a
+    garbage string there is worse than saying nothing.
+    """
+    if os.name == "nt":
+        stub = tmp_path / "sleap-nn.bat"
+        stub.write_text(
+            "@echo off\r\necho Error: No such option: --version\r\nexit /b 2\r\n"
+        )
+    else:
+        stub = tmp_path / "sleap-nn"
+        stub.write_text(
+            "#!/bin/sh\necho 'Error: No such option: --version'\nexit 2\n",
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+    assert backend.backend_version(stub) is None
+
+
+@pytest.mark.parametrize("ckpt_dir", ["C:foo", "models ", "models."])
+def test_ckpt_dir_gets_the_same_portability_rules_as_run_name(write_config, ckpt_dir):
+    """The field supplying the left-hand side of every guarded path took neither check.
+
+    `_check_single_component` explains at length why `C:foo` and a trailing dot or space are
+    unsafe; applying that reasoning to only one of the two fields was the asymmetry.
+    """
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"ckpt_dir": ckpt_dir}})
+    with pytest.raises(backend.BackendError, match="trainer_config.ckpt_dir"):
+        backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize(
+    "ckpt_dir", ["models", "models/nested", "../sibling", "/tmp/abs"]
+)
+def test_ordinary_checkpoint_directories_are_still_accepted(write_config, ckpt_dir):
+    """`ckpt_dir` is a *path*, not a single component -- separators stay legal."""
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"ckpt_dir": ckpt_dir}})
+    assert backend.run_directory(cfg).parent == Path(ckpt_dir)

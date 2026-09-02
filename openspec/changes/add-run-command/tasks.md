@@ -79,7 +79,7 @@ commit.
 ## 3. Destination policy and provenance artifacts (TDD)
 
 - [x] 3.1 Write the failing destination tests: artifacts land in `<ckpt_dir>/<run_name>/`; an unset
-      `ckpt_dir` resolves to `.` (the backend's own default); `--resolved-config` relocates the
+      `ckpt_dir` resolves to `.` (the backend's own default); `--emitted-config` relocates the
       emitted config while `source_config.yaml` still lands in the run directory; a relative
       `ckpt_dir` resolves against the process cwd (assert explicitly with `monkeypatch.chdir` —
       `VALID_CONFIG` ships a relative one).
@@ -107,9 +107,9 @@ commit.
       `emitted_config.yaml` contains no CR byte on any platform.
 - [x] 3.5 Write the failing write-robustness tests: missing parents are created; a destination whose
       parent is a file is refused cleanly (portable — `chmod(0o555)` does not deny writes on Windows
-      or for root); `--resolved-config` naming a directory is refused (`dir_okay=False`);
-      `--resolved-config` naming the input config is refused, since overwriting the source with its
-      `experiment`-stripped form destroys the run's identity; a **relative** `--resolved-config`
+      or for root); `--emitted-config` naming a directory is refused (`dir_okay=False`);
+      `--emitted-config` naming the input config is refused, since overwriting the source with its
+      `experiment`-stripped form destroys the run's identity; a **relative** `--emitted-config`
       that resolves to one of the run directory's own artifact names is refused (it would collide
       with what `run` writes); a write that fails partway leaves no truncated file.
 - [x] 3.6 Write the failing credential tests (design D9): a non-empty `trainer_config.wandb.api_key`
@@ -183,7 +183,7 @@ gate.
       commands: with `resolve_sleap_nn` stubbed to raise, `validate <good>` still exits 0 and
       `emit <good>` still writes its output. Confirm red for the whole group.
 - [x] 5.8 Implement `run` in `cli.py`: `@main.command(name="run")`, `config_path` argument
-      (`exists=True, dir_okay=False, path_type=Path`), `--resolved-config`
+      (`exists=True, dir_okay=False, path_type=Path`), `--emitted-config`
       (`dir_okay=False, path_type=Path`); compose gate → `load_config` → `validate_config` (echoing
       notes) → `_require_api_key()` when `use_wandb` → run-name and destination checks →
       run-directory refusal → stage → invoke → `ctx.exit(status)`; map `BackendError` /
@@ -311,7 +311,7 @@ the change document should say what was actually built.
       field-named error rather than a traceback, and pre-flight that the **emitted** config resolves
       on its own, so an interpolation into the stripped `experiment` block cannot gate and stage
       against a value the backend never sees.
-- [x] 9.5 Apply the run-directory guard to `--resolved-config`, and refuse an override that names a
+- [x] 9.5 Apply the run-directory guard to `--emitted-config`, and refuse an override that names a
       run-evidence file (which would fabricate the completion evidence the next run refuses).
 - [x] 9.6 Report the paths actually written, rather than the two constants.
 - [x] 9.7 Verify that an executable-search hit came from the directory searched (Python 3.11 on
@@ -328,6 +328,29 @@ the change document should say what was actually built.
       no-credential case failed, `RUN_EVIDENCE` parametrized over the constant, and a byte-identity
       test with teeth on every platform (a hand-written config carrying a comment and unordered
       keys, not machine-generated YAML).
+
+## 10. Review-driven hardening (round 4)
+
+- [x] 10.1 Case-fold the run-evidence comparison for `--emitted-config`, unconditionally rather
+      than via `os.path.normcase`: NTFS is case-insensitive, so `Best.ckpt` is the guard's own
+      marker on the training host, and folding only there would make this the one rule in the
+      module that answers differently on the authoring host.
+- [x] 10.2 Walk the destination's ancestors (bounded by `ckpt_dir`) instead of checking only its
+      parent — the model upload is recursive, so a config written into any subdirectory of a
+      finished run would be published as part of that run's artifact.
+- [x] 10.3 Return `None` from the version probe on a non-zero exit, so a failed probe cannot be
+      echoed *as* the version — it is the substitute for stamping the version into a file.
+- [x] 10.4 Cover the version probe on Windows too (a `.bat` stub), so the reporting path is not
+      POSIX-only coverage.
+- [x] 10.5 Apply the drive-relative and trailing-dot/space rules to `trainer_config.ckpt_dir`,
+      removing the asymmetry with `run_name` (separators stay legal — it is a path, not a
+      component).
+- [x] 10.6 Correct the `oc.env` guidance: nothing on disk bakes a resolved value, but sleap-nn
+      uploads a fully resolved config to the W&B run, so secrets must stay out of the config.
+- [x] 10.7 Rename `--resolved-config` to `--emitted-config` to match the artifact, and assert the
+      direct-child property alongside containment in the positive invariant test.
+- [x] 10.8 Document that `initial_config.yaml` supersedes `emitted_config.yaml` once a run
+      completes.
 
 ## Commit Plan
 

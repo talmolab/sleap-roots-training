@@ -133,7 +133,7 @@ models/cyl_arabidopsis_primary/
   best.ckpt                 # the trained weights
   initial_config.yaml       # sleap-nn: the config as submitted, stamped with sleap_nn_version
   training_config.yaml      # sleap-nn: the config actually used, after its own resolution
-  emitted_config.yaml      # run: what sleap-nn was given, written *before* training started
+  emitted_config.yaml       # run: what sleap-nn was given, written *before* training started
   source_config.yaml        # run: your config, verbatim, `experiment` block included
   labels_pr.*.slp           # predictions from the built-in eval pass
   metrics.*.npz             # eval metrics
@@ -144,7 +144,10 @@ has the repo-owned `experiment` block stripped by construction, so nothing else 
 records which species / mode / root_type / dataset the run was for. `emitted_config.yaml` earns
 its place by existing *before* the backend starts — sleap-nn writes its two only after the trainer
 is built, so a run that dies on a bad `.slp` path or at model init leaves a directory with no
-config at all. Stage it elsewhere with `--resolved-config <path>` if you prefer.
+config at all. **Once a run completes, `initial_config.yaml` supersedes it**: same content, plus the
+`sleap_nn_version` stamp. So read `emitted_config.yaml` for a run that died early and
+`initial_config.yaml` for one that finished. Stage it elsewhere with `--emitted-config <path>` if
+you prefer.
 
 #### One `run_name` per run
 
@@ -167,9 +170,13 @@ out (`..`), no trailing dot or space (Windows strips those, so `r1 ` and `r1` wo
 directory there and different ones here), and no Windows-reserved character or device name.
 `trainer_config.ckpt_dir` must likewise be a non-empty string when you set it.
 
-**Interpolations are kept, not resolved.** The emitted config preserves `${...}` verbatim, which is
-what keeps `${oc.env:WANDB_API_KEY}` a reference rather than a baked secret in a file that gets
-uploaded with the model. The flip side is that an interpolation pointing at the `experiment` block —
+**Interpolations are kept, not resolved — but do not put secrets behind `oc.env` anyway.** The
+emitted config preserves `${...}` verbatim, and so do the two configs sleap-nn writes into the run
+directory (`OmegaConf.save` defaults to `resolve=False`), so nothing on disk bakes a resolved value.
+The W&B run config is a different story: sleap-nn uploads a **fully resolved** copy
+(`model_trainer.py:1310`). `trainer_config.wandb.api_key` is masked before that happens, but any
+*other* `${oc.env:...}` value is resolved and shipped to the run — so keep secrets out of the config
+entirely and let `WANDB_API_KEY` / `wandb login` supply the credential. The flip side is that an interpolation pointing at the `experiment` block —
 `run_name: ${experiment.species}_v1` — cannot work, because that block is stripped from the config
 the backend receives; `run` checks for this and refuses before staging anything rather than letting
 the run fail later against a value it already reported.

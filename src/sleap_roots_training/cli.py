@@ -688,7 +688,7 @@ def _warn_on_dataset_mismatch(cfg) -> None:
     "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
 )
 @click.option(
-    "--resolved-config",
+    "--emitted-config",
     # dir_okay=False for the same reason --selection-matrix has it: a directory would
     # otherwise reach the writer and surface as a raw IsADirectoryError.
     type=click.Path(dir_okay=False, path_type=Path),
@@ -697,7 +697,7 @@ def _warn_on_dataset_mismatch(cfg) -> None:
 )
 @click.pass_context
 def run_command(
-    ctx: click.Context, config_path: Path, resolved_config: Optional[Path]
+    ctx: click.Context, config_path: Path, emitted_config: Optional[Path]
 ) -> None:
     """Validate CONFIG_PATH, stage it, and run ``sleap-nn train`` on it.
 
@@ -750,7 +750,7 @@ def run_command(
     try:
         run_dir = backend.run_directory(cfg)
         backend.check_run_directory(run_dir)
-        destination = backend.resolved_config_path(run_dir, resolved_config)
+        destination = backend.emitted_config_path(run_dir, emitted_config)
         backend.stage_artifacts(cfg, config_path, run_dir, destination)
     except backend.BackendError as error:
         raise click.ClickException(str(error))

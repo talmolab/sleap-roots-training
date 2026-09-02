@@ -98,11 +98,14 @@ or a space, and carries no control character, no character Windows forbids in a 
 device name — and SHALL refuse otherwise, naming the field. Every part of the rule SHALL be applied
 identically on every platform, so a name that would escape or alias the run directory on the training
 host is rejected on the authoring host too. `trainer_config.ckpt_dir` SHALL be a non-empty string
-when present, and SHALL default to `"."` only when absent. `run` SHALL also refuse when the run path
+when present, and SHALL default to `"."` only when absent. `trainer_config.ckpt_dir` MAY contain
+path separators, but SHALL NOT be Windows drive-relative and SHALL NOT contain a component ending in
+a dot or a space — the two rules that make a name mean different things on the authoring and
+training hosts apply to whichever field supplies the path, not only to the run name. `run` SHALL also refuse when the run path
 already exists and is not a directory. Every path `run` reports SHALL be absolute. `run` SHALL refuse to reuse a run directory that
 already holds evidence of a previous run (a `best.ckpt`, or the `training_config.yaml` the backend
 writes on completion), naming the directory and instructing the operator to choose a new
-`trainer_config.run_name`; no flag SHALL override this refusal. `--resolved-config PATH` SHALL
+`trainer_config.run_name`; no flag SHALL override this refusal. `--emitted-config PATH` SHALL
 relocate the emitted config only, and SHALL reject a path that is a directory or that is the input
 config itself.
 
@@ -197,21 +200,23 @@ config itself.
 
 #### Scenario: Relocating the emitted config
 
-- **WHEN** `run` is given `--resolved-config <path>`
+- **WHEN** `run` is given `--emitted-config <path>`
 - **THEN** the emitted config is written to `<path>`
 - **AND** `source_config.yaml` is still written into the run directory
 - **AND** the backend is invoked with `<path>`
 
 #### Scenario: An override may not bypass the run-directory guard
 
-- **WHEN** `--resolved-config` points into a directory that already holds a previous run, or names
-  a file the reuse check reads as evidence of a completed run
+- **WHEN** `--emitted-config` points at a directory that already holds a previous run, or at any
+  subdirectory beneath one within the checkpoint directory (the model upload is recursive), or
+  names a file the reuse check reads as evidence of a completed run **in any letter case**, since
+  the training host's filesystem is case-insensitive
 - **THEN** the command exits non-zero naming the path
 - **AND** the backend is not invoked, so `run` cannot fabricate the evidence it later refuses
 
 #### Scenario: A destination that would destroy input or is not a file is refused
 
-- **WHEN** `--resolved-config` names an existing directory, or names the input config itself, or
+- **WHEN** `--emitted-config` names an existing directory, or names the input config itself, or
   resolves to a path inside the run directory that would collide with an artifact `run` writes
 - **THEN** the command exits non-zero naming the path (not a traceback)
 - **AND** the input config is left unchanged
@@ -263,7 +268,7 @@ run, SHALL NOT emit a traceback, and SHALL NOT delete the artifacts of a failed 
 - **WHEN** the backend exits 0
 - **THEN** `run` exits 0
 - **AND** it prints one line naming the run directory and the **actual** location of each
-  persisted config, including when `--resolved-config` placed one outside the run directory
+  persisted config, including when `--emitted-config` placed one outside the run directory
 
 #### Scenario: Backend failure propagates its exit status
 

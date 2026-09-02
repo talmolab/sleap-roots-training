@@ -255,6 +255,43 @@ def check_emitted_config_resolvable(cfg) -> None:
         ) from error
 
 
+def _check_portable_path(value: str, field: str) -> None:
+    """Apply the host-portability rules to a *path* field (separators allowed).
+
+    ``run_name`` must be a single component; ``ckpt_dir`` is legitimately a path. But the two
+    reasons a component is unsafe apply to both fields: a Windows drive-relative prefix
+    (``C:foo``) discards whatever it is joined to and resolves against a hidden per-drive
+    current-directory table, and a trailing dot or space is stripped by Win32, so the same
+    string names a different directory on the authoring host than on the training host.
+    Checking only ``run_name`` left the field supplying the left-hand side of every guarded path
+    unchecked.
+
+    Args:
+        value: The field's value.
+        field: The dotted field name, for the error message.
+
+    Raises:
+        BackendError: The value is drive-relative, or a component ends in a dot or space.
+    """
+    windows = PureWindowsPath(value)
+    if windows.drive and not windows.root:
+        raise BackendError(
+            f"{field} must not be a Windows drive-relative path, got {value!r} (it discards "
+            "whatever it is joined to and resolves against a hidden per-drive working directory)"
+        )
+    for part in windows.parts:
+        # `.` and `..` are legitimate components of a *path* (unlike `run_name`, where they are
+        # an escape and refused there); it is a trailing dot or space on a real name that Win32
+        # strips.
+        if part in (".", ".."):
+            continue
+        if part.rstrip(". ") != part:
+            raise BackendError(
+                f"{field} has a component ending in a dot or space ({part!r}); Windows strips "
+                f"those, so {value!r} would name a different directory there than here"
+            )
+
+
 def run_directory(cfg) -> Path:
     """Return the directory the backend will train into, validating the run name.
 
@@ -300,6 +337,8 @@ def run_directory(cfg) -> Path:
         raise BackendError(
             f"trainer_config.ckpt_dir must be a non-empty string, got {ckpt_dir!r}"
         )
+    else:
+        _check_portable_path(ckpt_dir, "trainer_config.ckpt_dir")
     return Path(ckpt_dir) / run_name
 
 
@@ -332,12 +371,35 @@ def check_run_directory(run_dir: Path) -> None:
             )
 
 
-def resolved_config_path(run_dir: Path, override: Optional[Path]) -> Path:
+def _check_no_run_in_ancestors(destination: Path, boundary: Path) -> None:
+    """Refuse a destination sitting anywhere inside a directory that already holds a run.
+
+    Checks ``destination``'s parent and then walks upward, stopping once it leaves ``boundary``
+    (the checkpoint directory). The parent is always checked, even for a destination outside the
+    boundary entirely, so staging into an unrelated finished run is still caught; the walk is
+    bounded so that staging somewhere genuinely unrelated stays legal.
+
+    Args:
+        destination: The path the emitted config would be written to.
+        boundary: The checkpoint directory; the walk does not climb above it.
+
+    Raises:
+        BackendError: Some ancestor within the boundary holds evidence of a previous run.
+    """
+    check_run_directory(destination.parent)
+    boundary_resolved = boundary.resolve()
+    for ancestor in destination.resolve().parents:
+        if ancestor == boundary_resolved or boundary_resolved not in ancestor.parents:
+            break
+        check_run_directory(ancestor)
+
+
+def emitted_config_path(run_dir: Path, override: Optional[Path]) -> Path:
     """Return where the emitted sleap-nn config should be staged.
 
     Args:
         run_dir: The directory the backend will train into.
-        override: An explicit ``--resolved-config`` path, or ``None``.
+        override: An explicit ``--emitted-config`` path, or ``None``.
 
     Returns:
         ``override`` when given, else ``<run_dir>/emitted_config.yaml``.
@@ -443,28 +505,39 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
     check_run_directory(run_dir)
 
     source_copy = run_dir / SOURCE_CONFIG_NAME
-    if resolved_dest.name in RUN_EVIDENCE:
+    # Case-folded on both sides, and *unconditionally* rather than via `os.path.normcase`:
+    # NTFS is case-insensitive, so on the box that trains `Best.ckpt` **is** the file the reuse
+    # check reads as evidence -- an exact match let the override write the guard's own marker and
+    # lock the directory out of every later run, unrecoverable without deleting files by hand
+    # since there is no --force. `normcase` folds only on Windows, which would make this the one
+    # rule in the module that answers differently on the authoring host; the whole point
+    # established for `run_name` is that a config rejected on the box is rejected on the laptop
+    # too. Being marginally stricter on a case-sensitive filesystem costs a rename.
+    folded_evidence = {marker.casefold() for marker in RUN_EVIDENCE}
+    if resolved_dest.name.casefold() in folded_evidence:
         raise BackendError(
-            f"--resolved-config must not name {resolved_dest.name!r}: that is how a completed "
+            f"--emitted-config must not name {resolved_dest.name!r}: that is how a completed "
             "run is recognized, so writing it now would fabricate the evidence the next run "
             "refuses -- and with no --force, recovery would mean deleting files by hand"
         )
-    # The override is a way to move the emitted config, not a way around the reuse guard: an
-    # unchecked path could drop this run's config into a *different*, finished run's directory.
-    check_run_directory(resolved_dest.parent)
+    # The override moves the emitted config; it is not a way around the reuse guard. Walk the
+    # ancestors rather than checking only the immediate parent: `registry/publish.py` uploads a
+    # model directory with a *recursive* add_dir, so a config written into any subdirectory of a
+    # finished run would be published as part of that run's artifact.
+    _check_no_run_in_ancestors(resolved_dest, boundary=run_dir.parent)
     if resolved_dest.is_dir():
         raise BackendError(
-            f"--resolved-config must name a file, but {resolved_dest} is a directory"
+            f"--emitted-config must name a file, but {resolved_dest} is a directory"
         )
     if resolved_dest.resolve() == source_path.resolve():
         raise BackendError(
-            f"--resolved-config would overwrite the input config {source_path}; the "
+            f"--emitted-config would overwrite the input config {source_path}; the "
             "emitted config has the experiment block stripped, so this would destroy the "
             "run's identity"
         )
     if resolved_dest.resolve() == source_copy.resolve():
         raise BackendError(
-            f"--resolved-config resolves to {source_copy}, which `run` writes itself"
+            f"--emitted-config resolves to {source_copy}, which `run` writes itself"
         )
 
     try:
@@ -516,6 +589,12 @@ def backend_version(binary: Path) -> Optional[str]:
             [str(binary), "--version"], capture_output=True, text=True, timeout=60
         )
     except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        # A failed probe used to echo its own usage text *as* the version. Since this line is
+        # the substitute for stamping the version into an artifact, a wrong string here is
+        # worse than none -- and the flag only disappears on a future bump, which is exactly
+        # the case the probe exists for.
         return None
     reported = (completed.stdout or completed.stderr).strip()
     return reported or None

@@ -132,7 +132,7 @@ artifact exists to cover, so for a run that dies during setup the console line i
 what would have trained it.
 
 Destination: `<ckpt_dir>/<run_name>/`, with `ckpt_dir` defaulting to `"."` to match the backend.
-`--resolved-config PATH` relocates the emitted config only (`dir_okay=False`, and refused when it
+`--emitted-config PATH` relocates the emitted config only (`dir_okay=False`, and refused when it
 names the input config — overwriting the source with its `experiment`-stripped form would destroy
 the only copy of the run's identity). Writes are atomic (temp file in the destination directory +
 `os.replace`) because `Path.write_text` on ENOSPC leaves a truncated file behind, and LF-normalized

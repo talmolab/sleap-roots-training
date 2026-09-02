@@ -176,7 +176,7 @@ def test_resolved_config_override_relocates_only_the_emitted_config(
     backend_stub, run_config, tmp_path
 ):
     elsewhere = tmp_path / "elsewhere" / "cfg.yaml"
-    result = _invoke(["run", str(run_config()), "--resolved-config", str(elsewhere)])
+    result = _invoke(["run", str(run_config()), "--emitted-config", str(elsewhere)])
     assert result.exit_code == 0, result.output
     assert elsewhere.is_file()
     assert not (tmp_path / "ckpt" / "r1" / "emitted_config.yaml").exists()
@@ -461,7 +461,7 @@ def test_a_backend_that_cannot_launch_is_reported_cleanly(
 def test_the_success_line_names_the_override_path(backend_stub, run_config, tmp_path):
     """It used to hard-code both constants, so it named a file that was not there."""
     elsewhere = tmp_path / "elsewhere" / "emitted.yaml"
-    result = _invoke(["run", str(run_config()), "--resolved-config", str(elsewhere)])
+    result = _invoke(["run", str(run_config()), "--emitted-config", str(elsewhere)])
     assert result.exit_code == 0, result.output
     assert str(elsewhere.resolve()) in result.output
     assert "emitted_config.yaml" not in result.output.split("OK:")[-1]
