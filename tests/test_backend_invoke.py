@@ -716,6 +716,35 @@ def test_interpolation_into_the_experiment_block_is_refused(write_config, tmp_pa
         backend.check_emitted_config_resolvable(cfg)
 
 
+def test_staging_keeps_interpolations_unresolved_in_the_emitted_file(
+    write_config, tmp_path, monkeypatch
+):
+    """The bytes that land on disk carry the interpolation, not the value behind it.
+
+    `stage_artifacts` writes into the directory `registry/publish.py` uploads wholesale, so a
+    resolved `${oc.env:...}` here is a secret published as a registry artifact. Asserted on the
+    *file*, with the variable **set**: the unit test next to `to_sleap_nn_yaml` pins the string,
+    this pins that nothing between it and the filesystem re-resolves.
+    """
+    monkeypatch.setenv("SLEAP_ROOTS_TEST_SECRET", "supersecret")
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {
+                "ckpt_dir": str(tmp_path / "ckpt"),
+                "run_name": "r1",
+                "wandb": {"entity": "${oc.env:SLEAP_ROOTS_TEST_SECRET}"},
+            }
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    destination = backend.emitted_config_path(run_dir, None)
+    backend.stage_artifacts(cfg, source, run_dir, destination)
+    staged = destination.read_bytes()
+    assert b"${oc.env:SLEAP_ROOTS_TEST_SECRET}" in staged
+    assert b"supersecret" not in staged
+
+
 def test_a_resolvable_config_passes_the_emitted_resolvability_check(write_config):
     cfg, _ = _cfg(write_config)
     backend.check_emitted_config_resolvable(cfg)  # must not raise

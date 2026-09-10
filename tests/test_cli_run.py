@@ -509,6 +509,30 @@ def test_an_unresolvable_interpolation_is_reported_without_a_traceback(
     assert backend_stub.calls == []
 
 
+def test_run_persists_interpolations_rather_than_the_values_behind_them(
+    backend_stub, run_config, tmp_path, monkeypatch
+):
+    """The spec's "interpolations survive into the emitted config unresolved", at the command.
+
+    `run` is the command that writes a config into a directory a model publish uploads
+    wholesale, so this is where the guarantee has to hold. The environment variable is
+    deliberately **set**: with it unset, resolving would raise and the command would fail for
+    an unrelated reason, which is why every earlier interpolation test -- all of them using an
+    *unresolvable* reference -- left this untested.
+    """
+    monkeypatch.setenv("SLEAP_ROOTS_TEST_SECRET", "supersecret")
+    path = run_config(
+        overrides={
+            "trainer_config": {"wandb": {"entity": "${oc.env:SLEAP_ROOTS_TEST_SECRET}"}}
+        }
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code == 0, result.output
+    emitted = (tmp_path / "ckpt" / "r1" / "emitted_config.yaml").read_bytes()
+    assert b"${oc.env:SLEAP_ROOTS_TEST_SECRET}" in emitted
+    assert b"supersecret" not in emitted
+
+
 def test_staged_config_matches_emit_for_a_hand_written_config(
     backend_stub, tmp_path, monkeypatch
 ):
