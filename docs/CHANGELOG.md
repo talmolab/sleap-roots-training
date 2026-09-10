@@ -31,6 +31,10 @@ All notable changes to this project are documented here. The format is based on
   the server's own metadata back after linking and refreshes it in place when stale — `--force`
   alone does not create a new version when the weights digest is unchanged, so it is not evidence
   that metadata was refreshed.
+- `emit -o <file>` now writes **LF** line endings on every platform (#34). It previously inherited
+  Python's default newline translation, so the same config emitted CRLF on Windows — the platform
+  the target GPU box runs — and LF everywhere else, making the emitted bytes host-dependent. Only
+  the line endings change; the config content is identical, and `emit` to stdout was never affected.
 - Pinned `sleap-roots-contracts` to `0.1.0a6` (from `0.1.0a3`) and **collapsed the local mode
   vocabulary into the contract-owned `Mode`**. `chooser.MODE_VOCAB` is now derived from
   `sleap_roots_contracts.Mode` rather than restated here, so the producer and the
@@ -133,6 +137,51 @@ All notable changes to this project are documented here. The format is based on
   before the confirmation prompt rather than deep inside `wandb.init()`.
 
 ### Added
+- `sleap-roots-training run <config.yaml>` (#34): one command for the case where this package and
+  the `[train]` extra are installed on the same host (the GPU box). It resolves the `sleap-nn`
+  console script — preferring this interpreter's own environment over `PATH` — runs the same checks
+  as `validate`, writes the run's configs, then invokes `sleap-nn train --config` on the emitted one
+  as a subprocess, never by importing sleap-nn's training internals. The backend's output streams
+  live, its exit status becomes `run`'s, a signal-terminated backend exits `128 + N` where the
+  platform expresses signals that way, and an interrupt is handed to the backend rather than killing
+  it, so Lightning can still write its checkpoint. If the backend cannot be resolved, `run` fails
+  before writing anything, naming the `sleap-roots-training[train]` install.
+
+  **For config authors:** nothing about the documented workflow changes. `validate` and `emit` are
+  untouched and stay base-install safe, and `validate → emit → sleap-nn train` remains canonical for
+  the author-on-a-Mac / train-on-the-A5000 split — the `examples/*.yaml` headers keep showing it for
+  that reason. Three things are new to be aware of when you use `run`. **A `trainer_config.run_name`
+  is required, and each run needs its own:** sleap-nn auto-suffixes the run directory to
+  `<run_name>-1` when a `best.ckpt` is already there, so `run` refuses a directory that already holds
+  a run rather than leaving your configs beside a different run's results — there is no `--force`,
+  and the fix is a new name. A directory holding sleap-nn's `initial_config.yaml` counts as a
+  previous run too, so **retrying after a mid-run crash needs a new `run_name`**: that file is the
+  only record of what the crashed run was going to train, and the other two markers are written
+  only at or after success. **The run directory gains three files** — `emitted_config.yaml` (what
+  sleap-nn was given, written before training starts, so it survives a run that dies during setup),
+  `source_config.yaml` (your config verbatim, `experiment` block included, which is the one
+  thing no sleap-nn artifact records) and `run_metadata.yaml` (the `sleap-nn` version and resolved
+  path that ran it, this package's version, and a UTC start timestamp) — alongside the
+  `initial_config.yaml` and `training_config.yaml` sleap-nn writes itself. **A `trainer_config.wandb.api_key` written *literally* into the
+  config is refused**, because the run directory is uploaded whole when a model is published; use
+  `WANDB_API_KEY` or `wandb login`. An interpolation there (`${oc.env:WANDB_API_KEY}`) is not
+  refused — nothing `run` writes carries its value — but the guidance is still to keep credentials
+  out of the config entirely, because sleap-nn uploads a fully resolved copy to the W&B run. **`trainer_config.run_name` must be one plain directory name**,
+  checked identically on every platform so a config authored on a laptop cannot fail only on the
+  Windows training box: no separators, nothing absolute or drive-relative, nothing that climbs out
+  (`..`), no trailing dot or space, and no Windows-reserved character or device name.
+  `trainer_config.ckpt_dir` must be a non-empty string when you set it. Interpolations are preserved
+  **unresolved** in the emitted config, so `${oc.env:WANDB_API_KEY}` stays a reference rather than a
+  baked secret in a file that is uploaded with the model — and a config whose emitted form cannot
+  resolve on its own (an interpolation pointing into the stripped `experiment` block) is refused
+  before anything is staged. `--emitted-config`'s filename takes those same portability
+  rules, and may not name any file `run` or the backend owns in the run directory — in any letter
+  case, and with any trailing dot or space, since Windows strips those at write time. `run`
+  re-reads the run directory after writing and refuses if it ended up holding fabricated run
+  evidence or a rewritten `source_config.yaml` regardless of how the destination was spelled.
+  None of this changes what a run produces or how it is graded. `run_metadata.yaml` closes the
+  environment half of the provenance gap; the config hash, git commit and dataset checksum
+  (#32) remain open.
 - Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)
   run on the exact original v000 held-out split (Arabidopsis primary-root, multi-plant cylinder,
   bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:
