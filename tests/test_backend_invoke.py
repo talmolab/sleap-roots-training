@@ -1465,6 +1465,113 @@ def test_a_run_name_with_invisible_formatting_characters_is_refused(
         backend.run_directory(cfg)
 
 
+# --- review round 5: what counts as a run, and how far the ancestor walk reaches ---------
+
+
+def test_a_run_that_died_after_the_trainer_was_built_is_not_overwritten(tmp_path):
+    """`RUN_EVIDENCE` held only *completion* markers, so a crashed run read as a clean slate.
+
+    `best.ckpt` and `training_config.yaml` are both written at or after success. sleap-nn
+    writes `initial_config.yaml` at trainer-construction time (this change's own design.md
+    records it), so a run that reached construction and then died -- an OOM at epoch 5, a CUDA
+    fault -- leaves a directory the guard called empty, and a retry silently overwrote the
+    only record of what that run was going to train.
+    """
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "initial_config.yaml").write_text("model_config: {}\n", encoding="utf-8")
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.check_run_directory(run_dir)
+
+
+def test_a_directory_holding_only_this_commands_own_artifacts_is_still_the_retry_case(
+    tmp_path,
+):
+    """The retry path must survive the widening above.
+
+    A run that died *before* the backend built anything leaves only what `run` itself wrote,
+    and those are regenerated from the same input -- no flag should be needed.
+    """
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / backend.EMITTED_CONFIG_NAME).write_text("stale", encoding="utf-8")
+    (run_dir / backend.SOURCE_CONFIG_NAME).write_text("stale", encoding="utf-8")
+    backend.check_run_directory(run_dir)  # must not raise
+
+
+def test_a_checkpoint_directory_that_is_itself_a_finished_run_is_refused(
+    write_config, tmp_path
+):
+    """`ckpt_dir` was never checked, and `ckpt_dir: models/baseline_v1` is an ordinary typo.
+
+    With evidence sitting in `ckpt/`, a plain `run` with no override exited 0 and wrote into
+    that finished run's tree -- which a recursive `add_dir` then publishes.
+    """
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    (ckpt / "best.ckpt").write_bytes(b"weights")
+    cfg, source = _cfg(
+        write_config,
+        overrides={"trainer_config": {"ckpt_dir": str(ckpt), "run_name": "r1"}},
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.stage_artifacts(
+            cfg, source, run_dir, run_dir / backend.EMITTED_CONFIG_NAME
+        )
+
+
+def test_a_destination_deep_inside_a_finished_run_outside_ckpt_dir_is_refused(
+    write_config, tmp_path
+):
+    """The walk refused depth 1 outside the boundary but accepted depth 2.
+
+    The realistic shape is `ckpt_dir: models_scratch` while the published baseline lives under
+    `models/` -- and `add_dir` is recursive regardless of which `ckpt_dir` a run belongs to,
+    which is the whole rationale for walking ancestors at all.
+    """
+    finished = tmp_path / "models" / "baseline_v1"
+    (finished / "sub").mkdir(parents=True)
+    (finished / "best.ckpt").write_bytes(b"weights")
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {
+                "ckpt_dir": str(tmp_path / "models_scratch"),
+                "run_name": "r1",
+            }
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.stage_artifacts(cfg, source, run_dir, finished / "sub" / "emitted.yaml")
+
+
+def test_the_ancestor_walk_stops_at_the_operators_own_configuration(
+    write_config, tmp_path, monkeypatch
+):
+    """The walk is bounded, and bounded by something the operator controls.
+
+    Anything at or above the deepest directory the destination and `ckpt_dir` share is out of
+    scope: a stray `training_config.yaml` in a home directory or a repo root must not refuse
+    every run underneath it, since there is no `--force` and the operator may not own it.
+    """
+    root = tmp_path / "workspace"
+    (root / "ckpt").mkdir(parents=True)
+    (root / "elsewhere").mkdir()
+    (tmp_path / "training_config.yaml").write_text("stray", encoding="utf-8")
+    monkeypatch.chdir(root)
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(root / "ckpt"), "run_name": "r1"}
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    backend.stage_artifacts(cfg, source, run_dir, root / "elsewhere" / "emitted.yaml")
+    assert (root / "elsewhere" / "emitted.yaml").is_file()
+
+
 @pytest.mark.parametrize("ckpt_dir", ["C:foo", "models ", "models."])
 def test_ckpt_dir_gets_the_same_portability_rules_as_run_name(write_config, ckpt_dir):
     """The field supplying the left-hand side of every guarded path took neither check.

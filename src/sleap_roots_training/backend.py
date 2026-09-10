@@ -109,11 +109,30 @@ EMITTED_CONFIG_NAME = "emitted_config.yaml"
 #: dataset identity.
 SOURCE_CONFIG_NAME = "source_config.yaml"
 
-#: Evidence that a run already happened in a directory. ``best.ckpt`` is the backend's own
-#: auto-suffix trigger (``training/model_trainer.py:522``); ``training_config.yaml`` is
-#: what it writes on completion (``:1313``) and catches the ``save_ckpt: false`` case,
-#: where no checkpoint is ever written and the backend silently reuses the directory.
-RUN_EVIDENCE = ("best.ckpt", "training_config.yaml")
+#: What, found in a run directory, means a run already happened there -- each mapped to why,
+#: so the refusal can say something true about the marker it actually found. Every one of
+#: these is written by the backend, none by this command.
+#:
+#: The third was missing, and its absence was the interesting one: the first two are written
+#: at or *after* success, so a run that reached trainer construction and then died left a
+#: directory this guard called clean, and the retry overwrote the only record of it.
+RUN_EVIDENCE = {
+    "best.ckpt": (
+        "the backend's own auto-suffix trigger (training/model_trainer.py:522), so it would "
+        "train into a '-1' directory instead and leave this run's config beside another "
+        "run's results"
+    ),
+    "training_config.yaml": (
+        "what the backend writes on completion (training/model_trainer.py:1313), which also "
+        "catches the save_ckpt: false case, where no checkpoint is ever written and the "
+        "backend silently reuses the directory"
+    ),
+    "initial_config.yaml": (
+        "what the backend writes once the trainer is constructed, so a run that died after "
+        "that point -- an OOM at epoch 5, a CUDA fault -- left it behind; reusing the name "
+        "would overwrite the only record of what that run was going to train"
+    ),
+}
 
 
 def _mangled(name: str) -> str:
@@ -549,37 +568,70 @@ def check_run_directory(run_dir: Path) -> None:
         raise BackendError(
             f"{run_dir} exists and is not a directory, so it cannot hold this run's artifacts"
         )
-    for marker in RUN_EVIDENCE:
+    for marker, why in RUN_EVIDENCE.items():
         if (run_dir / marker).exists():
             raise BackendError(
-                f"{run_dir} already holds a previous run ({marker}); the backend would "
-                f"train into '{run_dir.name}-1' instead, leaving this run's config beside "
-                "another run's results. Change trainer_config.run_name (there is no "
-                "--force: overwriting a finished run's provenance is never wanted)."
+                f"{run_dir} already holds a previous run ({marker}): {why}. Change "
+                "trainer_config.run_name (there is no --force: overwriting a finished or a "
+                "crashed run's provenance is never wanted)."
             )
 
 
-def _check_no_run_in_ancestors(destination: Path, boundary: Path) -> None:
+def _common_ancestor(first: Path, second: Path) -> Optional[Path]:
+    """Return the deepest directory both paths lie under, or ``None`` for different roots.
+
+    Compared component-wise and case-folded, for the reason :func:`_same_file` gives: two
+    components differing only in case are one directory on both hosts that matter.
+
+    Args:
+        first: One path.
+        second: The other.
+
+    Returns:
+        The deepest shared ancestor, or ``None`` when the two share no root (separate Windows
+        drives).
+    """
+    left, right = first.resolve().parts, second.resolve().parts
+    shared = []
+    for one, other in zip(left, right):
+        if one.casefold() != other.casefold():
+            break
+        shared.append(one)
+    return Path(*shared) if shared else None
+
+
+def _check_no_run_in_ancestors(destination: Path, ckpt_dir: Path) -> None:
     """Refuse a destination sitting anywhere inside a directory that already holds a run.
 
-    Checks ``destination``'s parent and then walks upward, stopping once it leaves ``boundary``
-    (the checkpoint directory). The parent is always checked, even for a destination outside the
-    boundary entirely, so staging into an unrelated finished run is still caught; the walk is
-    bounded so that staging somewhere genuinely unrelated stays legal.
+    ``registry/publish.py`` uploads a model directory with a **recursive** ``add_dir``, so a
+    config written into any descendant of a finished run is published as part of that run's
+    artifact -- and that is true regardless of which ``ckpt_dir`` the finished run belonged to.
+    The previous form bounded the walk by ``ckpt_dir`` and always checked the immediate parent,
+    which left two holes: depth 2 or more *outside* the checkpoint tree was accepted
+    (``ckpt_dir: models_scratch`` while the published baseline sits under ``models/`` is the
+    realistic shape), and ``ckpt_dir`` **itself** was never checked, so evidence sitting
+    directly in it let a plain run with no override write into a finished run's tree.
+
+    The walk now climbs from the destination's parent to the deepest directory it shares with
+    ``ckpt_dir``, inclusive. Bounding it by something the operator configured rather than by
+    ``ckpt_dir`` alone covers both holes, and stops short of climbing to the filesystem root:
+    a stray ``training_config.yaml`` in a home directory would otherwise refuse every run
+    underneath it, with no ``--force`` and possibly nothing the operator can delete.
 
     Args:
         destination: The path the emitted config would be written to.
-        boundary: The checkpoint directory; the walk does not climb above it.
+        ckpt_dir: The checkpoint directory, which bounds how far the walk climbs.
 
     Raises:
-        BackendError: Some ancestor within the boundary holds evidence of a previous run.
+        BackendError: The destination's parent, or an ancestor within the bound, holds
+            evidence of a previous run.
     """
-    check_run_directory(destination.parent)
-    boundary_resolved = boundary.resolve()
-    for ancestor in destination.resolve().parents:
-        if ancestor == boundary_resolved or boundary_resolved not in ancestor.parents:
-            break
+    resolved = destination.resolve()
+    boundary = _common_ancestor(resolved.parent, ckpt_dir)
+    for ancestor in resolved.parents:
         check_run_directory(ancestor)
+        if boundary is None or ancestor == boundary:
+            break
 
 
 def emitted_config_path(run_dir: Path, override: Optional[Path]) -> Path:
