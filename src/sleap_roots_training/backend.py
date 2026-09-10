@@ -19,6 +19,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import unicodedata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import NamedTuple, Optional
 
@@ -115,6 +116,35 @@ SOURCE_CONFIG_NAME = "source_config.yaml"
 RUN_EVIDENCE = ("best.ckpt", "training_config.yaml")
 
 
+def _mangled(name: str) -> str:
+    r"""Return the name the filesystem would actually **create** for ``name``, folded for case.
+
+    Two independent aliasing rules, applied together because the hosts that matter apply both.
+    Win32 strips trailing dots and spaces at creation time, so ``best.ckpt.`` and ``best.ckpt``
+    name one file there; NTFS and (by default) APFS compare case-insensitively, so ``Best.ckpt``
+    is that file too. Folding unconditionally rather than via ``os.path.normcase`` keeps every
+    rule in this module answering the same on the authoring laptop and the training box -- the
+    principle already established for ``run_name``, where being marginally stricter on a
+    case-sensitive filesystem costs a rename and being laxer costs a run.
+
+    This is a *comparison* helper only. Nothing here normalizes a name on the way to disk: the
+    name the operator wrote is the name that is written, or the write is refused.
+
+    Args:
+        name: A single path component.
+
+    Returns:
+        The comparison key for that component.
+    """
+    return name.rstrip(". ").casefold()
+
+
+#: Names a run directory must never gain from ``--emitted-config``, as comparison keys. The two
+#: the reuse check reads as a completed run, plus the one artifact nothing else can reproduce.
+_GUARDED_RUN_DIR_NAMES = frozenset(
+    _mangled(name) for name in (*RUN_EVIDENCE, SOURCE_CONFIG_NAME)
+)
+
 #: Characters Windows forbids in a path component. ``/`` and ``\\`` are already excluded by the
 #: single-component check; ``:`` is listed because a bare ``C:foo`` is *drive-relative*, not
 #: absolute, and joining it discards everything to its left.
@@ -151,12 +181,37 @@ def _check_single_component(run_name: str) -> None:
         BackendError: The name is not a single, portable path component.
     """
     for flavour in (PurePosixPath, PureWindowsPath):
-        if len(flavour(run_name).parts) != 1:
+        # An anchor check as well as a component count, because a bare root satisfies the
+        # count: `PurePosixPath("/").parts` is `("/",)` -- one component -- and
+        # `Path("ckpt") / "/"` is `/`. Found by the generated containment test, not by
+        # enumerating another shape; `..` and `C:foo` were the same oversight one round each.
+        candidate = flavour(run_name)
+        if len(candidate.parts) != 1 or candidate.anchor:
             raise BackendError(
                 f"trainer_config.run_name must be a single directory name, got {run_name!r} "
                 "(a separator, an absolute path, or a Windows drive-relative name like 'C:foo' "
                 "would place the run outside ckpt_dir)"
             )
+    _check_portable_component(run_name, "trainer_config.run_name")
+
+
+def _check_portable_component(value: str, field: str) -> None:
+    """Apply the host-portability rules to one path component, whatever field supplies it.
+
+    Extracted from :func:`_check_single_component` so ``--emitted-config``'s basename gets the
+    same treatment: it was the only path input in this module receiving no portability check at
+    all, so ``<run_dir>/CON`` reached ``argv`` pointing at a console device and ``a?b.yaml``
+    surfaced as a write failure blaming the write rather than the name. The reasoning is
+    unchanged from ``run_name``'s -- a config authored on a Mac must not fail only on the box
+    that trains -- so the rules are, too.
+
+    Args:
+        value: The component to check.
+        field: How to name the offending input in the error, e.g. ``trainer_config.run_name``.
+
+    Raises:
+        BackendError: The component would not mean the same thing on both hosts.
+    """
     # `..` (and `...`) survive the component count -- one component under both flavours -- yet
     # `<ckpt_dir>/..` climbs out of the very directory the refusal machinery guards, so the run's
     # provenance lands beside `ckpt_dir` rather than inside it, on every platform. This also
@@ -164,31 +219,40 @@ def _check_single_component(run_name: str) -> None:
     # `run_name: "r1 "` and `run_name: "r1"` name ONE directory there and TWO here -- which makes
     # the reuse refusal answer differently on the authoring host and the training host, and lets
     # `NUL ` walk past the device-name check below. Rejecting rather than silently normalizing
-    # keeps the name the operator wrote and the directory they get identical everywhere.
-    if run_name.rstrip(". ") != run_name or not run_name.rstrip(". "):
+    # keeps the name the operator wrote and the name that is created identical everywhere.
+    if value.rstrip(". ") != value or not value.rstrip(". "):
         raise BackendError(
-            f"trainer_config.run_name must not be a relative directory reference or end in a "
-            f"dot or space, got {run_name!r} (Windows strips trailing dots and spaces, so the "
-            "same name would identify a different directory there than here)"
+            f"{field} must not be a relative directory reference or end in a "
+            f"dot or space, got {value!r} (Windows strips trailing dots and spaces, so the "
+            "same name would identify a different file there than here)"
         )
-    control = sorted(char for char in run_name if ord(char) < 32)
+    control = sorted(char for char in value if ord(char) < 32)
     if control:
         raise BackendError(
-            f"trainer_config.run_name contains control character(s) {control!r}; "
-            f"got {run_name!r}"
+            f"{field} contains control character(s) {control!r}; got {value!r}"
         )
-    bad_chars = sorted(set(run_name) & _WINDOWS_RESERVED_CHARS)
+    # Category Cf is the same hazard as a control character with no visual signal whatsoever:
+    # `run<ZWSP>name` and `runname` render identically and are two directories -- for a name
+    # that becomes a W&B run id, so the two runs are indistinguishable in the registry too.
+    invisible = sorted({char for char in value if unicodedata.category(char) == "Cf"})
+    if invisible:
+        raise BackendError(
+            f"{field} contains invisible Unicode formatting character(s) "
+            f"{[f'U+{ord(char):04X}' for char in invisible]}; got {value!r} (two names that "
+            "render identically would be two different directories)"
+        )
+    bad_chars = sorted(set(value) & _WINDOWS_RESERVED_CHARS)
     if bad_chars:
         raise BackendError(
-            f"trainer_config.run_name contains character(s) Windows forbids in a path: "
-            f"{''.join(bad_chars)!r} (got {run_name!r})"
+            f"{field} contains character(s) Windows forbids in a path: "
+            f"{''.join(bad_chars)!r} (got {value!r})"
         )
     # Rejected on every platform, not only Windows: the GPU box is Windows, so a name that is
     # legal on the authoring Mac but illegal there would fail at the worst possible moment.
-    if run_name.split(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
+    if value.split(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
         raise BackendError(
-            f"trainer_config.run_name is a Windows reserved device name ({run_name!r}); "
-            "it cannot be a directory on the training box"
+            f"{field} is a Windows reserved device name ({value!r}); it cannot name a file or "
+            "a directory on the training box"
         )
 
 
@@ -331,6 +395,89 @@ def _check_portable_path(value: str, field: str) -> None:
                 f"{field} has a component ending in a dot or space ({part!r}); Windows strips "
                 f"those, so {value!r} would name a different directory there than here"
             )
+
+
+def _same_file(first: Path, second: Path) -> bool:
+    """Whether two paths name the same file on the hosts this project actually runs on.
+
+    ``PosixPath.__eq__`` is case-**sensitive** while macOS ships case-insensitive APFS, so
+    ``Source_Config.yaml`` compared unequal to ``source_config.yaml`` on a CI leg where the two
+    are one file -- making these the only rules in the module that answered differently per
+    host, which :func:`_mangled` argues at length against. ``os.path.samefile`` would answer
+    correctly but needs both paths to exist, and ``source_config.yaml`` has not been written at
+    check time; that is the hole ``--emitted-config <run_dir>/source_config.yaml.`` went
+    through, since ``resolve()`` cannot canonicalize a file that does not exist yet.
+
+    Args:
+        first: One path.
+        second: The other.
+
+    Returns:
+        Whether they resolve to the same file, comparing case-insensitively.
+    """
+    return str(first.resolve()).casefold() == str(second.resolve()).casefold()
+
+
+def _entries(directory: Path) -> set:
+    """Return the names ``directory`` currently holds, empty when it does not exist.
+
+    Deliberately ``os.listdir`` rather than a set of paths we expected to write: the whole
+    B1-B3 family is "the name passed in is not the name the filesystem created", so the only
+    trustworthy source for what is there is the directory itself.
+
+    Args:
+        directory: The directory to list.
+
+    Returns:
+        The entry names, or an empty set when the directory is absent or unreadable.
+    """
+    try:
+        return set(os.listdir(directory))
+    except OSError:
+        return set()
+
+
+def _purge_fabricated_evidence(run_dir: Path, before: set) -> str:
+    """Delete anything a staging attempt created that reads as evidence of a completed run.
+
+    Scoped to entries that appeared *since* ``before`` and whose mangled name is one the reuse
+    check reads, so the deliberate decision to keep ``source_config.yaml`` after a failed
+    second write is untouched. The case this exists for is a write that materializes a file
+    and then fails: on NTFS, ``--emitted-config <run_dir>/best.ckpt:x`` makes ``mkstemp``
+    create the **base** file ``best.ckpt`` before ``os.replace`` fails, and
+    :func:`_atomic_write`'s cleanup can only unlink the temp stream -- leaving a 0-byte
+    ``best.ckpt`` that refuses the run name forever, with no ``--force``.
+
+    Args:
+        run_dir: The run directory.
+        before: The entry names present before the attempt.
+
+    Returns:
+        A sentence to append to the caller's error, or ``""`` when there was nothing to do.
+    """
+    folded = {_mangled(marker) for marker in RUN_EVIDENCE}
+    removed, stuck = [], []
+    for name in sorted(_entries(run_dir) - before):
+        if _mangled(name) not in folded:
+            continue
+        try:
+            (run_dir / name).unlink()
+        except OSError:
+            stuck.append(name)
+        else:
+            removed.append(name)
+    parts = []
+    if removed:
+        parts.append(
+            f"removed {', '.join(repr(name) for name in removed)}, which the "
+            "attempt created and the reuse check would have read as a completed run"
+        )
+    if stuck:
+        parts.append(
+            f"could NOT remove {', '.join(repr(name) for name in stuck)}; delete it "
+            "by hand or this run name will be refused from now on"
+        )
+    return f" ({'; '.join(parts)})" if parts else ""
 
 
 def run_directory(cfg) -> Path:
@@ -532,12 +679,114 @@ def _atomic_write(path: Path, payload: bytes) -> None:
         raise
 
 
+def _check_destination_name(destination: Path) -> None:
+    """Reject a ``--emitted-config`` basename that is unportable or names an owned artifact.
+
+    Belt-and-braces beside :func:`_verify_staging`, not a replacement for it. This is a
+    *pre*-write check on a string, so it can still be beaten by a mangling rule nobody has
+    written down; the post-write check reads the directory back and cannot be. It earns its
+    place by producing a specific, actionable message before anything is written, instead of a
+    generic "staging left something behind" afterwards.
+
+    Args:
+        destination: The resolved ``--emitted-config`` path.
+
+    Raises:
+        BackendError: The basename is empty, is not portable to the training host, or aliases
+            a file the run directory must never gain this way.
+    """
+    name = destination.name
+    if not name:
+        # `--emitted-config ''` arrives here as `Path('.')`, which used to be reported as
+        # "must not name a file, but . is a directory" -- accurate and baffling.
+        raise BackendError(
+            f"--emitted-config needs a filename; {str(destination)!r} names a directory"
+        )
+    _check_portable_component(name, "--emitted-config's filename")
+    if _mangled(name) in _GUARDED_RUN_DIR_NAMES:
+        raise BackendError(
+            f"--emitted-config must not name {name!r}. Folded for the training host's "
+            f"filesystem that is {_mangled(name)!r}, which is either how a completed run is "
+            "recognized -- writing it would fabricate the evidence the next run refuses, with "
+            "no --force to recover -- or the verbatim source copy, the only artifact carrying "
+            "the experiment block"
+        )
+
+
+def _verify_staging(
+    run_dir: Path, source_copy: Path, source_bytes: bytes, before: set
+) -> None:
+    """Assert, **after** the writes, the property every destination check exists to preserve.
+
+    Four review rounds found the same defect with a different spelling -- ``C:foo``, ``..``, a
+    trailing dot, a case variant, Win32 mangling, an NTFS stream suffix -- because each guard
+    compared the string it was handed while the filesystem created a different one. A longer
+    blocklist cannot win that race: the mangling rules belong to the OS, not to this module.
+
+    Reading the directory back does not have to win it. Two things must be true once the
+    writes return, and both are checked against what is actually there:
+
+    1. **No fabricated evidence.** Nothing in the run directory is a name the reuse check
+       reads as a completed run. ``run`` must not be able to create the evidence it later
+       refuses, whatever the destination was spelled as.
+    2. **An intact source copy.** ``source_config.yaml`` is byte-identical to the input. It is
+       the only artifact carrying the ``experiment`` block, so a write landing on top of it
+       destroys species / mode / root_type / dataset identity -- silently, at exit 0, with the
+       success line asserting the file is there and ``publish.py`` uploading it as the run's
+       lineage record.
+
+    A violation is repaired before raising, because the alternative is leaving the operator
+    with exactly the state this function exists to prevent.
+
+    Args:
+        run_dir: The directory the backend will train into.
+        source_copy: Where the verbatim copy belongs.
+        source_bytes: The input config's exact bytes.
+        before: The run directory's entries before the writes.
+
+    Raises:
+        BackendError: Either invariant was violated; the run directory has been repaired.
+    """
+    folded_evidence = {_mangled(marker) for marker in RUN_EVIDENCE}
+    fabricated = sorted(
+        name for name in _entries(run_dir) if _mangled(name) in folded_evidence
+    )
+    if fabricated:
+        raise BackendError(
+            f"staging left {', '.join(repr(name) for name in fabricated)} in {run_dir}, which "
+            "the reuse check reads as evidence of a completed run -- the destination named a "
+            "file the filesystem then created under a different name than the one checked."
+            f"{_purge_fabricated_evidence(run_dir, before)} Choose a different "
+            "--emitted-config path."
+        )
+    if not source_copy.is_file() or source_copy.read_bytes() != source_bytes:
+        try:
+            _atomic_write(source_copy, source_bytes)
+        except (
+            OSError
+        ) as error:  # pragma: no cover - the repair failing needs two faults
+            raise BackendError(
+                f"staging overwrote {source_copy}, the only artifact carrying the experiment "
+                f"block, and restoring it failed: {error}"
+            ) from error
+        raise BackendError(
+            f"staging would have overwritten {source_copy} with the emitted config, which has "
+            "the experiment block stripped -- species, mode, root_type and dataset identity "
+            "are recorded nowhere else. The verbatim copy has been restored and nothing was "
+            "launched; choose a different --emitted-config path."
+        )
+
+
 def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) -> None:
     """Write the run's two provenance artifacts, before the backend is started.
 
     The emitted config is written with LF line endings so its bytes are host-independent
     (and identical to ``emit -o``'s). The source config is copied **verbatim** -- a
     provenance copy that rewrote the operator's bytes would not be one.
+
+    The destination checks below are all belt-and-braces. The guarantee is
+    :func:`_verify_staging`, which reads the run directory back afterwards; the pre-write
+    checks exist to fail with a message naming the actual mistake.
 
     Args:
         cfg: A loaded, validated training config.
@@ -547,7 +796,7 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
 
     Raises:
         BackendError: The destination is unusable, would destroy the source, or the write
-            failed. Nothing partial is left behind.
+            failed. Nothing partial and nothing misleading is left behind.
     """
     # Re-check immediately before writing: the caller checked earlier, and a checkpoint
     # appearing in that window would otherwise strand these artifacts next to it. This narrows
@@ -558,53 +807,46 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
     check_run_directory(run_dir)
 
     source_copy = run_dir / SOURCE_CONFIG_NAME
-    # Case-folded on both sides, and *unconditionally* rather than via `os.path.normcase`:
-    # NTFS is case-insensitive, so on the box that trains `Best.ckpt` **is** the file the reuse
-    # check reads as evidence -- an exact match let the override write the guard's own marker and
-    # lock the directory out of every later run, unrecoverable without deleting files by hand
-    # since there is no --force. `normcase` folds only on Windows, which would make this the one
-    # rule in the module that answers differently on the authoring host; the whole point
-    # established for `run_name` is that a config rejected on the box is rejected on the laptop
-    # too. Being marginally stricter on a case-sensitive filesystem costs a rename.
-    folded_evidence = {marker.casefold() for marker in RUN_EVIDENCE}
-    if resolved_dest.name.casefold() in folded_evidence:
-        raise BackendError(
-            f"--emitted-config must not name {resolved_dest.name!r}: that is how a completed "
-            "run is recognized, so writing it now would fabricate the evidence the next run "
-            "refuses -- and with no --force, recovery would mean deleting files by hand"
-        )
+    _check_destination_name(resolved_dest)
     # The override moves the emitted config; it is not a way around the reuse guard. Walk the
     # ancestors rather than checking only the immediate parent: `registry/publish.py` uploads a
     # model directory with a *recursive* add_dir, so a config written into any subdirectory of a
     # finished run would be published as part of that run's artifact.
-    _check_no_run_in_ancestors(resolved_dest, boundary=run_dir.parent)
+    _check_no_run_in_ancestors(resolved_dest, run_dir.parent)
     if resolved_dest.is_dir():
         raise BackendError(
             f"--emitted-config must name a file, but {resolved_dest} is a directory"
         )
-    if resolved_dest.resolve() == source_path.resolve():
+    if _same_file(resolved_dest, source_path):
         raise BackendError(
             f"--emitted-config would overwrite the input config {source_path}; the "
             "emitted config has the experiment block stripped, so this would destroy the "
             "run's identity"
         )
-    if resolved_dest.resolve() == source_copy.resolve():
+    if _same_file(resolved_dest, source_copy):
         raise BackendError(
             f"--emitted-config resolves to {source_copy}, which `run` writes itself"
         )
 
+    before = _entries(run_dir)
     try:
+        source_bytes = source_path.read_bytes()
         # `source_config.yaml` first, deliberately: it is the only artifact carrying the
         # `experiment` block, so if the second write fails the run directory keeps the record
         # nothing else can reproduce rather than the one the backend rewrites anyway.
-        _atomic_write(source_copy, source_path.read_bytes())
+        _atomic_write(source_copy, source_bytes)
         _atomic_write(
             resolved_dest, training_config.to_sleap_nn_yaml(cfg).encode("utf-8")
         )
     except OSError as error:
+        # A write that fails *after* materializing a file is the B3 case: on NTFS `mkstemp`
+        # creates the base file of a `name:stream` destination, and `_atomic_write`'s own
+        # cleanup can only unlink the stream it opened.
         raise BackendError(
-            f"could not write the run's config artifacts: {error}"
+            "could not write the run's config artifacts: "
+            f"{error}{_purge_fabricated_evidence(run_dir, before)}"
         ) from error
+    _verify_staging(run_dir, source_copy, source_bytes, before)
 
 
 class BackendOutcome(NamedTuple):

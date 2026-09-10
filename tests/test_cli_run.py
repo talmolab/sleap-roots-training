@@ -590,6 +590,39 @@ def test_run_refuses_an_interpolation_into_the_stripped_experiment_block(
     assert not (tmp_path / "ckpt" / "arabidopsis_v1").exists()
 
 
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "source_config.yaml.",
+        "source_config.yaml ",
+        "best.ckpt.",
+        "best.ckpt ",
+        "training_config.yaml ",
+        "BEST.CKPT.",
+        "best.ckpt:x",
+        "CON",
+        "a?b.yaml",
+    ],
+)
+def test_run_refuses_a_destination_the_filesystem_would_rename(
+    backend_stub, run_config, tmp_path, spelling
+):
+    """At the command, where the damage was measured: exit 0 with the backend launched.
+
+    Every one of these spellings reached the backend at exit 0 on Windows, having either
+    fabricated the completion evidence the next run refuses -- with no `--force` to recover --
+    or overwritten `source_config.yaml`, the only artifact carrying the `experiment` block, so
+    that the run's species / mode / root_type / dataset identity was gone and the success line
+    still said the file was there.
+    """
+    path = run_config()
+    before = _snapshot(tmp_path)
+    result = _invoke(
+        ["run", str(path), "--emitted-config", str(tmp_path / "ckpt" / "r1" / spelling)]
+    )
+    _assert_nothing_happened(result, backend_stub, tmp_path, before)
+
+
 def test_run_persists_interpolations_rather_than_the_values_behind_them(
     backend_stub, run_config, tmp_path, monkeypatch
 ):

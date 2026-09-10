@@ -16,8 +16,55 @@ from pathlib import Path
 
 import pytest
 
+from omegaconf import OmegaConf
+
 from sleap_roots_training import backend
 from sleap_roots_training import config as training_config
+
+
+def _mangled(name: str) -> str:
+    """What Win32 would actually create for ``name``, folded for case.
+
+    Deliberately the test module's **own** copy of the rule rather than an import of
+    ``backend._mangled``: a test that reuses the implementation's helper cannot notice the
+    implementation getting the rule wrong.
+    """
+    return name.rstrip(". ").casefold()
+
+
+#: Destination spellings built from three independent mangling rules rather than listed by
+#: hand. Every name a run directory must never gain, crossed with the suffixes Win32 strips at
+#: creation time and the case transforms NTFS and APFS fold. The point is not the count -- it
+#: is that a spelling nobody enumerated is generated, and that the assertion below is the
+#: property rather than membership of this product.
+_MANGLING_SUFFIXES = ("", ".", " ", "..", ". ", " .", "...")
+_CASE_FORMS = (str.lower, str.upper, str.capitalize)
+
+
+def _destination_spellings(bases):
+    """Yield every case x trailing-mangling spelling of each name in ``bases``."""
+    for base in bases:
+        for case in _CASE_FORMS:
+            for suffix in _MANGLING_SUFFIXES:
+                yield case(base) + suffix
+
+
+#: Fragments that have each, at some point in this change's history, turned a plain name into
+#: an escape: relative references, both separators, a Windows drive prefix, a home reference,
+#: the characters Win32 strips, and an invisible Unicode format character.
+_NAME_FRAGMENTS = ("", ".", "..", "...", "/", "\\", "C:", "~", " ", "\t", "\u200b")
+
+#: Seeds chosen so the product covers an ordinary name, a device name, and an evidence name.
+_NAME_SEEDS = ("r1", "run", "NUL", "best.ckpt")
+
+
+def _generated_run_names():
+    """Yield run names as a product of fragments, not as a hand-written list."""
+    for seed in _NAME_SEEDS:
+        for prefix in _NAME_FRAGMENTS:
+            for suffix in _NAME_FRAGMENTS:
+                yield f"{prefix}{seed}{suffix}"
+    yield from _NAME_FRAGMENTS
 
 
 def _make_stub(directory: Path) -> Path:
@@ -801,8 +848,13 @@ def test_override_naming_a_run_evidence_file_is_refused(write_config, tmp_path):
     )
     run_dir = backend.run_directory(cfg)
     for marker in backend.RUN_EVIDENCE:
-        with pytest.raises(backend.BackendError, match="run"):
+        # "fabricate", not "run": `="run"` is a substring of nearly every BackendError in the
+        # module, so the test passed on any refusal rather than on the guard it is named for.
+        with pytest.raises(backend.BackendError, match="fabricate"):
             backend.stage_artifacts(cfg, source, run_dir, run_dir / marker)
+        # ...and nothing landed. Asserting only that an exception was raised is what let a
+        # partial write leave a 0-byte marker behind unnoticed.
+        assert not run_dir.exists() or not list(run_dir.iterdir())
 
 
 def test_override_pointing_into_a_finished_run_is_refused(write_config, tmp_path):
@@ -1003,8 +1055,9 @@ def test_an_override_naming_run_evidence_in_any_case_is_refused(
         },
     )
     run_dir = backend.run_directory(cfg)
-    with pytest.raises(backend.BackendError, match="run"):
+    with pytest.raises(backend.BackendError, match="fabricate"):
         backend.stage_artifacts(cfg, source, run_dir, run_dir / case(marker))
+    assert not run_dir.exists() or not list(run_dir.iterdir())
 
 
 def test_an_override_inside_a_finished_runs_subtree_is_refused(write_config, tmp_path):
@@ -1062,6 +1115,354 @@ def test_a_failed_version_probe_is_not_reported_as_a_version(tmp_path):
         )
         stub.chmod(0o755)
     assert backend.backend_version(stub) is None
+
+
+# --- review round 5: the staging property, asserted after the writes -----------------------
+
+
+def _staging_fixture(write_config, tmp_path):
+    """A loaded config, its path, and the run directory `run` would train into."""
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {"ckpt_dir": str(tmp_path / "ckpt"), "run_name": "r1"}
+        },
+    )
+    return cfg, source, backend.run_directory(cfg)
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    sorted(
+        set(_destination_spellings((*backend.RUN_EVIDENCE, backend.SOURCE_CONFIG_NAME)))
+    ),
+)
+def test_staging_leaves_no_fabricated_evidence_and_an_intact_source_copy(
+    write_config, tmp_path, spelling
+):
+    """The property, asserted **after** the writes, for every generated spelling.
+
+    Four rounds of this bug were the same shape with a different spelling -- `C:foo`, `..`, a
+    trailing dot, a case variant, Win32 mangling -- because the guard compared the string it
+    was handed while the filesystem created a different one. A longer blocklist cannot win
+    that race; the mangling rules belong to the OS.
+
+    So this asserts neither a refusal nor a message. Each spelling is allowed to be refused
+    *or* to succeed, and in **both** cases two things must hold afterwards:
+
+    1. nothing in the run directory is a name the reuse check would read as a completed run --
+       `run` must not be able to fabricate the evidence it later refuses, with no `--force`;
+    2. `source_config.yaml`, if it exists, is byte-identical to the input -- it is the only
+       artifact carrying the `experiment` block, so a write landing on top of it destroys
+       species / mode / root_type / dataset identity at exit 0.
+
+    A spelling nobody thought of fails this by violating an invariant, not by being missing
+    from a list.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    source_bytes = source.read_bytes()
+    folded_evidence = {_mangled(marker) for marker in backend.RUN_EVIDENCE}
+    try:
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
+    except backend.BackendError:
+        pass  # refusing is one correct outcome; leaving a lie behind is not
+    landed = set(os.listdir(run_dir)) if run_dir.is_dir() else set()
+    assert not [name for name in landed if _mangled(name) in folded_evidence], landed
+    copy = run_dir / backend.SOURCE_CONFIG_NAME
+    if copy.exists():
+        assert copy.read_bytes() == source_bytes
+
+
+def test_the_destination_that_destroys_the_source_copy_is_refused(
+    write_config, tmp_path
+):
+    """The worst spelling, called out on its own so a regression names itself.
+
+    `--emitted-config <run_dir>/source_config.yaml.` used to exit 0 with the trailing dot
+    stripped at write time, leaving a file *named* `source_config.yaml` holding the
+    experiment-stripped config -- and the success line asserting the run directory held it.
+    The collision guard could not see it because `resolve()` cannot canonicalize a file that
+    does not exist yet, and `source_config.yaml` is written *after* the check.
+
+    The post-condition is the **property**, not the mechanism: whether the pre-write name
+    check refused it or the post-write check caught and repaired it, what must not exist is a
+    `source_config.yaml` that is not the operator's bytes. Asserting "the file is absent"
+    would pass on POSIX (nothing is mangled, so the name check fires) and fail on Windows
+    (where the repair restores it) -- a test that only holds on the host that cannot
+    reproduce the bug.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(
+            cfg, source, run_dir, run_dir / (backend.SOURCE_CONFIG_NAME + ".")
+        )
+    copy = run_dir / backend.SOURCE_CONFIG_NAME
+    assert not copy.exists() or copy.read_bytes() == source.read_bytes()
+
+
+@pytest.fixture
+def win32_name_mangling(monkeypatch):
+    """Make writes strip trailing dots and spaces the way Win32 does, on any host.
+
+    That stripping happens in the OS at *creation* time and is the entire mechanism behind
+    this round's findings -- which means three of the six matrix cells physically cannot
+    reproduce them, and the post-write property check is shadowed on those cells by the
+    pre-write name check that happens to fire first. Modelling the rule at the one seam that
+    touches the filesystem makes every cell exercise the hazard, and makes the layer that is
+    the actual guarantee testable rather than merely present.
+    """
+    real_write = backend._atomic_write
+
+    def mangling_write(path, payload):
+        return real_write(path.parent / (path.name.rstrip(". ") or path.name), payload)
+
+    monkeypatch.setattr(backend, "_atomic_write", mangling_write)
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "source_config.yaml.",
+        "source_config.yaml ",
+        "source_config.yaml. ",
+        "best.ckpt.",
+        "best.ckpt ",
+        "training_config.yaml ",
+        "training_config.yaml..",
+    ],
+)
+def test_a_mangling_filesystem_cannot_be_made_to_produce_a_lie(
+    write_config, tmp_path, win32_name_mangling, spelling
+):
+    """The B1-B3 mechanism, driven on every platform rather than only the one that trains.
+
+    With the filesystem stripping trailing dots and spaces, the guard compares one string
+    while a different file is created. Neither refusal nor success is asserted -- only that
+    afterwards the run directory holds no fabricated run evidence, and no `source_config.yaml`
+    that is not the operator's bytes.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    source_bytes = source.read_bytes()
+    folded_evidence = {_mangled(marker) for marker in backend.RUN_EVIDENCE}
+    try:
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
+    except backend.BackendError:
+        pass
+    landed = set(os.listdir(run_dir)) if run_dir.is_dir() else set()
+    assert not [name for name in landed if _mangled(name) in folded_evidence], landed
+    copy = run_dir / backend.SOURCE_CONFIG_NAME
+    if copy.exists():
+        assert copy.read_bytes() == source_bytes
+
+
+@pytest.fixture
+def unmodelled_name_mangling(monkeypatch):
+    """A filesystem aliasing rule this module does **not** know about.
+
+    The reason for reading the directory back after the writes is that doing so does not
+    require knowing the rule. Win32's trailing-dot stripping is now modelled by a guard *and*
+    by a fixture, so a test using it cannot tell whether the post-write check is wired into
+    `stage_artifacts` at all -- the pre-write name check fires first and the mutation survives.
+
+    So this invents one: a trailing underscore is dropped at creation time. No guard in the
+    module models it, and none should; that is the point. If the property is genuinely closed
+    rather than enumerated, an unknown rule changes nothing.
+    """
+    real_write = backend._atomic_write
+
+    def mangling_write(path, payload):
+        return real_write(path.parent / (path.name.rstrip("_") or path.name), payload)
+
+    monkeypatch.setattr(backend, "_atomic_write", mangling_write)
+
+
+@pytest.mark.parametrize("spelling", ["best.ckpt_", "training_config.yaml_"])
+def test_an_aliasing_rule_the_module_does_not_model_cannot_fabricate_evidence(
+    write_config, tmp_path, unmodelled_name_mangling, spelling
+):
+    """The whole argument for the post-write check, stated as a test.
+
+    Four rounds enumerated shapes and lost the race four times. This one is a shape the code
+    has never heard of, and it is refused anyway -- with the fabricated file removed, so the
+    run name is not bricked.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="reuse check"):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
+    assert not [
+        name
+        for name in os.listdir(run_dir)
+        if _mangled(name) in {_mangled(m) for m in backend.RUN_EVIDENCE}
+    ]
+    backend.check_run_directory(run_dir)
+
+
+def test_an_aliasing_rule_the_module_does_not_model_cannot_destroy_the_source_copy(
+    write_config, tmp_path, unmodelled_name_mangling
+):
+    """The same argument for the irreplaceable half: identity survives an unknown rule."""
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="experiment block"):
+        backend.stage_artifacts(
+            cfg, source, run_dir, run_dir / (backend.SOURCE_CONFIG_NAME + "_")
+        )
+    assert (run_dir / backend.SOURCE_CONFIG_NAME).read_bytes() == source.read_bytes()
+
+
+def test_the_post_write_check_catches_evidence_it_did_not_predict(
+    write_config, tmp_path
+):
+    """The guarantee layer, pinned on its own rather than through a spelling.
+
+    `_verify_staging` is what makes this family closed instead of enumerated, so it is driven
+    against a run directory put into the bad state directly -- no destination string involved,
+    and therefore nothing for a future mangling rule to route around.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    before = set(os.listdir(run_dir))
+    source_bytes = source.read_bytes()
+    (run_dir / backend.SOURCE_CONFIG_NAME).write_bytes(source_bytes)
+    (run_dir / "best.ckpt").write_bytes(b"")
+    with pytest.raises(backend.BackendError, match="reuse check"):
+        backend._verify_staging(
+            run_dir, run_dir / backend.SOURCE_CONFIG_NAME, source_bytes, before
+        )
+    assert not (run_dir / "best.ckpt").exists()  # repaired, not merely reported
+    backend.check_run_directory(run_dir)  # ...so the run name is not bricked
+
+
+def test_the_post_write_check_restores_a_rewritten_source_copy(write_config, tmp_path):
+    """The other half of the guarantee: the irreplaceable artifact is put back.
+
+    Losing it is silent -- the emitted config has the `experiment` block stripped, so what
+    remains is a plausible file recording no species, mode, root type or dataset.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    before = set(os.listdir(run_dir))
+    source_bytes = source.read_bytes()
+    copy = run_dir / backend.SOURCE_CONFIG_NAME
+    copy.write_bytes(b"the emitted config, with the experiment block stripped\n")
+    with pytest.raises(backend.BackendError, match="experiment block"):
+        backend._verify_staging(run_dir, copy, source_bytes, before)
+    assert copy.read_bytes() == source_bytes
+
+
+def test_a_write_that_materializes_evidence_before_failing_leaves_none_behind(
+    write_config, tmp_path, monkeypatch
+):
+    """B3's filesystem effect, driven directly so it is exercised on every host.
+
+    On NTFS, `--emitted-config <run_dir>/best.ckpt:x` makes `mkstemp` materialize the **base**
+    file `best.ckpt` (`:` opens an alternate data stream); `os.replace` then fails and
+    `_atomic_write`'s `except BaseException` can only unlink the temp stream, leaving a 0-byte
+    `best.ckpt` that bricks the run name forever. The `:` is refused by name now, so this
+    stubs the same effect: whatever a *failed* write leaves behind, it must not be something
+    the reuse check reads as a completed run.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    real_write = backend._atomic_write
+
+    def hostile_write(path, payload):
+        if path.name == backend.SOURCE_CONFIG_NAME:
+            return real_write(path, payload)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        (path.parent / "best.ckpt").write_bytes(b"")  # what mkstemp does on NTFS
+        raise OSError(87, "The parameter is incorrect")
+
+    monkeypatch.setattr(backend, "_atomic_write", hostile_write)
+    with pytest.raises(backend.BackendError, match="could not write"):
+        backend.stage_artifacts(
+            cfg, source, run_dir, run_dir / backend.EMITTED_CONFIG_NAME
+        )
+    assert not (run_dir / "best.ckpt").exists()
+    # ...and the run name is not bricked: a retry must still be possible without --force.
+    backend.check_run_directory(run_dir)
+
+
+@pytest.mark.parametrize(
+    "name", ["CON", "NUL", "aux.yaml", "a?b.yaml", "best.ckpt:x", 'q"uote.yaml']
+)
+def test_the_destination_basename_gets_run_names_portability_rules(
+    write_config, tmp_path, name
+):
+    """`--emitted-config` was the only path input in the module with no portability check.
+
+    `<run_dir>/CON` exited 0 with argv pointing at a console device; `NUL` and `a?b.yaml`
+    surfaced as write failures blaming the write rather than the name. `run_name` refuses all
+    of these on *every* platform with the explicit reasoning that a Mac-authored config must
+    not fail only on the box that trains -- the same reasoning, the same rules.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="--emitted-config"):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / name)
+
+
+def test_an_empty_destination_says_what_is_actually_wrong(write_config, tmp_path):
+    """`--emitted-config ''` reported "must not name a file, but . is a directory"."""
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="--emitted-config"):
+        backend.stage_artifacts(cfg, source, run_dir, Path(""))
+
+
+def test_a_case_variant_of_the_source_copy_is_refused_on_a_folding_filesystem(
+    write_config, tmp_path
+):
+    """`PosixPath.__eq__` is case-sensitive; macOS ships case-insensitive APFS.
+
+    The two `Path.__eq__` collision guards were safe on Windows only because
+    `WindowsPath.__eq__` folds case -- making them the one rule in the module that answers
+    differently per host, which is what its own comments argue against.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / "Source_Config.YAML")
+
+
+def test_every_accepted_run_name_lands_strictly_inside_ckpt_dir(tmp_path):
+    """The containment invariant over *generated* names rather than an enumerated list.
+
+    Deliberately one-directional: this says nothing about which names must be refused -- that
+    is the refusal tests' job, and repeating it here would be the same blocklist in another
+    file. It says that **whatever** the accept/reject rule turns out to be, no accepted name
+    can put the run directory anywhere but immediately inside the resolved `ckpt_dir`. A new
+    escape shape fails this without anyone having thought of it.
+    """
+    ckpt = tmp_path / "ckpt"
+    ckpt.mkdir()
+    accepted = 0
+    for run_name in _generated_run_names():
+        cfg = OmegaConf.create(
+            {"trainer_config": {"ckpt_dir": str(ckpt), "run_name": run_name}}
+        )
+        try:
+            run_dir = backend.run_directory(cfg)
+        except backend.BackendError:
+            continue
+        accepted += 1
+        assert run_dir.resolve().parent == ckpt.resolve(), run_name
+        assert ckpt.resolve() in run_dir.resolve().parents, run_name
+    # Without this the invariant would be satisfied by refusing everything.
+    assert (
+        accepted
+    ), "the generator produced no accepted name; the assertion was vacuous"
+
+
+@pytest.mark.parametrize(
+    "run_name", ["run\u200bname", "run\u202ename", "run\ufeffname"]
+)
+def test_a_run_name_with_invisible_formatting_characters_is_refused(
+    write_config, run_name
+):
+    """Two names that render identically would be two directories -- and a W&B run id.
+
+    `run_name` already refuses control characters below 32; Unicode category `Cf` is the same
+    hazard with no visual signal at all.
+    """
+    cfg, _ = _cfg(write_config, overrides={"trainer_config": {"run_name": run_name}})
+    with pytest.raises(backend.BackendError, match="trainer_config.run_name"):
+        backend.run_directory(cfg)
 
 
 @pytest.mark.parametrize("ckpt_dir", ["C:foo", "models ", "models."])
