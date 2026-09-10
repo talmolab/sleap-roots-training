@@ -9,10 +9,12 @@ single invocation on a host where the optional `train` extra is installed. `run`
 and SHALL fail fast with a clear error naming the `sleap-roots-training[train]` install when none of
 them yields it. `run` SHALL print the absolute path of the resolved executable before starting the
 backend. `run` SHALL invoke the backend as a subprocess and SHALL NOT import `sleap-nn`'s training
-entry points. `run` SHALL execute its steps in the order gate → validate → run-name and
-configuration field reads → emitted-config resolvability → credential check → destination and
-run-directory refusal → write artifacts → write run metadata → invoke, so that a failure at any
-step leaves nothing written and no subprocess started. The resolvability pre-flight SHALL run
+entry points. `run` SHALL execute its steps in the order gate → validate → run-name, credential and
+configuration field reads → emitted-config resolvability → credential resolution → destination
+and run-directory refusal → write config artifacts → write run metadata → invoke, so that a
+failure at any step before the writes leaves nothing written and no subprocess started. A
+failure while writing the run metadata SHALL leave the config artifacts in place — they record
+what was attempted — and SHALL NOT start the backend. The resolvability pre-flight SHALL run
 after the individual field reads, so that a field carrying an unresolvable interpolation is
 reported against that field rather than against the config as a whole. Deep `sleap-nn` validation SHALL run only when `sleap_nn` is importable by the running
 interpreter — which resolving the console script does not guarantee — and `run` SHALL report the
@@ -114,15 +116,21 @@ already holds evidence of a previous run — a `best.ckpt`, the `training_config
 writes on completion, or the `initial_config.yaml` it writes once the trainer is constructed and
 which is therefore the only marker a run that crashed mid-training leaves behind — naming the
 directory and the marker found, and instructing the operator to choose a new
-`trainer_config.run_name`; no flag SHALL override this refusal. The same refusal SHALL apply to
+`trainer_config.run_name`; no flag SHALL override this refusal. A marker SHALL be recognized
+through the same aliasing rules used everywhere else in this capability, so the refusal does not
+depend on the host's filesystem, and SHALL be recognized only as a **file**, since a directory of
+that name is not an artifact. The same refusal SHALL apply to
 every directory between the staging destination and the deepest directory it shares with
 `trainer_config.ckpt_dir`, inclusive, since a model publish uploads a directory recursively. `--emitted-config PATH` SHALL
 relocate the emitted config only, and SHALL reject a path that is a directory or that is the input
-config itself. Its filename SHALL be subject to the same portability rules as
-`trainer_config.run_name`, and SHALL NOT name any file `run` or the backend owns in a run
-directory — compared after applying the aliasing rules the training host applies at write time
-(trailing dots and spaces stripped, case folded), so a spelling that the filesystem would turn
-into one of those names is refused as that name. Independently of every such check, `run` SHALL
+config itself. Its filename **and each directory component leading to it** SHALL be subject to the same
+portability rules as `trainer_config.run_name`. Its filename SHALL NOT name any file `run` or the
+backend owns in a run directory, wherever the destination points rather than only inside the run
+directory — compared after applying every aliasing rule the training host applies at write time:
+trailing dots and spaces stripped, and case folded under **both** Unicode case folding and simple
+uppercase, since the filesystem's fold and the language's are different functions that disagree in
+both directions. A spelling the filesystem would resolve onto one of those names SHALL be refused
+as that name. Independently of every such check, `run` SHALL
 verify **after** writing that the run directory contains no file the reuse check reads as evidence
 of a completed run and that `source_config.yaml` is byte-identical to the input; on a violation it
 SHALL restore that state, refuse, and not invoke the backend.
@@ -274,6 +282,29 @@ SHALL restore that state, refuse, and not invoke the backend.
   bytes differ from the input
 - **AND** that holds for spellings this project has not enumerated, because it is verified against
   the run directory after the writes rather than against the path before them
+
+#### Scenario: A previous run is recognized however its marker is spelled
+
+- **WHEN** the run directory holds a marker spelled so that the training host's filesystem
+  resolves it onto one of the evidence names — a different letter case, a trailing dot or space,
+  or a code point that folds onto an ASCII letter under either the filesystem's fold or the
+  language's
+- **THEN** the command exits non-zero naming both the entry found and the marker it resolves onto,
+  on every platform rather than only where the filesystem folds
+- **AND** nothing is written and the backend is not invoked
+
+#### Scenario: A directory sharing a marker's name is not a previous run
+
+- **WHEN** a *directory* in the checkpoint tree is named like an evidence marker
+- **THEN** it is not treated as evidence, since a directory is not an artifact
+
+#### Scenario: A marker outside the checkpoint tree's neighbourhood does not refuse every run
+
+- **WHEN** a file named like an evidence marker sits above `trainer_config.ckpt_dir`'s parent —
+  in a home directory or a filesystem root — and the staging destination lies on a different
+  branch
+- **THEN** the run proceeds, since no flag overrides the refusal and the operator may not be able
+  to remove that file
 
 #### Scenario: An unportable destination filename is refused on every platform
 

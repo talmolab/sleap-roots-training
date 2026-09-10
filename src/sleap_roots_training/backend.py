@@ -6,10 +6,11 @@ libraries, and a subprocess additionally keeps Lightning's process-level side ef
 (signal handlers, CUDA init, ``sys.exit``) out of this CLI's process while handing us the
 backend's exit status for free.
 
-Nothing here imports ``sleap_nn``. The module is **base-install safe** -- its only
-non-stdlib imports are ``omegaconf`` and this package's own ``config`` module, both of which
-the base install already provides -- so the cross-platform CI matrix, which never installs
-the ``train`` extra, exercises every path in it through stub executables.
+Nothing here imports ``sleap_nn``. The module is **base-install safe**: it imports
+``omegaconf`` and this package's own ``config``, and nothing beyond what the base install
+already pulls in transitively (``sleap_roots_contracts``, ``pydantic``, ``yaml`` and their
+dependencies arrive through ``config``). So the cross-platform CI matrix, which never
+installs the ``train`` extra, exercises every path in it through stub executables.
 """
 
 from __future__ import annotations
@@ -142,16 +143,27 @@ RUN_EVIDENCE = {
 }
 
 
-def _mangled(name: str) -> str:
-    r"""Return the name the filesystem would actually **create** for ``name``, folded for case.
+def _name_keys(name: str) -> frozenset:
+    r"""Return every key ``name`` could collide under on the hosts this project runs on.
 
-    Two independent aliasing rules, applied together because the hosts that matter apply both.
-    Win32 strips trailing dots and spaces at creation time, so ``best.ckpt.`` and ``best.ckpt``
-    name one file there; NTFS and (by default) APFS compare case-insensitively, so ``Best.ckpt``
-    is that file too. Folding unconditionally rather than via ``os.path.normcase`` keeps every
-    rule in this module answering the same on the authoring laptop and the training box -- the
-    principle already established for ``run_name``, where being marginally stricter on a
-    case-sensitive filesystem costs a rename and being laxer costs a run.
+    Three aliasing rules, applied together because between them the training host applies
+    all three:
+
+    - **Win32 strips trailing dots and spaces** at creation time, so ``best.ckpt.`` and
+      ``best.ckpt`` are one file there.
+    - **NTFS and APFS compare case-insensitively**, and that needs *two* folds rather than
+      one. NTFS folds through its ``$UpCase`` table, which is Unicode simple **uppercase**;
+      ``str.casefold()`` is a different function, and they disagree on U+0131 LATIN SMALL
+      LETTER DOTLESS I: ``'\u0131'.upper() == 'I'`` while ``'\u0131'.casefold()`` is
+      unchanged. So a name spelled with dotless i folds to itself under ``casefold`` --
+      straight past a guard comparing that way -- while on NTFS it **is** the file the reuse
+      check reads. ``casefold`` is still needed for the cases going the other way (U+212A
+      KELVIN SIGN, U+017F LATIN SMALL LETTER LONG S), so both are applied.
+
+    Folding unconditionally rather than via ``os.path.normcase`` keeps every rule in this
+    module answering the same on the authoring laptop and the training box -- the principle
+    established for ``run_name``, where being marginally stricter on a case-sensitive
+    filesystem costs a rename and being laxer costs a run.
 
     This is a *comparison* helper only. Nothing here normalizes a name on the way to disk: the
     name the operator wrote is the name that is written, or the write is refused.
@@ -160,16 +172,39 @@ def _mangled(name: str) -> str:
         name: A single path component.
 
     Returns:
-        The comparison key for that component.
+        The set of keys it may collide under. Two names alias when their key sets intersect.
     """
-    return name.rstrip(". ").casefold()
+    stripped = name.rstrip(". ")
+    return frozenset({stripped.casefold(), stripped.upper()})
+
+
+def _aliases(name: str, keys: frozenset) -> bool:
+    """Whether the filesystem could resolve ``name`` onto one of a set of known names.
+
+    Args:
+        name: A single path component.
+        keys: A union of :func:`_name_keys` results for the names being guarded.
+
+    Returns:
+        Whether ``name`` collides with any of them.
+    """
+    return bool(_name_keys(name) & keys)
 
 
 #: Names a run directory must never gain from ``--emitted-config``, as comparison keys. The two
 #: the reuse check reads as a completed run, plus the one artifact nothing else can reproduce.
 _GUARDED_RUN_DIR_NAMES = frozenset(
-    _mangled(name) for name in (*RUN_EVIDENCE, SOURCE_CONFIG_NAME, RUN_METADATA_NAME)
+    key
+    for name in (*RUN_EVIDENCE, SOURCE_CONFIG_NAME, RUN_METADATA_NAME)
+    for key in _name_keys(name)
 )
+
+#: The evidence markers alone, keyed the same way, with a reverse lookup so a refusal can
+#: name the marker an aliasing spelling would have resolved onto.
+_EVIDENCE_KEYS = frozenset(key for name in RUN_EVIDENCE for key in _name_keys(name))
+_EVIDENCE_BY_KEY = {
+    key: marker for marker in RUN_EVIDENCE for key in _name_keys(marker)
+}
 
 #: Characters Windows forbids in a path component. ``/`` and ``\\`` are already excluded by the
 #: single-component check; ``:`` is listed because a bare ``C:foo`` is *drive-relative*, not
@@ -431,15 +466,16 @@ def _check_portable_path(value: str, field: str) -> None:
         )
     for part in windows.parts:
         # `.` and `..` are legitimate components of a *path* (unlike `run_name`, where they are
-        # an escape and refused there); it is a trailing dot or space on a real name that Win32
-        # strips.
-        if part in (".", ".."):
+        # an escape and refused there). The anchor is skipped because it is not a name the
+        # operator chose: `PureWindowsPath("C:/data").parts[0]` is `C:\\`, whose colon is the
+        # drive separator rather than the forbidden character.
+        if part in (".", "..") or part == windows.anchor:
             continue
-        if part.rstrip(". ") != part:
-            raise BackendError(
-                f"{field} has a component ending in a dot or space ({part!r}); Windows strips "
-                f"those, so {value!r} would name a different directory there than here"
-            )
+        # Every rule, not only the trailing dot and space. A device name or a forbidden
+        # character is exactly as unportable one component to the left as it is in the last
+        # one, and the reasoning `_check_portable_component` gives does not depend on which
+        # position the component is in.
+        _check_portable_component(part, f"{field} component {part!r}")
 
 
 def _same_file(first: Path, second: Path) -> bool:
@@ -448,7 +484,7 @@ def _same_file(first: Path, second: Path) -> bool:
     ``PosixPath.__eq__`` is case-**sensitive** while macOS ships case-insensitive APFS, so
     ``Source_Config.yaml`` compared unequal to ``source_config.yaml`` on a CI leg where the two
     are one file -- making these the only rules in the module that answered differently per
-    host, which :func:`_mangled` argues at length against. ``os.path.samefile`` would answer
+    host, which :func:`_name_keys` argues at length against. ``os.path.samefile`` would answer
     correctly but needs both paths to exist, and ``source_config.yaml`` has not been written at
     check time; that is the hole ``--emitted-config <run_dir>/source_config.yaml.`` went
     through, since ``resolve()`` cannot canonicalize a file that does not exist yet.
@@ -500,10 +536,9 @@ def _purge_fabricated_evidence(run_dir: Path, before: set) -> str:
     Returns:
         A sentence to append to the caller's error, or ``""`` when there was nothing to do.
     """
-    folded = {_mangled(marker) for marker in RUN_EVIDENCE}
     removed, stuck = [], []
     for name in sorted(_entries(run_dir) - before):
-        if _mangled(name) not in folded:
+        if not _aliases(name, _EVIDENCE_KEYS):
             continue
         try:
             (run_dir / name).unlink()
@@ -594,36 +629,24 @@ def check_run_directory(run_dir: Path) -> None:
         raise BackendError(
             f"{run_dir} exists and is not a directory, so it cannot hold this run's artifacts"
         )
-    for marker, why in RUN_EVIDENCE.items():
-        if (run_dir / marker).exists():
-            raise BackendError(
-                f"{run_dir} already holds a previous run ({marker}): {why}. Change "
-                "trainer_config.run_name (there is no --force: overwriting a finished or a "
-                "crashed run's provenance is never wanted)."
-            )
-
-
-def _common_ancestor(first: Path, second: Path) -> Optional[Path]:
-    """Return the deepest directory both paths lie under, or ``None`` for different roots.
-
-    Compared component-wise and case-folded, for the reason :func:`_same_file` gives: two
-    components differing only in case are one directory on both hosts that matter.
-
-    Args:
-        first: One path.
-        second: The other.
-
-    Returns:
-        The deepest shared ancestor, or ``None`` when the two share no root (separate Windows
-        drives).
-    """
-    left, right = first.resolve().parts, second.resolve().parts
-    shared = []
-    for one, other in zip(left, right):
-        if one.casefold() != other.casefold():
-            break
-        shared.append(one)
-    return Path(*shared) if shared else None
+    for entry in sorted(_entries(run_dir)):
+        keys = _name_keys(entry) & _EVIDENCE_KEYS
+        # `is_file`, not `exists`: a *directory* called `best.ckpt` is not a checkpoint, and
+        # `run_name: best.ckpt` makes one -- which under `exists()` would refuse every later
+        # run anywhere under that `ckpt_dir`, under any name, with no --force.
+        if not keys or not (run_dir / entry).is_file():
+            continue
+        marker = _EVIDENCE_BY_KEY[next(iter(keys))]
+        # Named through the same fold the rest of the module uses, so this answers
+        # identically on a case-sensitive filesystem and on the box that trains. Reporting
+        # the entry *and* the marker it resolves onto keeps the message honest when they
+        # differ (`Best.ckpt`, `best.ckpt.`).
+        found = repr(entry) if entry == marker else f"{entry!r}, which is {marker}"
+        raise BackendError(
+            f"{run_dir} already holds a previous run ({found}): {RUN_EVIDENCE[marker]}. "
+            "Change trainer_config.run_name (there is no --force: overwriting a finished "
+            "or a crashed run's provenance is never wanted)."
+        )
 
 
 def _check_no_run_in_ancestors(destination: Path, ckpt_dir: Path) -> None:
@@ -631,33 +654,43 @@ def _check_no_run_in_ancestors(destination: Path, ckpt_dir: Path) -> None:
 
     ``registry/publish.py`` uploads a model directory with a **recursive** ``add_dir``, so a
     config written into any descendant of a finished run is published as part of that run's
-    artifact -- and that is true regardless of which ``ckpt_dir`` the finished run belonged to.
-    The previous form bounded the walk by ``ckpt_dir`` and always checked the immediate parent,
-    which left two holes: depth 2 or more *outside* the checkpoint tree was accepted
-    (``ckpt_dir: models_scratch`` while the published baseline sits under ``models/`` is the
-    realistic shape), and ``ckpt_dir`` **itself** was never checked, so evidence sitting
-    directly in it let a plain run with no override write into a finished run's tree.
+    artifact -- regardless of which ``ckpt_dir`` the finished run belonged to.
 
-    The walk now climbs from the destination's parent to the deepest directory it shares with
-    ``ckpt_dir``, inclusive. Bounding it by something the operator configured rather than by
-    ``ckpt_dir`` alone covers both holes, and stops short of climbing to the filesystem root:
-    a stray ``training_config.yaml`` in a home directory would otherwise refuse every run
-    underneath it, with no ``--force`` and possibly nothing the operator can delete.
+    The destination's immediate parent is always checked. Above it, the walk continues only
+    while the ancestor is strictly inside ``ckpt_dir``'s **parent**, which is the whole of the
+    bound and is stated that way because a looser one was wrong in both directions:
+
+    - Bounding by ``ckpt_dir`` alone accepted anything two or more levels deep *outside* the
+      checkpoint tree (``ckpt_dir: models_scratch`` with the published baseline under
+      ``models/`` is the realistic shape) and never checked ``ckpt_dir`` itself, so a typo
+      like ``ckpt_dir: models/baseline_v1`` wrote straight into a finished run.
+    - Bounding by the deepest ancestor shared with ``ckpt_dir`` looked tighter and was not:
+      when the destination and ``ckpt_dir`` sit on different trees, the deepest shared
+      ancestor is the filesystem **root**, and the walk then checked every directory up to
+      and including ``/``. A stray ``training_config.yaml`` in a home directory would refuse
+      every run beneath it, with no ``--force`` and possibly nothing the operator can delete.
+
+    ``ckpt_dir.parent`` is a function of what the operator configured, cannot climb above the
+    checkpoint tree's own neighbourhood, and covers both holes. One consequence worth stating:
+    with the documented default ``ckpt_dir: "."`` the run directory's parent *is* the working
+    directory, so a completed run's ``training_config.yaml`` sitting there is refused. That is
+    the intended "``ckpt_dir`` itself is checked" rule, not an accident.
 
     Args:
         destination: The path the emitted config would be written to.
-        ckpt_dir: The checkpoint directory, which bounds how far the walk climbs.
+        ckpt_dir: The checkpoint directory, whose parent bounds how far the walk climbs.
 
     Raises:
         BackendError: The destination's parent, or an ancestor within the bound, holds
             evidence of a previous run.
     """
-    resolved = destination.resolve()
-    boundary = _common_ancestor(resolved.parent, ckpt_dir)
-    for ancestor in resolved.parents:
-        check_run_directory(ancestor)
-        if boundary is None or ancestor == boundary:
+    ancestors = list(destination.resolve().parents)
+    check_run_directory(ancestors[0])
+    boundary = ckpt_dir.resolve().parent
+    for ancestor in ancestors[1:]:
+        if boundary not in ancestor.parents:
             break
+        check_run_directory(ancestor)
 
 
 def emitted_config_path(run_dir: Path, override: Optional[Path]) -> Path:
@@ -766,6 +799,11 @@ def _check_destination_name(destination: Path) -> None:
     place by producing a specific, actionable message before anything is written, instead of a
     generic "staging left something behind" afterwards.
 
+    The owned-name rule applies **wherever the destination points**, not only inside the run
+    directory. That is deliberate rather than an oversight in scoping: the rule is about the
+    name, the operator almost certainly did not mean it, and the cost of being wrong is a
+    rename. It is stated the same way in the spec.
+
     Args:
         destination: The resolved ``--emitted-config`` path.
 
@@ -782,13 +820,28 @@ def _check_destination_name(destination: Path) -> None:
             f"--emitted-config needs a filename; {str(destination)!r} names a directory"
         )
     _check_portable_component(name, "--emitted-config's filename")
-    if _mangled(name) in _GUARDED_RUN_DIR_NAMES:
+    # ...and the directories leading to it. `ckpt_dir` gets `_check_portable_path` with the
+    # explicit reasoning that a drive-relative prefix and a trailing dot or space make a path
+    # mean different things on the two hosts; that reasoning does not stop at the last
+    # component. Without this, `--emitted-config "out dir /x.yaml"` writes into `out dir` on
+    # the box and `out dir ` here, and the path this command echoes is wrong there.
+    parent = destination.parent
+    if str(parent) not in (".", ""):
+        _check_portable_path(str(parent), "--emitted-config's directory")
+    # Two messages, because the two halves fail for different reasons and a merged one would
+    # assert something false about whichever half it was not describing.
+    if _aliases(name, _EVIDENCE_KEYS):
         raise BackendError(
-            f"--emitted-config must not name {name!r}. Folded for the training host's "
-            f"filesystem that is {_mangled(name)!r}, which is either how a completed run is "
-            "recognized -- writing it would fabricate the evidence the next run refuses, with "
-            "no --force to recover -- or the verbatim source copy, the only artifact carrying "
-            "the experiment block"
+            f"--emitted-config must not name {name!r}: on the training host's filesystem that "
+            "resolves onto a file the reuse check reads as a completed run, so writing it "
+            "would fabricate the evidence the next run refuses -- and with no --force, "
+            "recovery would mean deleting files by hand"
+        )
+    if _aliases(name, _GUARDED_RUN_DIR_NAMES):
+        raise BackendError(
+            f"--emitted-config must not name {name!r}: on the training host's filesystem that "
+            f"resolves onto {SOURCE_CONFIG_NAME} or {RUN_METADATA_NAME}, which `run` writes "
+            "itself"
         )
 
 
@@ -826,9 +879,11 @@ def _verify_staging(
     Raises:
         BackendError: Either invariant was violated; the run directory has been repaired.
     """
-    folded_evidence = {_mangled(marker) for marker in RUN_EVIDENCE}
+    # Only entries that appeared *since* the writes. Anything that was already there was
+    # refused by `check_run_directory` before a byte was written, so blaming the destination
+    # for it -- as this message does -- would be false.
     fabricated = sorted(
-        name for name in _entries(run_dir) if _mangled(name) in folded_evidence
+        name for name in _entries(run_dir) - before if _aliases(name, _EVIDENCE_KEYS)
     )
     if fabricated:
         raise BackendError(

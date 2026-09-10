@@ -335,19 +335,31 @@ A violation is repaired (the fabricated marker unlinked, the verbatim copy resto
 refused. Repairing rather than only reporting matters because there is no `--force`: a fabricated
 `best.ckpt` would refuse that run name from then on, recoverable only by deleting files by hand.
 
-The pre-write checks stay, as belt-and-braces and for message quality: the destination's basename
-gets `run_name`'s portability rules — it was the only path input in the module with no portability
-check at all — and its **mangled** form (`name.rstrip(". ").casefold()`, both aliasing rules the
-training host applies) is compared against every name `run` or the backend owns in a run
-directory. They produce a specific error before anything is written; they are not what makes the
-family closed.
+The pre-write checks stay, as belt-and-braces and for message quality. The destination's basename
+**and its directory components** get `run_name`'s portability rules — `--emitted-config` was the
+only path input in the module with no portability check at all, and checking only the last
+component would have left the same gap one position to the left. The name is then compared against
+everything `run` or the backend owns in a run directory, under every key the filesystem could
+resolve it onto.
+
+That comparison needs **two** case folds, not one, which is the part a single `casefold()` got
+wrong. NTFS folds through its `$UpCase` table — Unicode simple uppercase — and `str.casefold()` is
+a different function; they disagree in both directions. U+0131 DOTLESS I upcases to `I` but does
+not casefold to `i`, so `ınıtıal_confıg.yaml` walked past a casefold-only guard *and past the
+post-write read-back, which used the same fold*, while NTFS created `initial_config.yaml` and
+refused that run name from then on. U+212A KELVIN SIGN is the mirror image. `_name_keys` returns
+both keys and two names alias when their key sets intersect; `check_run_directory` compares the
+same way, so the reuse check no longer answers differently on a case-sensitive filesystem than on
+the box that trains.
+
+None of this is what makes the family closed — it is what makes the error specific.
 
 Testing follows the same shape. Spellings are generated from a product of mangling rules rather
 than listed, the assertion is the post-condition rather than a refusal or a message, and a fixture
 models Win32's stripping at the write seam so the three POSIX matrix cells exercise a hazard they
 physically cannot reproduce. A second fixture invents an aliasing rule the module does *not*
-model — a stripped trailing underscore — which is the only test that fails when the post-condition
-check is removed, and is therefore the one that shows the property is closed rather than
+model — a stripped trailing underscore — and those are the only tests that fail when the
+post-condition check is removed, which is what shows the property is closed rather than
 enumerated. The containment invariant for `run_name` is likewise asserted over generated names;
 that immediately surfaced an escape nobody had enumerated (`run_name: "/"`, one path component
 under both flavours, `Path("ckpt") / "/"` == `/`).
@@ -366,14 +378,24 @@ message names the marker and the remedy, and a run that died before the trainer 
 only `run`'s own artifacts — regenerated from the same input — so the ordinary retry path is
 unchanged.
 
-The ancestor walk climbs from the destination's parent to the deepest directory it shares with
-`ckpt_dir`, inclusive. Bounded by `ckpt_dir` alone it accepted anything two or more levels deep
-outside the checkpoint tree (`ckpt_dir: models_scratch` with the published baseline under
-`models/` is the realistic shape) and never checked `ckpt_dir` itself (`ckpt_dir:
-models/baseline_v1` is an ordinary typo). Deliberately **not** unbounded to the filesystem root: a
-stray `training_config.yaml` in a home directory would then refuse every run underneath it, with
-no `--force` and possibly nothing the operator can delete. Bounding by the operator's own
-configuration closes both holes and keeps the blast radius inside what they chose.
+The ancestor walk always checks the destination's immediate parent, then climbs only while the
+ancestor is strictly inside **`ckpt_dir`'s parent**. Two looser bounds were wrong first:
+
+- Bounding by `ckpt_dir` alone accepted anything two or more levels deep *outside* the checkpoint
+  tree (`ckpt_dir: models_scratch` with the published baseline under `models/` is the realistic
+  shape) and never checked `ckpt_dir` itself (`ckpt_dir: models/baseline_v1` is an ordinary typo).
+- Bounding by the deepest ancestor shared with `ckpt_dir` looked tighter and was not. When the
+  destination and `ckpt_dir` sit on different trees the deepest shared ancestor is the filesystem
+  **root**, so the walk checked every directory up to and including `/` — a stray
+  `training_config.yaml` in a home directory would refuse every run beneath it, with no `--force`
+  and possibly nothing the operator can delete. It also picked a boundary one level too deep when
+  two components differed only in case on a case-sensitive filesystem.
+
+`ckpt_dir.parent` is a function of what the operator configured, cannot climb above the checkpoint
+tree's own neighbourhood, and covers both holes. One consequence worth stating rather than leaving
+to be discovered: with the documented default `ckpt_dir: "."` the run directory's parent *is* the
+working directory, so a completed run's `training_config.yaml` sitting there is refused. That is
+the intended "`ckpt_dir` itself is checked" rule, not an accident.
 
 ### D6c — `run_metadata.yaml`
 
@@ -395,14 +417,13 @@ halves of #32. The dataset checksum and the git commit stay there.
 `cli.py` is a thin command surface; `config.py` holds config-domain logic and is untouched.
 Executable resolution, destination policy, artifact staging, argv construction, and exit-status
 translation are domain logic with distinct failure modes worth unit-testing directly, so they land
-in a new `sleap_roots_training/backend.py` (base-install safe: `omegaconf` and this package's own
-`config`, nothing else). `backend.py` performs no process exit of its own — it returns a translated
+in a new `sleap_roots_training/backend.py` (base-install safe: it adds no dependency the
+base install does not already carry). `backend.py` performs no process exit of its own — it returns a translated
 status and the CLI owns `ctx.exit`, mirroring how `seed-registry` composes `registry.*`.
 
 **Correcting this option's framing.** The choice was posed as "a small `backend.py`, not more logic
-in `cli.py`", and size was the wrong axis. Measured with `ast`, the module is a couple of hundred
-executable lines under a much larger volume of docstring and comment, so it is not oversized *as
-logic* — but it carries six concerns with distinct failure modes (executable resolution,
+in `cli.py`", and size was the wrong axis: most of the file's length is docstring and comment
+rather than logic, so "small" was never the question. It carries six concerns with distinct failure modes (executable resolution,
 destination policy, artifact staging, run metadata, argv construction, exit-status translation),
 and this repo already answers exactly that shape with a **package** twice: `registry/` is six
 modules and `labeling/` is eight. A `backend/` package is the option this decision never

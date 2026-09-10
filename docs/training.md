@@ -145,13 +145,16 @@ has the repo-owned `experiment` block stripped by construction, so nothing else 
 records which species / mode / root_type / dataset the run was for. `emitted_config.yaml` earns
 its place by existing *before* the backend starts — sleap-nn writes its two only after the trainer
 is built, so a run that dies on a bad `.slp` path or at model init leaves a directory with no
-config at all. **Once a run completes, prefer `initial_config.yaml`**: it is what sleap-nn actually
-received, plus the `sleap_nn_version` stamp. Treat it as a *superset* rather than the same content
-— sleap-nn composes its structured-config defaults before saving, so keys absent from your config
-appear there with their defaults. A diff between the two is expected and does not mean the emitted
-config was modified. So read `emitted_config.yaml` for a run that died early and
-`initial_config.yaml` for one that finished. Stage it elsewhere with `--emitted-config <path>` if
-you prefer.
+config at all. **Once the trainer is built, prefer `initial_config.yaml`**: it is what sleap-nn
+actually received. Do **not** expect it to match `emitted_config.yaml` — sleap-nn composes its
+structured-config defaults and derives values (image sizes, crop sizes) at construction time, so
+that file carries keys yours did not set *and* values yours did not give. A diff between the two
+is expected and does not mean the emitted config was modified. So read `emitted_config.yaml` for
+what was submitted, and `initial_config.yaml` for what the trainer was actually built with. Stage
+the emitted config elsewhere with `--emitted-config <path>` if you prefer.
+
+That is also why `initial_config.yaml` counts as evidence of a previous run (below): it appears at
+trainer-construction time, not at completion.
 
 `run_metadata.yaml` records what would otherwise exist only in your terminal scrollback: the
 `sleap-nn` version and the resolved path of the executable that ran, this package's version, and a
@@ -159,14 +162,21 @@ UTC start timestamp. It is written *before* the backend starts, for the same rea
 `emitted_config.yaml` is. It is deliberately outside the byte-identity guarantee below — it
 carries a timestamp, so it differs between runs by construction.
 
-`--emitted-config` takes a filename, and that filename gets the same portability rules as
-`trainer_config.run_name` (below): no Windows-reserved character or device name, no trailing dot
-or space, no control or invisible-formatting character. It also may not name `best.ckpt`,
-`training_config.yaml`, `initial_config.yaml`, `source_config.yaml` or `run_metadata.yaml`, in any
-letter case or with any trailing dot or space — those are files `run` or the backend own, and
+`--emitted-config` takes a path, and every component of it — the filename and the directories
+leading to it — gets the same portability rules as `trainer_config.run_name` (below): no
+Windows-reserved character or device name, no trailing dot or space, no control or
+invisible-formatting character. Note this refuses a `:` in the name on every platform, so an
+ISO-timestamped destination like `emitted_2026-09-10T12:00:00.yaml` needs a different separator
+even on macOS, where it would otherwise work.
+
+The filename also may not name `best.ckpt`, `training_config.yaml`, `initial_config.yaml`,
+`source_config.yaml` or `run_metadata.yaml` — those are files `run` or the backend own, and
 writing over one either destroys the run's identity or fabricates the evidence the next run
-refuses. Whatever the destination, `run` re-reads the run directory after writing and refuses if
-either of those happened anyway.
+refuses. "May not name" is applied through the filesystem's own aliasing rules rather than as a
+string match: any letter case, any trailing dot or space (Windows strips those when creating the
+file), and code points that fold onto ASCII letters on NTFS. That rule holds wherever the
+destination points, not only inside the run directory. And whatever the destination, `run`
+re-reads the run directory after writing and refuses if either of those things happened anyway.
 
 #### One `run_name` per run
 
@@ -186,11 +196,14 @@ record of what that run was going to train. The practical consequence: **retryin
 crash needs a new `run_name`.** A run that died *before* the trainer was built leaves only `run`'s
 own artifacts, which are regenerated from the same input, so that retry needs nothing.
 
-The same rule applies to the directories *above* the run directory, up to the checkpoint
-directory: `run` refuses to write into any of them if one holds a finished run, because a model
-publish uploads a directory recursively and your config would ship inside someone else's
-artifact. `ckpt_dir: models/baseline_v1` is an ordinary typo with an expensive outcome, and it is
-caught.
+The same rule applies to the directories *above* the destination: `run` refuses to write into any
+of them if one holds a finished run, because a model publish uploads a directory recursively and
+your config would ship inside someone else's artifact. `ckpt_dir: models/baseline_v1` is an
+ordinary typo with an expensive outcome, and it is caught. The walk stops once it leaves
+`ckpt_dir`'s parent, so a stray `training_config.yaml` further up — in your home directory, say —
+cannot refuse every run beneath it. One consequence of `ckpt_dir` itself being checked: with the
+default `ckpt_dir: "."`, that directory is your working directory, so a completed run's
+`training_config.yaml` sitting there is refused.
 
 For the same reason `run` requires an explicit `trainer_config.run_name`: with none, sleap-nn
 generates a timestamped directory (`model_trainer.py:513`) that `run` cannot predict. Vary the

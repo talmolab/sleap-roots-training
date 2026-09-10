@@ -412,6 +412,49 @@ the change document should say what was actually built.
 - [x] 11.15 `npx --yes @fission-ai/openspec@latest validate add-run-command --strict` passes;
       `uv run pytest -q tests/`, `black --check`, `ruff check` clean.
 
+## 12. Self-review before re-requesting review (round 5, second pass)
+
+Found by turning the round-5 diff over adversarially rather than waiting for round 6. Each item
+is a defect this round *introduced or left*, not a new feature.
+
+- [x] 12.1 **A new instance of the blocking class, in the fix for it.** `_mangled` folded with
+      `str.casefold()` alone. NTFS folds through `$UpCase` -- Unicode simple **uppercase** -- and
+      the two disagree in both directions: U+0131 DOTLESS I upcases to `I` but does not casefold
+      to `i`, so `ınıtıal_confıg.yaml` passed the pre-write name check *and* the post-write
+      read-back (same fold) while NTFS created `initial_config.yaml`. U+212A KELVIN SIGN is the
+      mirror. `_name_keys` now returns both keys; each fold is separately mutation-checked.
+- [x] 12.2 **The ancestor walk did climb to `/`**, contradicting its own docstring, `design.md`
+      and `docs/training.md`. With the destination and `ckpt_dir` on different trees the deepest
+      shared ancestor is the root, so a stray `training_config.yaml` in a home directory refused
+      every run beneath it. Bounded by `ckpt_dir.parent` instead; `_common_ancestor` deleted
+      (it also picked a boundary one level too deep for case-differing components).
+- [x] 12.3 **`check_run_directory` compared exact names while `_verify_staging` folded**, so the
+      central reuse guard answered differently per host -- the one thing this module's own
+      comments forbid -- and a pre-existing `best.ckpt.` produced a false error blaming an
+      `--emitted-config` that was never given, after both artifacts had been written. It folds
+      now, and `_verify_staging` considers only entries created since the writes.
+- [x] 12.4 Evidence must be a **file**: `run_name: best.ckpt` creates a directory of that name,
+      which under `exists()` refused every later run under that `ckpt_dir`, under any name.
+- [x] 12.5 `--emitted-config`'s **directory components** take the portability rules too; checking
+      only the basename left the round-5 gap one component to the left. `_check_portable_path`
+      now applies every rule to each component, which closes the same gap for `ckpt_dir`.
+- [x] 12.6 Mutation survivors closed: `_same_file`'s casefold (its test was answered by the name
+      check firing first), `_name_keys`' `rstrip`, the empty-destination message, the
+      `is_file()` half of the source-copy check, and three of the four destination portability
+      sub-rules named in a spec scenario but never exercised.
+- [x] 12.7 The gate-order test passed in **both** orders: OmegaConf's own exception text embeds
+      `full_key: trainer_config.ckpt_dir`, so asserting that substring could not tell the two
+      messages apart. It now asserts which error was raised.
+- [x] 12.8 De-flake the real-subprocess interrupt test. It drove interrupts on a wall-clock
+      schedule and failed under load; it is the **only** test that reddens when the polled wait
+      is reverted, so it has to be reliable. Interrupts are retried until the child exits, which
+      removes the timing assumption without weakening the discriminator.
+- [x] 12.9 Correct claims that were not true of the code: the module's import list, "the only
+      test that fails", D7's unreproducible line count, the ancestor-walk bound in three
+      documents, and `initial_config.yaml` as a "superset" (sleap-nn also *derives* values, so it
+      differs in values as well as keys). Reconcile the spec's step order and the
+      "leaves nothing written" claim with what a metadata-write failure actually leaves.
+
 ## Commit Plan
 
 One PR, matching the repo's precedent (#4, #15, #20 each carried proposal **and** implementation).

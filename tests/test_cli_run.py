@@ -752,7 +752,12 @@ def test_run_reports_the_field_when_its_interpolation_cannot_resolve(
     before = _snapshot(tmp_path)
     result = _invoke(["run", str(path)])
     _assert_nothing_happened(result, backend_stub, tmp_path, before)
-    assert "trainer_config.ckpt_dir" in result.output
+    # NOT just `"trainer_config.ckpt_dir" in result.output`: OmegaConf's own exception text
+    # embeds `full_key: trainer_config.ckpt_dir`, so the *coarse* message carries the field
+    # name too and that assertion passed in either order. What distinguishes them is which
+    # error was raised at all, so that is what is asserted.
+    assert "trainer_config.ckpt_dir could not be resolved" in result.output
+    assert "cannot be resolved on its own" not in result.output
     # ...and it must not assert a cause that is wrong for this input. The generic message
     # blamed the repo-owned `experiment` block and prescribed "write the value literally",
     # which for the field this guard most often fires on (a credential) is precisely what the

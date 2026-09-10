@@ -24,14 +24,23 @@ from sleap_roots_training import backend
 from sleap_roots_training import config as training_config
 
 
-def _mangled(name: str) -> str:
-    """What Win32 would actually create for ``name``, folded for case.
+def _fs_keys(name: str) -> set:
+    """Every key ``name`` could collide under on NTFS or APFS -- the test module's own copy.
 
-    Deliberately the test module's **own** copy of the rule rather than an import of
-    ``backend._mangled``: a test that reuses the implementation's helper cannot notice the
-    implementation getting the rule wrong.
+    Deliberately *not* an import of `backend._name_keys`: a test that reuses the
+    implementation's helper cannot notice the implementation getting the rule wrong, and
+    that is exactly what happened -- a single `casefold()` looked like "the" fold and is
+    not the one NTFS uses.
     """
-    return name.rstrip(". ").casefold()
+    stripped = name.rstrip(". ")
+    return {stripped.casefold(), stripped.upper()}
+
+
+def _is_evidence(name: str) -> bool:
+    """Whether the filesystem could resolve ``name`` onto a run-evidence marker."""
+    return bool(
+        _fs_keys(name) & {key for m in backend.RUN_EVIDENCE for key in _fs_keys(m)}
+    )
 
 
 #: Destination spellings built from three independent mangling rules rather than listed by
@@ -40,11 +49,34 @@ def _mangled(name: str) -> str:
 #: is that a spelling nobody enumerated is generated, and that the assertion below is the
 #: property rather than membership of this product.
 _MANGLING_SUFFIXES = ("", ".", " ", "..", ". ", " .", "...")
-_CASE_FORMS = (str.lower, str.upper, str.capitalize)
+
+
+def _dotless(name: str) -> str:
+    """Spell ``name`` with U+0131, which upcases to ``I`` but does not casefold to ``i``."""
+    return name.replace("i", "\u0131")
+
+
+def _kelvin(name: str) -> str:
+    """Spell ``name`` with U+212A, which casefolds to ``k`` but does not upcase to ``K``.
+
+    The mirror image of `_dotless`, and the reason the comparison needs *both* folds rather
+    than whichever one happens to be tried first.
+    """
+    return name.replace("k", "\u212a")
+
+
+_CASE_FORMS = (str.lower, str.upper, str.capitalize, _dotless, _kelvin)
 
 
 def _destination_spellings(bases):
-    """Yield every case x trailing-mangling spelling of each name in ``bases``."""
+    """Yield every case x trailing-mangling spelling of each name in ``bases``.
+
+    `_dotless` is in the case forms because a single `casefold()` is **not** the fold NTFS
+    applies: NTFS upcases through `$UpCase`, and `'\u0131'.upper()` is `'I'` while
+    `'\u0131'.casefold()` is unchanged. A guard folding only one way lets
+    `\u0131n\u0131t\u0131al_conf\u0131g.yaml` through and the filesystem then creates
+    `initial_config.yaml`.
+    """
     for base in bases:
         for case in _CASE_FORMS:
             for suffix in _MANGLING_SUFFIXES:
@@ -783,46 +815,69 @@ def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(
 
     The other interrupt tests raise `KeyboardInterrupt` synchronously from a fake `wait()`, so
     they cannot see this: the fake has no blocking syscall to be stuck in. This drives a
-    **real** subprocess and simulates the interrupts from another thread, which is the only
-    arrangement where a blocking wait behaves differently from a polled one.
+    **real** subprocess and simulates interrupts from another thread, which is the only
+    arrangement where a blocking wait behaves differently from a polled one -- and it is the
+    only test that reddens when the polled wait is reverted, so it has to be reliable.
 
-    `_thread.interrupt_main` sets the interpreter's interrupt flag rather than sending a
-    signal, so the flag is only observed when the main thread runs bytecode -- deferred
-    indefinitely inside a blocking `wait()`, seen within one poll interval otherwise. That is
-    also why the child never receives a real SIGINT here, which conveniently models the
-    "child ignores the first interrupt" case on every platform.
-
-    The interrupts are gated on the child having actually launched rather than on a wall-clock
-    delay: on a cold runner, process startup can outlast a fixed delay, and an interrupt
-    arriving during `Popen(...)` would escape as an unhandled `KeyboardInterrupt` and fail
-    this test for a reason that has nothing to do with what it is checking.
+    Reliability is why the interrupts are **retried until the child is gone** rather than sent
+    on a wall-clock schedule. `_thread.interrupt_main` sets the interpreter's interrupt flag
+    rather than sending a signal, so it is observed only when the main thread next runs
+    bytecode: deferred indefinitely inside a blocking `wait()`, seen within one poll interval
+    otherwise. A single mistimed shot -- during process startup on a cold, loaded runner, or
+    inside the handler's own `print` -- is then indistinguishable from the bug. Retrying
+    removes the timing assumption without weakening the discriminator: with a blocking wait
+    *no* interrupt is ever observed, however many are sent, and the child runs its full sleep.
     """
     import _thread
 
     launched = threading.Event()
+    stop = threading.Event()
+    children = []
     real_popen = backend.subprocess.Popen
 
     class _WatchedPopen(real_popen):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            children.append(self)
             launched.set()
 
     monkeypatch.setattr(backend.subprocess, "Popen", _WatchedPopen)
 
-    def interrupt_twice():
-        launched.wait(timeout=30)
-        time.sleep(0.5)
-        _thread.interrupt_main()
-        time.sleep(1.0)  # long relative to the handler's one `print`
-        _thread.interrupt_main()
+    def interrupt_until_the_child_is_gone():
+        if not launched.wait(timeout=60):  # pragma: no cover - the child never started
+            return
+        while not stop.is_set() and children[0].poll() is None:
+            _thread.interrupt_main()
+            # Long relative to the handler's single `print`, so an interrupt landing inside
+            # the handler and escaping stays vanishingly unlikely -- and is asserted against
+            # below rather than left to chance.
+            stop.wait(1.0)
 
-    threading.Thread(target=interrupt_twice, daemon=True).start()
+    interrupter = threading.Thread(
+        target=interrupt_until_the_child_is_gone, daemon=True
+    )
+    interrupter.start()
     started = time.monotonic()
-    outcome = backend.run_backend([sys.executable, "-c", _DEAF_CHILD])
+    escaped = None
+    try:
+        outcome = backend.run_backend([sys.executable, "-c", _DEAF_CHILD])
+    except (
+        KeyboardInterrupt
+    ) as error:  # pragma: no cover - a contract failure, asserted below
+        outcome, escaped = None, error
+    finally:
+        stop.set()
+        interrupter.join(timeout=10)
+        try:
+            time.sleep(0.05)  # drain a flag set just before `stop`, so it cannot leak
+        except KeyboardInterrupt:  # pragma: no cover - timing-dependent
+            pass
     elapsed = time.monotonic() - started
     captured = capfd.readouterr()
-    # The child sleeps 30s and ignores SIGINT, so finishing quickly can only mean the second
-    # interrupt was delivered mid-run and `terminate()` ran.
+
+    assert escaped is None, "run_backend must swallow the interrupt, not propagate it"
+    # The child sleeps 30s and ignores SIGINT, so finishing quickly can only mean an interrupt
+    # was observed mid-run and the ladder ran.
     assert elapsed < 20, f"escalation never reached the child ({elapsed:.1f}s)"
     assert "press Ctrl-C again" in captured.err
     assert "terminating sleap-nn" in captured.err
@@ -1264,13 +1319,12 @@ def test_staging_leaves_no_fabricated_evidence_and_an_intact_source_copy(
     """
     cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
     source_bytes = source.read_bytes()
-    folded_evidence = {_mangled(marker) for marker in backend.RUN_EVIDENCE}
     try:
         backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
     except backend.BackendError:
         pass  # refusing is one correct outcome; leaving a lie behind is not
     landed = set(os.listdir(run_dir)) if run_dir.is_dir() else set()
-    assert not [name for name in landed if _mangled(name) in folded_evidence], landed
+    assert not [name for name in landed if _is_evidence(name)], landed
     copy = run_dir / backend.SOURCE_CONFIG_NAME
     if copy.exists():
         assert copy.read_bytes() == source_bytes
@@ -1346,13 +1400,12 @@ def test_a_mangling_filesystem_cannot_be_made_to_produce_a_lie(
     """
     cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
     source_bytes = source.read_bytes()
-    folded_evidence = {_mangled(marker) for marker in backend.RUN_EVIDENCE}
     try:
         backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
     except backend.BackendError:
         pass
     landed = set(os.listdir(run_dir)) if run_dir.is_dir() else set()
-    assert not [name for name in landed if _mangled(name) in folded_evidence], landed
+    assert not [name for name in landed if _is_evidence(name)], landed
     copy = run_dir / backend.SOURCE_CONFIG_NAME
     if copy.exists():
         assert copy.read_bytes() == source_bytes
@@ -1392,11 +1445,7 @@ def test_an_aliasing_rule_the_module_does_not_model_cannot_fabricate_evidence(
     cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
     with pytest.raises(backend.BackendError, match="reuse check"):
         backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
-    assert not [
-        name
-        for name in os.listdir(run_dir)
-        if _mangled(name) in {_mangled(m) for m in backend.RUN_EVIDENCE}
-    ]
+    assert not [name for name in os.listdir(run_dir) if _is_evidence(name)]
     backend.check_run_directory(run_dir)
 
 
@@ -1469,6 +1518,102 @@ def test_a_metadata_write_failure_is_a_clean_error(write_config, tmp_path, monke
     monkeypatch.setattr(backend, "_atomic_write", failing_write)
     with pytest.raises(backend.BackendError, match="run's metadata"):
         backend.stage_run_metadata(run_dir, tmp_path / "bin" / "sleap-nn", "0.2.0")
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        # Needs the uppercase fold: U+0131 upcases to `I`, and does not casefold to `i`.
+        "\u0131n\u0131t\u0131al_conf\u0131g.yaml",
+        "tra\u0131n\u0131ng_config.yaml",
+        # Needs the casefold: U+212A casefolds to `k`, and does not upcase to `K`.
+        "best.c\u212apt",
+        "BEST.C\u212aPT",
+    ],
+)
+def test_a_unicode_spelling_of_an_evidence_name_is_refused(
+    write_config, tmp_path, spelling
+):
+    """One `casefold()` is not "the" case fold, and the two available folds each have a gap.
+
+    NTFS folds through its `$UpCase` table -- Unicode simple **uppercase** -- while
+    `str.casefold()` is a different function, and they disagree in both directions:
+
+    - U+0131 DOTLESS I: `.upper()` gives `I`, `.casefold()` leaves it alone. Fold only with
+      `casefold` and `\u0131n\u0131t\u0131al_conf\u0131g.yaml` looks unrelated to
+      `initial_config.yaml` while the filesystem creates exactly that file.
+    - U+212A KELVIN SIGN: `.casefold()` gives `k`, `.upper()` leaves it alone. Fold only with
+      `upper` and `best.c\u212apt` slips through the same way.
+
+    So neither fold alone is sufficient and each is necessary -- which is what these four
+    inputs assert, two per fold. Same defect class as the trailing dot and the case variant,
+    on a third axis.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="fabricate"):
+        backend.stage_artifacts(cfg, source, run_dir, run_dir / spelling)
+
+
+def test_a_pre_existing_evidence_alias_is_refused_before_anything_is_written(tmp_path):
+    """The reuse check folds too, so it answers the same on every filesystem.
+
+    It compared exact names while the post-write check folded, which meant a directory
+    holding `Best.ckpt` was refused on macOS and Windows and called **clean** on Linux CI --
+    the one thing `_name_keys`'s own docstring argues no rule here may do. Worse, a plain
+    `run` with no `--emitted-config` at all then wrote both artifacts and failed with a
+    message blaming a destination that was never given.
+    """
+    run_dir = tmp_path / "ckpt" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "best.ckpt.").write_bytes(b"weights")
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.check_run_directory(run_dir)
+
+
+def test_a_directory_named_like_a_checkpoint_is_not_a_checkpoint(tmp_path):
+    """`run_name: best.ckpt` makes a *directory* called `best.ckpt` inside `ckpt_dir`.
+
+    Under an `exists()` check -- and now that the walk checks `ckpt_dir` itself -- that
+    refused every later run anywhere under that `ckpt_dir`, under any name, with no
+    `--force`. A directory is not a checkpoint.
+    """
+    ckpt = tmp_path / "ckpt"
+    (ckpt / "best.ckpt").mkdir(parents=True)
+    backend.check_run_directory(ckpt)  # must not raise
+
+
+def test_a_stray_marker_above_the_checkpoint_tree_does_not_refuse_every_run(
+    write_config, tmp_path, monkeypatch
+):
+    """The walk's bound, asserted where the previous bound actually failed.
+
+    Bounding by the deepest ancestor shared with `ckpt_dir` looked tighter than bounding by
+    `ckpt_dir` and was not: when the destination and `ckpt_dir` sit on different trees the
+    deepest shared ancestor is the filesystem **root**, so the walk climbed through the home
+    directory and `/`. A stray `training_config.yaml` in either would refuse every run
+    beneath it, with no `--force` and possibly nothing the operator can delete.
+
+    The earlier test for this was written to the shape of the code -- it only exercised a
+    destination and a `ckpt_dir` that share a deep ancestor, which is the case that already
+    worked.
+    """
+    (tmp_path / "training_config.yaml").write_text("stray", encoding="utf-8")
+    (tmp_path / "vol" / "models").mkdir(parents=True)
+    scratch = tmp_path / "elsewhere" / "scratch"
+    scratch.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    cfg, source = _cfg(
+        write_config,
+        overrides={
+            "trainer_config": {
+                "ckpt_dir": str(tmp_path / "vol" / "models"),
+                "run_name": "r1",
+            }
+        },
+    )
+    run_dir = backend.run_directory(cfg)
+    backend.stage_artifacts(cfg, source, run_dir, scratch / "emitted.yaml")
+    assert (scratch / "emitted.yaml").is_file()
 
 
 def test_the_post_write_check_catches_evidence_it_did_not_predict(
@@ -1544,7 +1689,21 @@ def test_a_write_that_materializes_evidence_before_failing_leaves_none_behind(
 
 
 @pytest.mark.parametrize(
-    "name", ["CON", "NUL", "aux.yaml", "a?b.yaml", "best.ckpt:x", 'q"uote.yaml']
+    "name",
+    [
+        "CON",
+        "NUL",
+        "aux.yaml",
+        "a?b.yaml",
+        "best.ckpt:x",
+        'q"uote.yaml',
+        # One per rule, so scoping any single rule back to `run_name` reddens something.
+        # The spec scenario names four; only two were exercised.
+        "emitted.yaml.",  # trailing dot: Win32 strips it at creation
+        "emitted.yaml ",  # trailing space: likewise
+        "emitted\x01.yaml",  # control character
+        "emitted\u200bname.yaml",  # invisible Cf: two names that render identically
+    ],
 )
 def test_the_destination_basename_gets_run_names_portability_rules(
     write_config, tmp_path, name
@@ -1573,10 +1732,63 @@ def test_the_run_metadata_sidecar_is_also_guarded_against_the_override(
 
 
 def test_an_empty_destination_says_what_is_actually_wrong(write_config, tmp_path):
-    """`--emitted-config ''` reported "must not name a file, but . is a directory"."""
+    """`--emitted-config ''` reported "must not name a file, but . is a directory".
+
+    Matched on the *message*, because the message is the entire point of this branch --
+    every other refusal also names `--emitted-config`, so matching that alone let the branch
+    be deleted with the test still green.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="needs a filename"):
+        backend.stage_artifacts(cfg, source, run_dir, Path(""))
+
+
+def test_a_case_variant_of_the_input_config_is_refused(write_config, tmp_path):
+    """`_same_file`'s fold, pinned where the name check cannot answer instead.
+
+    The earlier test for this used `Source_Config.YAML`, which the guarded-name check
+    refuses first -- so removing `_same_file`'s casefold changed nothing and the test still
+    passed. An upper-cased spelling of the *input config* is not a guarded name, so this
+    reaches the comparison it is named for. On a case-insensitive filesystem the two are one
+    file and the emitted config would overwrite the operator's input.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="overwrite the input config"):
+        backend.stage_artifacts(
+            cfg, source, run_dir, source.parent / source.name.upper()
+        )
+
+
+@pytest.mark.parametrize(
+    "component", ["C:foo", "out dir ", "out.dir.", "we?ird", "NUL"]
+)
+def test_the_destination_directory_gets_the_portability_rules_too(
+    write_config, tmp_path, component
+):
+    """`ckpt_dir` gets these rules for a reason that does not stop at the last component.
+
+    `--emitted-config "out dir /x.yaml"` writes into `out dir` on the training host and
+    `out dir ` here, so the path this command echoes is wrong exactly where it matters --
+    and `C:foo/x.yaml` discards whatever it is joined to. Only the basename was checked.
+    """
     cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
     with pytest.raises(backend.BackendError, match="--emitted-config"):
-        backend.stage_artifacts(cfg, source, run_dir, Path(""))
+        backend.stage_artifacts(cfg, source, run_dir, Path(component) / "emitted.yaml")
+
+
+def test_a_missing_source_copy_is_a_clean_error_not_a_traceback(write_config, tmp_path):
+    """`_verify_staging`'s `is_file()` half: absent is not the same as "bytes differ".
+
+    Without it a vanished `source_config.yaml` raises `FileNotFoundError` from
+    `read_bytes()`, which `cli.py` does not catch -- so the operator gets the traceback the
+    spec forbids instead of a message.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(backend.BackendError, match="experiment block"):
+        backend._verify_staging(
+            run_dir, run_dir / backend.SOURCE_CONFIG_NAME, source.read_bytes(), set()
+        )
 
 
 def test_a_case_variant_of_the_source_copy_is_refused_on_a_folding_filesystem(
@@ -1662,13 +1874,17 @@ def test_a_directory_holding_only_this_commands_own_artifacts_is_still_the_retry
 ):
     """The retry path must survive the widening above.
 
-    A run that died *before* the backend built anything leaves only what `run` itself wrote,
-    and those are regenerated from the same input -- no flag should be needed.
+    A run that died *before* the backend built anything leaves only what `run` itself wrote --
+    all three of them -- and those are regenerated from the same input, so no flag is needed.
     """
     run_dir = tmp_path / "ckpt" / "r1"
     run_dir.mkdir(parents=True)
-    (run_dir / backend.EMITTED_CONFIG_NAME).write_text("stale", encoding="utf-8")
-    (run_dir / backend.SOURCE_CONFIG_NAME).write_text("stale", encoding="utf-8")
+    for name in (
+        backend.EMITTED_CONFIG_NAME,
+        backend.SOURCE_CONFIG_NAME,
+        backend.RUN_METADATA_NAME,
+    ):
+        (run_dir / name).write_text("stale", encoding="utf-8")
     backend.check_run_directory(run_dir)  # must not raise
 
 
