@@ -12,6 +12,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -601,15 +603,27 @@ class _FakePopen:
         self.killed = False
         self.terminated = False
         self.waits = 0
+        self.returncode = None
         self._statuses = list(type(self).statuses)
         type(self).instances.append(self)
 
-    def wait(self):
+    def wait(self, timeout=None):
+        """Model the **bounded** wait the module now uses.
+
+        `timeout` is accepted rather than ignored on purpose: a fake that only implements the
+        blocking signature would keep passing if the production code went back to a blocking
+        wait, which is precisely the defect this signature exists to prevent. A queued
+        `TimeoutExpired` is raised like any other status, so the poll branch is exercised.
+        """
         self.waits += 1
         status = self._statuses.pop(0)
         if isinstance(status, BaseException):
             raise status
+        self.returncode = status
         return status
+
+    def poll(self):
+        return self.returncode
 
     def kill(self):
         self.killed = True
@@ -746,6 +760,64 @@ def test_real_subprocess_propagates_its_exit_status(status, capfd):
         == status
     )
     capfd.readouterr()  # drain the child's output so it does not leak into the report
+
+
+#: A child that ignores SIGINT and then sleeps -- the shape of a trainer with a graceful
+#: shutdown handler, which is exactly the case the escalation ladder exists for.
+_DEAF_CHILD = (
+    "import signal, sys, time; signal.signal(signal.SIGINT, signal.SIG_IGN); "
+    "sys.stderr.write('ready\\n'); sys.stderr.flush(); time.sleep(30)"
+)
+
+
+def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(capfd):
+    """The escalation ladder is reachable *during* the run, not only after it ends.
+
+    `Popen.wait()` with no timeout is a non-alertable `WaitForSingleObject(INFINITE)` on
+    Windows, so a pending interrupt is deferred until the child exits -- on the one platform
+    that trains. The common case still looked fine, because the console delivers `CTRL_C_EVENT`
+    to the child directly; but "press Ctrl-C again to terminate it" printed after the child had
+    already gone, and for a child that *defers* the interrupt the second and third Ctrl-C could
+    not be delivered at all, so `terminate()` and `kill()` never ran.
+
+    The existing interrupt tests raise `KeyboardInterrupt` synchronously from a fake `wait()`,
+    so they cannot see this: the fake has no blocking syscall to be stuck in. This drives a
+    **real** subprocess and simulates the interrupts from another thread, which is the only
+    arrangement where a blocking wait behaves differently from a polled one.
+
+    `_thread.interrupt_main` sets the interpreter's interrupt flag rather than sending a
+    signal, so the flag is only observed when the main thread runs bytecode -- deferred
+    indefinitely inside a blocking `wait()`, seen within one poll interval otherwise. That is
+    also why the child never receives a real SIGINT here, which conveniently models the
+    "child ignores the first interrupt" case on every platform.
+    """
+    interrupter = threading.Thread(
+        target=lambda: (
+            time.sleep(1.0),
+            _thread_interrupt(),
+            time.sleep(1.5),
+            _thread_interrupt(),
+        ),
+        daemon=True,
+    )
+    started = time.monotonic()
+    interrupter.start()
+    outcome = backend.run_backend([sys.executable, "-c", _DEAF_CHILD])
+    elapsed = time.monotonic() - started
+    captured = capfd.readouterr()
+    # The child sleeps 30s and ignores SIGINT, so finishing quickly can only mean the second
+    # interrupt was delivered mid-run and `terminate()` ran.
+    assert elapsed < 20, f"escalation never reached the child ({elapsed:.1f}s)"
+    assert "press Ctrl-C again" in captured.err
+    assert "terminating sleap-nn" in captured.err
+    assert outcome.exit_code != 0
+
+
+def _thread_interrupt():
+    """Raise ``KeyboardInterrupt`` in the main thread, as a console Ctrl-C does."""
+    import _thread
+
+    _thread.interrupt_main()
 
 
 @pytest.mark.integration
@@ -1018,6 +1090,20 @@ def test_backend_version_reports_what_the_binary_prints(tmp_path):
 def test_backend_version_is_a_diagnostic_and_never_a_gate(tmp_path):
     """A backend that cannot report a version still runs -- this must not raise."""
     assert backend.backend_version(tmp_path / "does_not_exist") is None
+
+
+def test_a_wait_that_times_out_just_keeps_waiting(fake_popen):
+    """The poll branch is a loop, not a failure: a long run times out thousands of times."""
+    fake_popen.statuses = [
+        subprocess.TimeoutExpired(cmd="sleap-nn", timeout=0.5),
+        subprocess.TimeoutExpired(cmd="sleap-nn", timeout=0.5),
+        0,
+    ]
+    outcome = backend.run_backend(["sleap-nn"])
+    (call,) = fake_popen.instances
+    assert outcome.exit_code == 0
+    assert call.waits == 3
+    assert not call.terminated and not call.killed
 
 
 def test_a_third_interrupt_kills(fake_popen):

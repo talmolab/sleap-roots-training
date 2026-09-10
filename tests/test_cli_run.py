@@ -34,14 +34,19 @@ class _Recorder:
 
     def __init__(self, argv, **kwargs):
         self.argv = argv
+        self.returncode = None
         type(self).calls.append((argv, kwargs))
         self._statuses = list(type(self).statuses)
 
-    def wait(self):
+    def wait(self, timeout=None):
         status = self._statuses.pop(0)
         if isinstance(status, BaseException):
             raise status
+        self.returncode = status
         return status
+
+    def poll(self):
+        return self.returncode
 
     def kill(self):  # pragma: no cover - a failure of the interrupt contract
         raise AssertionError("run must not kill the backend")

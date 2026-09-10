@@ -972,6 +972,12 @@ def build_argv(binary: Path, resolved_config: Path) -> list[str]:
 #: `STATUS_CONTROL_C_EXIT` (0xC000013A) -- what a Windows console Ctrl-C produces.
 _STATUS_CONTROL_C_EXIT = 3221225786
 
+#: How often the wait loop returns to Python while the backend runs. It has to return at all:
+#: `Popen.wait()` with no timeout is a non-alertable `WaitForSingleObject(INFINITE)` on
+#: Windows, so a pending interrupt is deferred until the child exits -- on the platform that
+#: trains. Two wakeups a second against a multi-hour run is not a cost worth optimizing.
+_WAIT_POLL_SECONDS = 0.5
+
 
 def _translate_status(returncode: int) -> BackendOutcome:
     """Turn a child's return code into an exit code this process can actually exit with.
@@ -1037,28 +1043,47 @@ def run_backend(argv: list[str]) -> BackendOutcome:
         raise BackendError(f"could not start {argv[0]}: {error}") from error
 
     interrupts = 0
-    while True:
-        try:
-            returncode = process.wait()
-            break
-        except KeyboardInterrupt:
-            interrupts += 1
-            if interrupts == 1:
-                # The child already received the same SIGINT; let it shut down gracefully,
-                # which is the whole reason this is not `subprocess.run`.
-                print(
-                    "interrupt forwarded to sleap-nn; press Ctrl-C again to terminate it",
-                    file=sys.stderr,
-                    flush=True,
-                )
-            elif interrupts == 2:
-                # There has to be a ceiling. Every further Ctrl-C used to hit the same
-                # `continue`, so a child that ignores SIGINT could not be aborted at all --
-                # design.md claimed an escape hatch that did not exist. Escalating only on an
-                # explicit second request keeps the graceful path for the ordinary case.
-                print("terminating sleap-nn", file=sys.stderr, flush=True)
-                process.terminate()
-            else:
-                print("killing sleap-nn", file=sys.stderr, flush=True)
-                process.kill()
+    try:
+        while True:
+            try:
+                # A bounded wait, not a blocking one. On Windows the blocking form defers a
+                # pending interrupt until the child exits, so the ladder below could not run
+                # at all there: the "press Ctrl-C again" line printed after the child had
+                # already gone, and a child that defers the first interrupt -- which is what a
+                # graceful-shutdown handler does -- could not be stopped by the second or
+                # third. Measured against a 30s child interrupted at 1.0s: 30.0s blocking,
+                # ~2.5s polled.
+                returncode = process.wait(timeout=_WAIT_POLL_SECONDS)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+            except KeyboardInterrupt:
+                interrupts += 1
+                if interrupts == 1:
+                    # The child already received the same SIGINT; let it shut down gracefully,
+                    # which is the whole reason this is not `subprocess.run`.
+                    print(
+                        "interrupt forwarded to sleap-nn; press Ctrl-C again to terminate it",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                elif interrupts == 2:
+                    # There has to be a ceiling. Every further Ctrl-C used to hit the same
+                    # `continue`, so a child that ignores SIGINT could not be aborted at all.
+                    # Escalating only on an explicit second request keeps the graceful path
+                    # for the ordinary case.
+                    print("terminating sleap-nn", file=sys.stderr, flush=True)
+                    process.terminate()
+                else:
+                    print("killing sleap-nn", file=sys.stderr, flush=True)
+                    process.kill()
+    finally:
+        # Do not leave a trainer holding GPU memory if this frame unwinds for any reason the
+        # ladder above did not handle. This covers exception-driven unwinding only: a
+        # default-disposition SIGTERM to *this* process (an IDE stop button, a closed
+        # terminal) kills the interpreter without unwinding, so no `finally` runs. Covering
+        # that would need a signal handler, which is a larger change than this review asked
+        # for and is noted in design.md rather than done here.
+        if process.poll() is None:  # pragma: no cover - needs an unhandled unwind
+            process.terminate()
     return _translate_status(returncode)
