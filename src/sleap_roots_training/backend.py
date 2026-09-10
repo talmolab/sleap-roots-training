@@ -656,29 +656,29 @@ def _check_no_run_in_ancestors(destination: Path, ckpt_dir: Path) -> None:
     config written into any descendant of a finished run is published as part of that run's
     artifact -- regardless of which ``ckpt_dir`` the finished run belonged to.
 
-    The destination's immediate parent is always checked. Above it, the walk continues only
-    while the ancestor is strictly inside ``ckpt_dir``'s **parent**, which is the whole of the
-    bound and is stated that way because a looser one was wrong in both directions:
+    The immediate parent is always checked. How far above it the walk climbs depends on who
+    chose the destination, because the two cases have opposite risk profiles:
 
-    - Bounding by ``ckpt_dir`` alone accepted anything two or more levels deep *outside* the
-      checkpoint tree (``ckpt_dir: models_scratch`` with the published baseline under
-      ``models/`` is the realistic shape) and never checked ``ckpt_dir`` itself, so a typo
-      like ``ckpt_dir: models/baseline_v1`` wrote straight into a finished run.
-    - Bounding by the deepest ancestor shared with ``ckpt_dir`` looked tighter and was not:
-      when the destination and ``ckpt_dir`` sit on different trees, the deepest shared
-      ancestor is the filesystem **root**, and the walk then checked every directory up to
-      and including ``/``. A stray ``training_config.yaml`` in a home directory would refuse
-      every run beneath it, with no ``--force`` and possibly nothing the operator can delete.
+    - **Inside ``ckpt_dir``** -- the default, and every run that passes no ``--emitted-config``
+      -- the walk stops at ``ckpt_dir``. Bounding it there is what keeps a stray
+      ``training_config.yaml`` further up (in a home directory, or a filesystem root) from
+      refusing every run beneath it, which would be unrecoverable: there is no ``--force``,
+      and the operator may not own the file.
+    - **Outside ``ckpt_dir``** -- only reachable by typing an explicit ``--emitted-config``
+      path -- every ancestor is checked. A bound here was tried twice and was wrong both
+      times: ``ckpt_dir`` alone accepted anything two or more levels deep outside the
+      checkpoint tree, and ``ckpt_dir``'s parent still accepted it whenever the destination
+      sat on an unrelated branch. Both misses are silent, and a config published inside
+      another run's artifact is exactly what this guard exists to prevent.
 
-    ``ckpt_dir.parent`` is a function of what the operator configured, cannot climb above the
-    checkpoint tree's own neighbourhood, and covers both holes. One consequence worth stating:
-    with the documented default ``ckpt_dir: "."`` the run directory's parent *is* the working
-    directory, so a completed run's ``training_config.yaml`` sitting there is refused. That is
-    the intended "``ckpt_dir`` itself is checked" rule, not an accident.
+    The asymmetry is the point. A missed detection corrupts another run's provenance with no
+    signal; a false refusal on a path the operator just typed names the offending directory and
+    is answered by typing a different one. Only the second is recoverable, so only the second
+    is the acceptable direction to be wrong in.
 
     Args:
         destination: The path the emitted config would be written to.
-        ckpt_dir: The checkpoint directory, whose parent bounds how far the walk climbs.
+        ckpt_dir: The checkpoint directory, which bounds the walk for a destination inside it.
 
     Raises:
         BackendError: The destination's parent, or an ancestor within the bound, holds
@@ -686,9 +686,16 @@ def _check_no_run_in_ancestors(destination: Path, ckpt_dir: Path) -> None:
     """
     ancestors = list(destination.resolve().parents)
     check_run_directory(ancestors[0])
-    boundary = ckpt_dir.resolve().parent
+    resolved_ckpt = ckpt_dir.resolve()
+    inside_checkpoint_tree = (
+        resolved_ckpt == ancestors[0] or resolved_ckpt in ancestors[0].parents
+    )
+    # `ckpt_dir`'s *parent*, so that `ckpt_dir` itself is checked -- `ckpt_dir:
+    # models/baseline_v1` is an ordinary typo that would otherwise write straight into a
+    # finished run. `None` means unbounded, for the explicit-override case above.
+    boundary = resolved_ckpt.parent if inside_checkpoint_tree else None
     for ancestor in ancestors[1:]:
-        if boundary not in ancestor.parents:
+        if boundary is not None and boundary not in ancestor.parents:
             break
         check_run_directory(ancestor)
 

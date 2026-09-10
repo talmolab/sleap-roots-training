@@ -199,11 +199,17 @@ own artifacts, which are regenerated from the same input, so that retry needs no
 The same rule applies to the directories *above* the destination: `run` refuses to write into any
 of them if one holds a finished run, because a model publish uploads a directory recursively and
 your config would ship inside someone else's artifact. `ckpt_dir: models/baseline_v1` is an
-ordinary typo with an expensive outcome, and it is caught. The walk stops once it leaves
-`ckpt_dir`'s parent, so a stray `training_config.yaml` further up — in your home directory, say —
-cannot refuse every run beneath it. One consequence of `ckpt_dir` itself being checked: with the
-default `ckpt_dir: "."`, that directory is your working directory, so a completed run's
-`training_config.yaml` sitting there is refused.
+ordinary typo with an expensive outcome, and it is caught.
+
+How far up `run` looks depends on where you sent the file, on purpose:
+
+- **No `--emitted-config`** (the config lands in the run directory): the check stops at
+  `ckpt_dir`. A stray `training_config.yaml` further up — in your home directory, say — cannot
+  refuse every run beneath it. Since `ckpt_dir` itself *is* checked, note that with the default
+  `ckpt_dir: "."` that directory is your working directory.
+- **`--emitted-config` pointing outside `ckpt_dir`**: every directory above it is checked, all the
+  way up. Writing into someone else's finished run is silent and unfixable after the fact; a
+  refusal here names the directory and is fixed by choosing a different path.
 
 For the same reason `run` requires an explicit `trainer_config.run_name`: with none, sleap-nn
 generates a timestamped directory (`model_trainer.py:513`) that `run` cannot predict. Vary the

@@ -1582,38 +1582,77 @@ def test_a_directory_named_like_a_checkpoint_is_not_a_checkpoint(tmp_path):
     backend.check_run_directory(ckpt)  # must not raise
 
 
-def test_a_stray_marker_above_the_checkpoint_tree_does_not_refuse_every_run(
+@pytest.mark.parametrize(
+    ("ckpt_rel", "finished_rel", "dest_rel"),
+    [
+        # Sibling trees: `ckpt_dir: models_scratch` while the published baseline lives under
+        # `models/`. The shape the ancestor walk was added for.
+        ("models_scratch", "models/baseline_v1", "models/baseline_v1/sub/e.yaml"),
+        ("models_scratch", "models/baseline_v1", "models/baseline_v1/a/b/c/e.yaml"),
+        # A finished run on a branch sharing nothing with `ckpt_dir`. Depth 1 was always
+        # caught (the parent is always checked); depth 2 was accepted by *both* earlier
+        # bounds -- `ckpt_dir`, and then `ckpt_dir`'s parent.
+        ("a/b/models_scratch", "far/finished", "far/finished/e.yaml"),
+        ("a/b/models_scratch", "far/finished", "far/finished/sub/e.yaml"),
+        ("a/b/models_scratch", "far/finished", "far/finished/x/y/z/e.yaml"),
+        # ...and inside the checkpoint tree, at depth.
+        ("ckpt", "ckpt/other", "ckpt/other/sub/e.yaml"),
+    ],
+)
+def test_no_destination_lands_inside_a_finished_run_at_any_depth(
+    write_config, tmp_path, ckpt_rel, finished_rel, dest_rel
+):
+    """The override must not be able to publish this run's config inside another run.
+
+    `add_dir` is recursive, so *any* descendant of a finished run ships with that run's
+    artifact -- which makes depth the wrong thing for a guard to be sensitive to. Both
+    earlier bounds were: `ckpt_dir` accepted anything two levels deep outside the checkpoint
+    tree, and `ckpt_dir`'s parent still accepted it whenever the destination sat on an
+    unrelated branch. Parametrized over the geometries rather than the one shape that was
+    reported, because "which depth, on which branch" is exactly what kept being missed.
+    """
+    ckpt = tmp_path / ckpt_rel
+    ckpt.mkdir(parents=True)
+    finished = tmp_path / finished_rel
+    finished.mkdir(parents=True)
+    (finished / "best.ckpt").write_bytes(b"weights")
+    cfg, source = _cfg(
+        write_config,
+        overrides={"trainer_config": {"ckpt_dir": str(ckpt), "run_name": "r1"}},
+    )
+    run_dir = backend.run_directory(cfg)
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.stage_artifacts(cfg, source, run_dir, tmp_path / dest_rel)
+
+
+def test_a_stray_marker_above_ckpt_dir_cannot_refuse_the_ordinary_run(
     write_config, tmp_path, monkeypatch
 ):
-    """The walk's bound, asserted where the previous bound actually failed.
+    """The other half of the trade, and the half that must never be got wrong.
 
-    Bounding by the deepest ancestor shared with `ckpt_dir` looked tighter than bounding by
-    `ckpt_dir` and was not: when the destination and `ckpt_dir` sit on different trees the
-    deepest shared ancestor is the filesystem **root**, so the walk climbed through the home
-    directory and `/`. A stray `training_config.yaml` in either would refuse every run
-    beneath it, with no `--force` and possibly nothing the operator can delete.
+    The walk climbing without a bound is unrecoverable for the *default* path: there is no
+    `--force`, and a stray `training_config.yaml` in a home directory or a repo root -- which
+    the operator may not own -- would refuse every run beneath it forever. So for a
+    destination inside `ckpt_dir`, which is every run that passes no `--emitted-config`, the
+    walk stops at `ckpt_dir`.
 
-    The earlier test for this was written to the shape of the code -- it only exercised a
-    destination and a `ckpt_dir` that share a deep ancestor, which is the case that already
-    worked.
+    Markers are planted *two* levels up and one level up from `ckpt_dir`, so the bound is
+    asserted rather than incidentally satisfied.
     """
     (tmp_path / "training_config.yaml").write_text("stray", encoding="utf-8")
-    (tmp_path / "vol" / "models").mkdir(parents=True)
-    scratch = tmp_path / "elsewhere" / "scratch"
-    scratch.mkdir(parents=True)
+    home = tmp_path / "home"
+    ckpt = home / "models"
+    ckpt.mkdir(parents=True)
+    (home / "best.ckpt").write_bytes(b"stray too")
     monkeypatch.chdir(tmp_path)
     cfg, source = _cfg(
         write_config,
-        overrides={
-            "trainer_config": {
-                "ckpt_dir": str(tmp_path / "vol" / "models"),
-                "run_name": "r1",
-            }
-        },
+        overrides={"trainer_config": {"ckpt_dir": str(ckpt), "run_name": "r1"}},
     )
     run_dir = backend.run_directory(cfg)
-    backend.stage_artifacts(cfg, source, run_dir, scratch / "emitted.yaml")
-    assert (scratch / "emitted.yaml").is_file()
+    destination = backend.emitted_config_path(run_dir, None)
+    backend.stage_artifacts(cfg, source, run_dir, destination)
+    assert destination.is_file()
 
 
 def test_the_post_write_check_catches_evidence_it_did_not_predict(
@@ -1936,14 +1975,23 @@ def test_a_destination_deep_inside_a_finished_run_outside_ckpt_dir_is_refused(
         backend.stage_artifacts(cfg, source, run_dir, finished / "sub" / "emitted.yaml")
 
 
-def test_the_ancestor_walk_stops_at_the_operators_own_configuration(
+def test_an_override_outside_the_checkpoint_tree_is_checked_all_the_way_up(
     write_config, tmp_path, monkeypatch
 ):
-    """The walk is bounded, and bounded by something the operator controls.
+    """The deliberate asymmetry, stated as a test so the trade cannot drift silently.
 
-    Anything at or above the deepest directory the destination and `ckpt_dir` share is out of
-    scope: a stray `training_config.yaml` in a home directory or a repo root must not refuse
-    every run underneath it, since there is no `--force` and the operator may not own it.
+    Round 5's test here asserted the opposite -- that a stray marker above the shared
+    ancestor leaves an *outside* destination alone -- and it was written to the shape of the
+    code rather than from the requirement: it only exercised a destination and a `ckpt_dir`
+    sharing a deep ancestor, which is the case that already worked. Under either bound tried
+    since, the case it did not exercise silently published this run's config inside another
+    run's artifact.
+
+    The rule now depends on who chose the destination. Inside `ckpt_dir` (every run passing
+    no `--emitted-config`) the walk stops at `ckpt_dir`, because a false refusal there is
+    unrecoverable. Outside it -- reachable only by typing a path -- every ancestor is
+    checked, because a missed detection is silent and a false refusal is answered by typing
+    a different path.
     """
     root = tmp_path / "workspace"
     (root / "ckpt").mkdir(parents=True)
@@ -1957,8 +2005,10 @@ def test_the_ancestor_walk_stops_at_the_operators_own_configuration(
         },
     )
     run_dir = backend.run_directory(cfg)
-    backend.stage_artifacts(cfg, source, run_dir, root / "elsewhere" / "emitted.yaml")
-    assert (root / "elsewhere" / "emitted.yaml").is_file()
+    with pytest.raises(backend.BackendError, match="previous run"):
+        backend.stage_artifacts(
+            cfg, source, run_dir, root / "elsewhere" / "emitted.yaml"
+        )
 
 
 @pytest.mark.parametrize("ckpt_dir", ["C:foo", "models ", "models."])

@@ -378,24 +378,43 @@ message names the marker and the remedy, and a run that died before the trainer 
 only `run`'s own artifacts — regenerated from the same input — so the ordinary retry path is
 unchanged.
 
-The ancestor walk always checks the destination's immediate parent, then climbs only while the
-ancestor is strictly inside **`ckpt_dir`'s parent**. Two looser bounds were wrong first:
+The ancestor walk always checks the destination's immediate parent. How far above it the walk
+climbs depends on **who chose the destination**, because the two cases have opposite risk
+profiles — and three symmetric bounds were tried and were wrong before that became clear:
 
 - Bounding by `ckpt_dir` alone accepted anything two or more levels deep *outside* the checkpoint
-  tree (`ckpt_dir: models_scratch` with the published baseline under `models/` is the realistic
-  shape) and never checked `ckpt_dir` itself (`ckpt_dir: models/baseline_v1` is an ordinary typo).
-- Bounding by the deepest ancestor shared with `ckpt_dir` looked tighter and was not. When the
-  destination and `ckpt_dir` sit on different trees the deepest shared ancestor is the filesystem
-  **root**, so the walk checked every directory up to and including `/` — a stray
-  `training_config.yaml` in a home directory would refuse every run beneath it, with no `--force`
-  and possibly nothing the operator can delete. It also picked a boundary one level too deep when
-  two components differed only in case on a case-sensitive filesystem.
+  tree (`ckpt_dir: models_scratch` with the published baseline under `models/`) and never checked
+  `ckpt_dir` itself (`ckpt_dir: models/baseline_v1` is an ordinary typo).
+- Bounding by the deepest ancestor shared with `ckpt_dir` fixed both, and climbed to the
+  filesystem **root** whenever the destination sat on an unrelated branch — so a stray
+  `training_config.yaml` in a home directory refused every run beneath it.
+- Bounding by `ckpt_dir`'s parent stopped the root-climb and reopened the first hole for any
+  destination on a branch that shares nothing with `ckpt_dir`.
 
-`ckpt_dir.parent` is a function of what the operator configured, cannot climb above the checkpoint
-tree's own neighbourhood, and covers both holes. One consequence worth stating rather than leaving
-to be discovered: with the documented default `ckpt_dir: "."` the run directory's parent *is* the
-working directory, so a completed run's `training_config.yaml` sitting there is refused. That is
-the intended "`ckpt_dir` itself is checked" rule, not an accident.
+There is no symmetric bound that closes both, because the two failures are not symmetric:
+
+|                              | missed detection | false refusal |
+| ---------------------------- | ---------------- | ------------- |
+| **signal**                   | none             | names the directory |
+| **effect**                   | this run's config published inside another run's artifact | the command stops |
+| **recoverable by operator?** | no — it is silent | yes — type a different path |
+
+So the walk is asymmetric. For a destination **inside `ckpt_dir`** — the default, and every run
+that passes no `--emitted-config` — it stops at `ckpt_dir`. A false refusal on that path is the
+unrecoverable one: there is no `--force`, and the operator may not own the file causing it. For a
+destination **outside `ckpt_dir`** — reachable only by typing an explicit path — every ancestor is
+checked, because there the false refusal is answered by typing a different path and the missed
+detection is not answered at all.
+
+Stated once more because it is the part worth disagreeing with: this deliberately accepts a
+larger false-refusal surface on the override path in exchange for closing the silent one. That
+matches how the rest of this design already resolves the same tension (no `--force`; "the correct
+remedy for a name collision is a new name"), and both halves are pinned by tests, so the trade
+cannot drift without a test changing.
+
+One consequence worth stating rather than leaving to be discovered: `ckpt_dir` itself is checked,
+and with the documented default `ckpt_dir: "."` that directory is the working directory — so a
+completed run's `training_config.yaml` sitting there is refused.
 
 ### D6c — `run_metadata.yaml`
 

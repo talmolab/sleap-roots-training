@@ -426,8 +426,16 @@ is a defect this round *introduced or left*, not a new feature.
 - [x] 12.2 **The ancestor walk did climb to `/`**, contradicting its own docstring, `design.md`
       and `docs/training.md`. With the destination and `ckpt_dir` on different trees the deepest
       shared ancestor is the root, so a stray `training_config.yaml` in a home directory refused
-      every run beneath it. Bounded by `ckpt_dir.parent` instead; `_common_ancestor` deleted
-      (it also picked a boundary one level too deep for case-differing components).
+      every run beneath it. `_common_ancestor` deleted (it also picked a boundary one level too
+      deep for case-differing components).
+- [x] 12.2a Bounding by `ckpt_dir.parent` — the first replacement — reopened 12.2's own target:
+      a destination two or more levels inside a finished run on a branch sharing nothing with
+      `ckpt_dir` was accepted again. There is no symmetric bound that closes both, because the
+      failures are not symmetric: a missed detection is silent and unrecoverable, a false refusal
+      names the directory and is answered by typing another path. The walk is therefore
+      **asymmetric** — bounded at `ckpt_dir` for a destination inside it (every run passing no
+      `--emitted-config`, where a false refusal cannot be worked around), unbounded for an
+      explicitly relocated one. Both halves pinned; all four alternative bounds redden a test.
 - [x] 12.3 **`check_run_directory` compared exact names while `_verify_staging` folded**, so the
       central reuse guard answered differently per host -- the one thing this module's own
       comments forbid -- and a pre-existing `best.ckpt.` produced a false error blaming an

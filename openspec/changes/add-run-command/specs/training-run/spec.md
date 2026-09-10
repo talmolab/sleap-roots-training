@@ -120,8 +120,13 @@ directory and the marker found, and instructing the operator to choose a new
 through the same aliasing rules used everywhere else in this capability, so the refusal does not
 depend on the host's filesystem, and SHALL be recognized only as a **file**, since a directory of
 that name is not an artifact. The same refusal SHALL apply to
-every directory between the staging destination and the deepest directory it shares with
-`trainer_config.ckpt_dir`, inclusive, since a model publish uploads a directory recursively. `--emitted-config PATH` SHALL
+directories above the staging destination, since a model publish uploads a directory recursively.
+The destination's immediate parent SHALL always be checked. Above it, when the destination lies
+inside `trainer_config.ckpt_dir` the check SHALL stop at `trainer_config.ckpt_dir` inclusive, so
+that an unrelated marker further up cannot refuse a run the operator has no way to unblock; when
+the destination lies outside it — reachable only through an explicit `--emitted-config` — every
+ancestor SHALL be checked, since writing into another run's tree is silent and unrecoverable
+while a refusal names the directory and is answered by choosing another path. `--emitted-config PATH` SHALL
 relocate the emitted config only, and SHALL reject a path that is a directory or that is the input
 config itself. Its filename **and each directory component leading to it** SHALL be subject to the same
 portability rules as `trainer_config.run_name`. Its filename SHALL NOT name any file `run` or the
@@ -298,13 +303,20 @@ SHALL restore that state, refuse, and not invoke the backend.
 - **WHEN** a *directory* in the checkpoint tree is named like an evidence marker
 - **THEN** it is not treated as evidence, since a directory is not an artifact
 
-#### Scenario: A marker outside the checkpoint tree's neighbourhood does not refuse every run
+#### Scenario: A marker above the checkpoint directory does not refuse the ordinary run
 
-- **WHEN** a file named like an evidence marker sits above `trainer_config.ckpt_dir`'s parent —
-  in a home directory or a filesystem root — and the staging destination lies on a different
-  branch
+- **WHEN** a file named like an evidence marker sits above `trainer_config.ckpt_dir` — in a home
+  directory or a repository root — and `run` is invoked with no `--emitted-config`
 - **THEN** the run proceeds, since no flag overrides the refusal and the operator may not be able
   to remove that file
+
+#### Scenario: An explicitly relocated config is checked against every directory above it
+
+- **WHEN** `--emitted-config` points outside `trainer_config.ckpt_dir`, at any depth beneath a
+  directory that holds a previous run, however unrelated that directory's branch is
+- **THEN** the command exits non-zero naming that directory, and the backend is not invoked
+- **AND** the check does not depend on how deep the destination sits, since a recursive upload
+  ships every descendant alike
 
 #### Scenario: An unportable destination filename is refused on every platform
 
