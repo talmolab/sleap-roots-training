@@ -52,7 +52,7 @@ for everything except this one composition.
   artifacts as the record of what was attempted.
 - **`emit` writes LF too** (one line in `cli.py`). Today it inherits `newline=None` and produces
   CRLF on Windows — the documented GPU box — which would make `run`'s artifact and `emit -o`'s
-  output differ byte-wise on the one host that matters, and would defeat the config hashing #10/#11
+  output differ byte-wise on the one host that matters, and would defeat the config hashing #32
   will want. **This is the one behavior change to an existing command in this proposal.**
 - Docs: a one-command section in `docs/training.md` (with the run-directory file inventory and the
   `uv run --no-sync` caveat), the guide's contract test extended so the shortcut cannot silently
@@ -69,7 +69,7 @@ box. `run` is a shortcut for when all three would run on one host.
 - Proxying `sleap-nn train`'s flags or Hydra-style overrides. `run` passes one config and nothing
   else; anything more is the three-command path.
 - Closing the provenance gap `docs/training.md` already documents. `run` records **no** config hash,
-  git commit, or dataset checksum — those stay deferred to Tier 2 (#10/#11). It makes a run
+  git commit, or dataset checksum — those stay deferred to Tier 2 (#32). It makes a run
   directory self-describing as to *which experiment* it was, not *which bytes* it consumed.
 - A `--dry-run` mode, and any `--force`-style override of the run-directory refusal.
 

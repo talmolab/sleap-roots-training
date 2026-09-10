@@ -30,7 +30,7 @@ self-describing, and must never leave an artifact describing a run other than th
   run; the backend's own failure surfaced verbatim; zero change to `validate` / `emit` semantics or
   to the base install.
 - **Non-Goals:** flag or override proxying, sweeps, W&B orchestration, resume, device selection,
-  replacing the three-command path, in-process use of the backend, config hashing (#10/#11).
+  replacing the three-command path, in-process use of the backend, config hashing (#32).
 
 ## Decisions
 
@@ -137,7 +137,7 @@ names the input config — overwriting the source with its `experiment`-stripped
 the only copy of the run's identity). Writes are atomic (temp file in the destination directory +
 `os.replace`) because `Path.write_text` on ENOSPC leaves a truncated file behind, and LF-normalized
 (`newline="\n"`) because the GPU box is Windows and CRLF would break byte-comparison of artifacts
-that #10/#11 will eventually hash.
+that #32 will eventually hash.
 
 ### D4 — Refuse to reuse a run directory; there is no `--force`
 
@@ -241,6 +241,27 @@ foreground process group and would take the test runner with it. The real signal
 POSIX by a stub that `kill -9`s itself, and on Windows by the recorded manual verification (which
 showed Lightning's own graceful shutdown running, then a clean non-zero exit).
 
+### D4a — The wait is polled, not blocking
+
+`Popen.wait()` with no timeout is a non-alertable `WaitForSingleObject(INFINITE)` on Windows, so a
+pending `KeyboardInterrupt` is deferred until the child exits — on the one platform that trains.
+The ordinary case still worked, because the console delivers `CTRL_C_EVENT` to the child directly;
+but "press Ctrl-C again to terminate it" printed *after* the child had gone, and for a child that
+defers the first interrupt (which is what a graceful-shutdown handler does) the second and third
+could not be delivered at all, so the `terminate()` / `kill()` rungs were unreachable. The loop
+uses `wait(timeout=0.5)`, at ~2 wakeups a second against a multi-hour run.
+
+The mock-based interrupt tests cannot see this — a fake `wait()` has no blocking syscall to be
+stuck in — so it is covered by a real subprocess that ignores SIGINT and sleeps, interrupted twice
+from another thread. Blocking: 30.0s. Polled: ~2.5s.
+
+A `try/finally` terminates a still-running child if the frame unwinds for a reason the ladder did
+not handle. **Scope, stated honestly:** that covers exception-driven unwinding only. A
+default-disposition `SIGTERM` to *this* process — an IDE stop button, a closed terminal — kills the
+interpreter without unwinding, so no `finally` runs and the trainer keeps its GPU memory. Covering
+that needs a signal handler in the CLI, which is a larger change than this one and is deliberately
+left out.
+
 ### D5a — Interpolation: the gates resolve, the artifact does not
 
 `backend.py` reads every gated field through `OmegaConf.select`, which **resolves**, while
@@ -261,7 +282,29 @@ facts are individually right and jointly dangerous, in both directions:
 
 The emitted file stays unresolved on purpose: that is what keeps `${oc.env:WANDB_API_KEY}` a literal
 interpolation in the artifact rather than a baked secret, and it is a stronger reason than
-byte-identity for D9 refusing an inline key rather than masking one.
+byte-identity for D9 refusing an inline key rather than masking one. That guarantee rests on one
+defaulted keyword (`OmegaConf.to_yaml`'s `resolve=False`), so it is pinned by tests at three
+levels — the string, the staged bytes, and the bytes `run` leaves in the run directory — with the
+environment variable **set**, because with it unset `resolve=True` raises and a test would pass
+for the wrong reason.
+
+**Ordering.** The coarse pre-flight runs *after* the field reads, not before them. It resolves the
+whole sleap-nn portion, so going first replaced every field-named error from the wrapper with one
+generic message and left that error path unreachable through `run`. Both are still before anything
+is staged, which is the part that matters.
+
+**The `api_key` guard reads the unresolved node.** Reading it through the resolving wrapper meant
+that with `WANDB_API_KEY` exported, `api_key: ${oc.env:WANDB_API_KEY}` resolved to the secret and
+was refused — a config whose artifact would have carried only the reference, with a message telling
+the operator to do what they had already done. The guard classifies rather than acts, so it reads
+what is persisted. A literal is still refused.
+
+**Where the credential guidance stands.** `docs/training.md` is the position of record: keep
+secrets out of the config entirely and let `WANDB_API_KEY` / `wandb login` supply them, because
+sleap-nn uploads a **fully resolved** config to the W&B run. This document previously called
+`${oc.env:WANDB_API_KEY}` "the pattern the credential guidance points operators toward", which
+contradicted that. It is *accepted* rather than *recommended*: `run` will not refuse it, and
+nothing `run` writes carries its value, but it is not the advice.
 
 ### D6 — Step order is a contract, not an implementation detail
 
@@ -274,14 +317,98 @@ prevents — a stale artifact beside a run that never happened — is indistingu
 real one. Conversely, a failure *after* the backend starts leaves the artifacts in place: they are
 the record of what was attempted, and rolling them back would destroy the evidence.
 
+### D6a — The destination guard is a post-condition, not a blocklist
+
+Four review rounds found the same defect with a different spelling: `C:foo`, then `..` and a
+trailing dot, then a case variant, then Win32's write-time mangling and NTFS alternate data
+streams. Every one of them was the same mechanism — the guard compares the string it was handed
+while the filesystem creates a different one — and every fix was another entry in a list. That
+race cannot be won by enumeration, because the aliasing rules belong to the operating system.
+
+So the guarantee is a **post-condition**, checked after the writes by reading the run directory
+back:
+
+1. no entry in the run directory has a name the reuse check reads as evidence of a completed run;
+2. `source_config.yaml` is byte-identical to the input.
+
+A violation is repaired (the fabricated marker unlinked, the verbatim copy restored) and then
+refused. Repairing rather than only reporting matters because there is no `--force`: a fabricated
+`best.ckpt` would refuse that run name from then on, recoverable only by deleting files by hand.
+
+The pre-write checks stay, as belt-and-braces and for message quality: the destination's basename
+gets `run_name`'s portability rules — it was the only path input in the module with no portability
+check at all — and its **mangled** form (`name.rstrip(". ").casefold()`, both aliasing rules the
+training host applies) is compared against every name `run` or the backend owns in a run
+directory. They produce a specific error before anything is written; they are not what makes the
+family closed.
+
+Testing follows the same shape. Spellings are generated from a product of mangling rules rather
+than listed, the assertion is the post-condition rather than a refusal or a message, and a fixture
+models Win32's stripping at the write seam so the three POSIX matrix cells exercise a hazard they
+physically cannot reproduce. A second fixture invents an aliasing rule the module does *not*
+model — a stripped trailing underscore — which is the only test that fails when the post-condition
+check is removed, and is therefore the one that shows the property is closed rather than
+enumerated. The containment invariant for `run_name` is likewise asserted over generated names;
+that immediately surfaced an escape nobody had enumerated (`run_name: "/"`, one path component
+under both flavours, `Path("ckpt") / "/"` == `/`).
+
+### D6b — What counts as a previous run
+
+`RUN_EVIDENCE` originally held only *completion* markers: `best.ckpt` and `training_config.yaml`
+are both written at or after success. A run that reached trainer construction and then died — an
+OOM at epoch 5, a CUDA fault — left a directory the guard called clean, and the retry overwrote
+the only record of it. sleap-nn writes `initial_config.yaml` at construction time, so that is
+evidence too.
+
+The trade is explicit: **retrying after a mid-run crash needs a new `run_name`.** That is the
+right side of the trade when the alternative is silently destroying a crashed run's record, the
+message names the marker and the remedy, and a run that died before the trainer was built leaves
+only `run`'s own artifacts — regenerated from the same input — so the ordinary retry path is
+unchanged.
+
+The ancestor walk climbs from the destination's parent to the deepest directory it shares with
+`ckpt_dir`, inclusive. Bounded by `ckpt_dir` alone it accepted anything two or more levels deep
+outside the checkpoint tree (`ckpt_dir: models_scratch` with the published baseline under
+`models/` is the realistic shape) and never checked `ckpt_dir` itself (`ckpt_dir:
+models/baseline_v1` is an ordinary typo). Deliberately **not** unbounded to the filesystem root: a
+stray `training_config.yaml` in a home directory would then refuse every run underneath it, with
+no `--force` and possibly nothing the operator can delete. Bounding by the operator's own
+configuration closes both holes and keeps the blast radius inside what they chose.
+
+### D6c — `run_metadata.yaml`
+
+The backend version and the resolved backend path were echoed and persisted nowhere. For a repo
+grading reproduce-or-beat, the backend version is the single most result-determining variable, and
+the path is the only thing that says which of several installed environments ran — visibility
+being D2's whole stated mitigation for the interpreter-first search.
+
+D10's byte-identity guarantee binds `emitted_config.yaml`; a separate sidecar costs one write and
+breaks nothing, which the byte-identity assertion beside it pins. Written before the subprocess
+starts, for the same reason the emitted config is. A probe that could not be asked records
+`sleap_nn_version: null` rather than dropping the key.
+
+With `source_config.yaml` giving the config bytes verbatim, this closes the code and environment
+halves of #32. The dataset checksum and the git commit stay there.
+
 ### D7 — A small `backend.py`, not more logic in `cli.py`
 
 `cli.py` is a thin command surface; `config.py` holds config-domain logic and is untouched.
 Executable resolution, destination policy, artifact staging, argv construction, and exit-status
 translation are domain logic with distinct failure modes worth unit-testing directly, so they land
-in a new `sleap_roots_training/backend.py` (stdlib only). `backend.py` performs no process exit of
-its own — it returns a translated status and the CLI owns `ctx.exit`, mirroring how `seed-registry`
-composes `registry.*`.
+in a new `sleap_roots_training/backend.py` (base-install safe: `omegaconf` and this package's own
+`config`, nothing else). `backend.py` performs no process exit of its own — it returns a translated
+status and the CLI owns `ctx.exit`, mirroring how `seed-registry` composes `registry.*`.
+
+**Correcting this option's framing.** The choice was posed as "a small `backend.py`, not more logic
+in `cli.py`", and size was the wrong axis. Measured with `ast`, the module is a couple of hundred
+executable lines under a much larger volume of docstring and comment, so it is not oversized *as
+logic* — but it carries six concerns with distinct failure modes (executable resolution,
+destination policy, artifact staging, run metadata, argv construction, exit-status translation),
+and this repo already answers exactly that shape with a **package** twice: `registry/` is six
+modules and `labeling/` is eight. A `backend/` package is the option this decision never
+considered, and it is the one the repo's own precedent points at. Not blocking and not done here:
+the seams are clean enough that the split is a pure move later. Recorded so the justification of
+record is the real one.
 
 ### D8 — Testable in CI, which cannot install the backend
 
@@ -335,7 +462,7 @@ artifact `run` writes and the file `emit -o` writes would differ byte-wise from 
 equivalents on the one host that actually trains, and any byte-comparison (including the retry
 check) would misfire there. Both write with `newline="\n"`. This changes `emit`'s output on Windows
 — the only behavior change to an existing command in this proposal — and is a strict improvement for
-a YAML artifact that #10/#11 will want to hash.
+a YAML artifact that #32 will want to hash.
 
 ## Risks / Trade-offs
 

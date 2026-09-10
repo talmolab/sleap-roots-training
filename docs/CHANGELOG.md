@@ -154,13 +154,19 @@ All notable changes to this project are documented here. The format is based on
   is required, and each run needs its own:** sleap-nn auto-suffixes the run directory to
   `<run_name>-1` when a `best.ckpt` is already there, so `run` refuses a directory that already holds
   a run rather than leaving your configs beside a different run's results — there is no `--force`,
-  and the fix is a new name. **The run directory gains two files** — `emitted_config.yaml` (what
-  sleap-nn was given, written before training starts, so it survives a run that dies during setup)
-  and `source_config.yaml` (your config verbatim, `experiment` block included, which is the one
-  thing no sleap-nn artifact records) — alongside the `initial_config.yaml` and
-  `training_config.yaml` sleap-nn writes itself. **A `trainer_config.wandb.api_key` written into the
+  and the fix is a new name. A directory holding sleap-nn's `initial_config.yaml` counts as a
+  previous run too, so **retrying after a mid-run crash needs a new `run_name`**: that file is the
+  only record of what the crashed run was going to train, and the other two markers are written
+  only at or after success. **The run directory gains three files** — `emitted_config.yaml` (what
+  sleap-nn was given, written before training starts, so it survives a run that dies during setup),
+  `source_config.yaml` (your config verbatim, `experiment` block included, which is the one
+  thing no sleap-nn artifact records) and `run_metadata.yaml` (the `sleap-nn` version and resolved
+  path that ran it, this package's version, and a UTC start timestamp) — alongside the
+  `initial_config.yaml` and `training_config.yaml` sleap-nn writes itself. **A `trainer_config.wandb.api_key` written *literally* into the
   config is refused**, because the run directory is uploaded whole when a model is published; use
-  `WANDB_API_KEY` or `wandb login`. **`trainer_config.run_name` must be one plain directory name**,
+  `WANDB_API_KEY` or `wandb login`. An interpolation there (`${oc.env:WANDB_API_KEY}`) is not
+  refused — nothing `run` writes carries its value — but the guidance is still to keep credentials
+  out of the config entirely, because sleap-nn uploads a fully resolved copy to the W&B run. **`trainer_config.run_name` must be one plain directory name**,
   checked identically on every platform so a config authored on a laptop cannot fail only on the
   Windows training box: no separators, nothing absolute or drive-relative, nothing that climbs out
   (`..`), no trailing dot or space, and no Windows-reserved character or device name.
@@ -168,8 +174,14 @@ All notable changes to this project are documented here. The format is based on
   **unresolved** in the emitted config, so `${oc.env:WANDB_API_KEY}` stays a reference rather than a
   baked secret in a file that is uploaded with the model — and a config whose emitted form cannot
   resolve on its own (an interpolation pointing into the stripped `experiment` block) is refused
-  before anything is staged. None of this changes what a run produces or how it is graded, and `run`
-  records no config hash or dataset checksum — that gap (#10/#11) is unchanged.
+  before anything is staged. `--emitted-config`'s filename takes those same portability
+  rules, and may not name any file `run` or the backend owns in the run directory — in any letter
+  case, and with any trailing dot or space, since Windows strips those at write time. `run`
+  re-reads the run directory after writing and refuses if it ended up holding fabricated run
+  evidence or a rewritten `source_config.yaml` regardless of how the destination was spelled.
+  None of this changes what a run produces or how it is graded. `run_metadata.yaml` closes the
+  environment half of the provenance gap; the config hash, git commit and dataset checksum
+  (#32) remain open.
 - Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)
   run on the exact original v000 held-out split (Arabidopsis primary-root, multi-plant cylinder,
   bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:

@@ -212,7 +212,7 @@ gate.
       (`initial_config.yaml` and `training_config.yaml` written by the backend,
       `emitted_config.yaml` and `source_config.yaml` written by `run`); the one-`run_name`-per-run
       rule and why; the note that the three-command path stays canonical for the author-here /
-      train-there workflow; and the unchanged #10/#11 provenance caveat. No `TODO` / `TBD` (a doc
+      train-there workflow; and the unchanged #32 provenance caveat. No `TODO` / `TBD` (a doc
       test forbids them) and no `**range**` token (the baseline test parses the first line containing
       it); use an untagged fence for any directory listing, since `_yaml_blocks` parses every
       ```yaml``` fence.
@@ -351,6 +351,66 @@ the change document should say what was actually built.
       direct-child property alongside containment in the positive invariant test.
 - [x] 10.8 Document that `initial_config.yaml` supersedes `emitted_config.yaml` once a run
       completes.
+
+## 11. Review-driven hardening (round 5)
+
+- [x] 11.1 Close the `--emitted-config` family as a **property** rather than a longer blocklist:
+      after the writes, assert the run directory holds no file the reuse check reads as evidence
+      and that `source_config.yaml` is byte-identical to the input, repairing and refusing on a
+      violation. Four rounds of enumerating name shapes lost the race four times; the aliasing
+      rules belong to the OS. Belt-and-braces beside it: fold the *mangled* destination name
+      (`rstrip(". ").casefold()`) against every name `run` or the backend owns, and put the
+      destination's basename through `run_name`'s portability rules.
+- [x] 11.2 Test it as a property. Generate destination spellings from a product of mangling rules;
+      model Win32's write-time stripping at the write seam so the three POSIX cells exercise a
+      hazard they cannot reproduce; and add a fixture for an aliasing rule the module does *not*
+      model, which is the only test that reddens when the post-write check is removed. Generate
+      `run_name`s for the containment invariant too — that found `run_name: "/"`, accepted because
+      `PurePosixPath("/").parts` is one component.
+- [x] 11.3 Pin that the emitted config keeps interpolations **unresolved**, with the variable set,
+      at three levels. `resolve=True` failed zero of 892 tests, and that mutant bakes
+      `${oc.env:...}` into a file a model publish uploads. Landed **before** 11.4, which removes
+      the accidental protection that made it unreachable for `api_key`.
+- [x] 11.4 Read the `api_key` guard off the **unresolved** node, so `${oc.env:WANDB_API_KEY}` is
+      not refused as an inline credential; drop the "write the value literally" remedy; and run
+      the coarse resolvability pre-flight *after* the field reads, so a field-named error is
+      reachable through `run`.
+- [x] 11.5 Treat sleap-nn's `initial_config.yaml` as run evidence, so a run that crashed after
+      trainer construction is not silently overwritten, and turn `RUN_EVIDENCE` into a mapping so
+      the refusal says something true about the marker it found.
+- [x] 11.6 Widen the ancestor walk to the deepest directory the destination shares with
+      `ckpt_dir`, inclusive — closing both depth ≥ 2 outside the checkpoint tree and `ckpt_dir`
+      itself — while deliberately stopping short of the filesystem root.
+- [x] 11.7 Poll the backend wait (`wait(timeout=0.5)`), so a `KeyboardInterrupt` is observed while
+      the child runs and the escalation ladder is reachable on Windows; cover it with a real
+      subprocess interrupted from another thread, since a mock `wait()` cannot see the difference.
+      Add a `try/finally` for exception-driven unwinding, noting that a default-disposition
+      SIGTERM is out of its reach.
+- [x] 11.8 Write `run_metadata.yaml` (backend version and resolved path, package version,
+      timestamp) before the backend starts, and assert byte-identity with `emit -o` alongside so
+      the new artifact cannot cost the guarantee it was justified against.
+- [x] 11.9 Cover `_warn_on_dataset_mismatch` (three tests, a requirement and two scenarios), the
+      absolute-path guarantee, and the second-invocation reproducibility the spec described as a
+      comparison `run` does not perform — the spec sentence is corrected to what is true.
+- [x] 11.10 Stop skipping the version-probe **success** test on `nt`; the `.bat` pattern existed
+      only on the failure test. Coverage on that leg was 99%, not the 100% previously reported.
+- [x] 11.11 Annotate every `cfg` parameter, name the bare status constants, correct the
+      "stdlib-only" module docstring, reject Unicode category `Cf` in a `run_name`, and rewrite
+      the comments that narrated prior review rounds as prospective rules.
+- [x] 11.12 Retarget the provenance-gap reference from #10/#11 to **#32** in all eleven places
+      (nine added by this change, two pre-existing): #10 is closed, #11 is the LabelCard backfill,
+      and #32's acceptance criteria are verbatim the config hash / git commit / dataset checksum.
+- [x] 11.13 Correct `design.md`: D7's framing (the repo answers "six concerns" with a *package*
+      twice, an option D7 never considered — not blocking, recorded as the justification of
+      record), and the D5a line calling `${oc.env:WANDB_API_KEY}` "the pattern the credential
+      guidance points operators toward", which contradicted `docs/training.md`. Docs is the
+      position of record: the interpolation is accepted, not recommended.
+- [x] 11.14 Soften the `docs/training.md` claim that `initial_config.yaml` has the "same content"
+      as the emitted config to a **superset**, since Hydra composes structured-config defaults
+      before saving. Not settled against the 2026-08-19 run, which is on the GPU box and not on
+      this host.
+- [x] 11.15 `npx --yes @fission-ai/openspec@latest validate add-run-command --strict` passes;
+      `uv run pytest -q tests/`, `black --check`, `ruff check` clean.
 
 ## Commit Plan
 

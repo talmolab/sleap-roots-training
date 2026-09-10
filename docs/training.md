@@ -51,7 +51,7 @@ Two repo rules the schema enforces, both closing real `sleap-nn` 0.2.0 gaps:
   loop and crashes with `ConfigAttributeError` if it is absent, so `validate` requires it up
   front (the example ships a `preprocessing` block).
 
-Two things this wrapper does **not** capture yet (deferred to Tier 2, tracked in #10/#11): run
+Two things this wrapper does **not** capture yet (deferred to Tier 2, tracked in #32): run
 provenance (a config hash / git commit) and a dataset content checksum. A config names its dataset
 by path, not by a verified hash, so do not assume a run is fully reproducible from the config alone
 today.
@@ -135,6 +135,7 @@ models/cyl_arabidopsis_primary/
   training_config.yaml      # sleap-nn: the config actually used, after its own resolution
   emitted_config.yaml       # run: what sleap-nn was given, written *before* training started
   source_config.yaml        # run: your config, verbatim, `experiment` block included
+  run_metadata.yaml         # run: which backend ran it, and when
   labels_pr.*.slp           # predictions from the built-in eval pass
   metrics.*.npz             # eval metrics
 ```
@@ -144,20 +145,52 @@ has the repo-owned `experiment` block stripped by construction, so nothing else 
 records which species / mode / root_type / dataset the run was for. `emitted_config.yaml` earns
 its place by existing *before* the backend starts — sleap-nn writes its two only after the trainer
 is built, so a run that dies on a bad `.slp` path or at model init leaves a directory with no
-config at all. **Once a run completes, `initial_config.yaml` supersedes it**: same content, plus the
-`sleap_nn_version` stamp. So read `emitted_config.yaml` for a run that died early and
+config at all. **Once a run completes, prefer `initial_config.yaml`**: it is what sleap-nn actually
+received, plus the `sleap_nn_version` stamp. Treat it as a *superset* rather than the same content
+— sleap-nn composes its structured-config defaults before saving, so keys absent from your config
+appear there with their defaults. A diff between the two is expected and does not mean the emitted
+config was modified. So read `emitted_config.yaml` for a run that died early and
 `initial_config.yaml` for one that finished. Stage it elsewhere with `--emitted-config <path>` if
 you prefer.
 
+`run_metadata.yaml` records what would otherwise exist only in your terminal scrollback: the
+`sleap-nn` version and the resolved path of the executable that ran, this package's version, and a
+UTC start timestamp. It is written *before* the backend starts, for the same reason
+`emitted_config.yaml` is. It is deliberately outside the byte-identity guarantee below — it
+carries a timestamp, so it differs between runs by construction.
+
+`--emitted-config` takes a filename, and that filename gets the same portability rules as
+`trainer_config.run_name` (below): no Windows-reserved character or device name, no trailing dot
+or space, no control or invisible-formatting character. It also may not name `best.ckpt`,
+`training_config.yaml`, `initial_config.yaml`, `source_config.yaml` or `run_metadata.yaml`, in any
+letter case or with any trailing dot or space — those are files `run` or the backend own, and
+writing over one either destroys the run's identity or fabricates the evidence the next run
+refuses. Whatever the destination, `run` re-reads the run directory after writing and refuses if
+either of those happened anyway.
+
 #### One `run_name` per run
 
-`run` refuses to start when `<ckpt_dir>/<run_name>/` already holds a `best.ckpt` or a
-`training_config.yaml`, and tells you to change `trainer_config.run_name`. This is not
-fussiness: sleap-nn auto-suffixes the run directory to `<run_name>-1` when a checkpoint is
-already there (`model_trainer.py:522`), so it would train *elsewhere* while the configs landed
-next to the older run — describing results they did not produce. There is no `--force`; the fix
-for a name collision is a new name. (The check also covers `save_ckpt: false` runs, where no
-checkpoint is ever written and sleap-nn would silently reuse the directory.)
+`run` refuses to start when `<ckpt_dir>/<run_name>/` already holds a `best.ckpt`, a
+`training_config.yaml` or an `initial_config.yaml`, and tells you to change
+`trainer_config.run_name`. This is not fussiness: sleap-nn auto-suffixes the run directory to
+`<run_name>-1` when a checkpoint is already there (`model_trainer.py:522`), so it would train
+*elsewhere* while the configs landed next to the older run — describing results they did not
+produce. There is no `--force`; the fix for a name collision is a new name. (The check also
+covers `save_ckpt: false` runs, where no checkpoint is ever written and sleap-nn would silently
+reuse the directory.)
+
+`initial_config.yaml` is in that list because the other two are only written at or after success.
+sleap-nn writes it as soon as the trainer is constructed, so a run that died partway — an OOM at
+epoch 5, a CUDA fault — leaves it and nothing else, and reusing the name would overwrite the only
+record of what that run was going to train. The practical consequence: **retrying after a mid-run
+crash needs a new `run_name`.** A run that died *before* the trainer was built leaves only `run`'s
+own artifacts, which are regenerated from the same input, so that retry needs nothing.
+
+The same rule applies to the directories *above* the run directory, up to the checkpoint
+directory: `run` refuses to write into any of them if one holds a finished run, because a model
+publish uploads a directory recursively and your config would ship inside someone else's
+artifact. `ckpt_dir: models/baseline_v1` is an ordinary typo with an expensive outcome, and it is
+caught.
 
 For the same reason `run` requires an explicit `trainer_config.run_name`: with none, sleap-nn
 generates a timestamped directory (`model_trainer.py:513`) that `run` cannot predict. Vary the
@@ -188,9 +221,11 @@ reports the backend's own status.
 A W&B key written into `trainer_config.wandb.api_key` is refused as well, since the run directory
 is uploaded whole when a model is published. Use `WANDB_API_KEY` or `wandb login`.
 
-The provenance caveat above is unchanged by `run`: it records no config hash, git commit, or
-dataset checksum (still #10/#11). It makes a run directory self-describing as to *which
-experiment* it was, not *which bytes* it consumed.
+The provenance caveat above is narrowed but not closed by `run`. `source_config.yaml` gives the
+config bytes verbatim and `run_metadata.yaml` gives the backend and package versions, so a run
+directory is now self-describing as to *which experiment* it was and *what ran it*. It still
+records no config hash, no git commit and no dataset checksum — that is #32, and the remaining
+halves of it are the dataset and the commit.
 
 ## 4. Read the metrics
 
@@ -249,7 +284,7 @@ reproduce-or-beat.
 **Data provenance.** The three v000 files were made self-contained for the offline GPU box with
 [`scripts/clean_pkg.py`](../scripts/clean_pkg.py) (drops the `source_video` share pointer and a
 frame-less stray video, re-embeds frames); the labeled-frame set is unchanged (99 train / 21 val,
-`r1..r6`). `clean_pkg.py` writes a `.sha256` sidecar next to each cleaned file (a content fingerprint captured at clean time); wiring that hash into an automated reproducibility check is still deferred to #10/#11.
+`r1..r6`). `clean_pkg.py` writes a `.sha256` sidecar next to each cleaned file (a content fingerprint captured at clean time); wiring that hash into an automated reproducibility check is still deferred to #32.
 
 **Metrics.** Read from each run's `metrics.val.0.npz` with
 [`scripts/dump_val_metrics.py`](../scripts/dump_val_metrics.py): `distance_metrics.avg` →

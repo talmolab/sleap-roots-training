@@ -284,7 +284,7 @@ def emit_command(config_path: Path, output: Optional[Path]) -> None:
         # the target GPU box runs (docs/training-backend.md) -- and LF everywhere else. That
         # makes the emitted bytes host-dependent, which breaks byte-comparison of one config
         # against another (the `run` command relies on it, and the deferred content hashing
-        # in #10/#11 would too).
+        # in #32 would too).
         output.write_text(sleap_nn_yaml, encoding="utf-8", newline="\n")
     except OSError as error:
         raise click.ClickException(f"could not write {output}: {error}")

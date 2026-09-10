@@ -9,9 +9,12 @@ single invocation on a host where the optional `train` extra is installed. `run`
 and SHALL fail fast with a clear error naming the `sleap-roots-training[train]` install when none of
 them yields it. `run` SHALL print the absolute path of the resolved executable before starting the
 backend. `run` SHALL invoke the backend as a subprocess and SHALL NOT import `sleap-nn`'s training
-entry points. `run` SHALL execute its steps in the order gate → validate → credential check →
-run-name and destination checks → run-directory refusal → write artifacts → invoke, so that a
-failure at any step leaves nothing written and no subprocess started. Deep `sleap-nn` validation SHALL run only when `sleap_nn` is importable by the running
+entry points. `run` SHALL execute its steps in the order gate → validate → run-name and
+configuration field reads → emitted-config resolvability → credential check → destination and
+run-directory refusal → write artifacts → write run metadata → invoke, so that a failure at any
+step leaves nothing written and no subprocess started. The resolvability pre-flight SHALL run
+after the individual field reads, so that a field carrying an unresolvable interpolation is
+reported against that field rather than against the config as a whole. Deep `sleap-nn` validation SHALL run only when `sleap_nn` is importable by the running
 interpreter — which resolving the console script does not guarantee — and `run` SHALL report the
 same skip note `validate` reports when it is not, without treating the skip as a failure.
 
@@ -81,11 +84,15 @@ same skip note `validate` reports when it is not, without treating the skip as a
 
 ### Requirement: Run Directory Provenance Artifacts
 
-Before invoking the backend, `run` SHALL write two files into the run directory
+Before invoking the backend, `run` SHALL write three files into the run directory
 `<trainer_config.ckpt_dir>/<trainer_config.run_name>/`: `emitted_config.yaml`, the emitted
-sleap-nn-native config with the same content `emit` produces for that input; and
+sleap-nn-native config with the same content `emit` produces for that input;
 `source_config.yaml`, a verbatim copy of the input config including the repo-owned `experiment`
-block. Neither SHALL be a temporary file, an in-memory pipe, or a file `run` deletes afterwards. The
+block; and `run_metadata.yaml`, recording the backend version reported by the resolved executable,
+that executable's resolved path, this package's version, and a start timestamp. `run_metadata.yaml`
+SHALL be written before the backend is invoked, and SHALL record an unavailable backend version
+explicitly rather than omitting the field. It is expressly **not** covered by the byte-identity
+guarantee, since it carries a timestamp. Neither SHALL be a temporary file, an in-memory pipe, or a file `run` deletes afterwards. The
 emitted config SHALL be written with LF (`\n`) line endings on every platform, so its bytes are
 host-independent; the source config SHALL be copied byte-for-byte, since a provenance copy that
 rewrote the operator's bytes would not be one. Both SHALL be written atomically, so a failed write
@@ -103,11 +110,22 @@ path separators, but SHALL NOT be Windows drive-relative and SHALL NOT contain a
 a dot or a space — the two rules that make a name mean different things on the authoring and
 training hosts apply to whichever field supplies the path, not only to the run name. `run` SHALL also refuse when the run path
 already exists and is not a directory. Every path `run` reports SHALL be absolute. `run` SHALL refuse to reuse a run directory that
-already holds evidence of a previous run (a `best.ckpt`, or the `training_config.yaml` the backend
-writes on completion), naming the directory and instructing the operator to choose a new
-`trainer_config.run_name`; no flag SHALL override this refusal. `--emitted-config PATH` SHALL
+already holds evidence of a previous run — a `best.ckpt`, the `training_config.yaml` the backend
+writes on completion, or the `initial_config.yaml` it writes once the trainer is constructed and
+which is therefore the only marker a run that crashed mid-training leaves behind — naming the
+directory and the marker found, and instructing the operator to choose a new
+`trainer_config.run_name`; no flag SHALL override this refusal. The same refusal SHALL apply to
+every directory between the staging destination and the deepest directory it shares with
+`trainer_config.ckpt_dir`, inclusive, since a model publish uploads a directory recursively. `--emitted-config PATH` SHALL
 relocate the emitted config only, and SHALL reject a path that is a directory or that is the input
-config itself.
+config itself. Its filename SHALL be subject to the same portability rules as
+`trainer_config.run_name`, and SHALL NOT name any file `run` or the backend owns in a run
+directory — compared after applying the aliasing rules the training host applies at write time
+(trailing dots and spaces stripped, case folded), so a spelling that the filesystem would turn
+into one of those names is refused as that name. Independently of every such check, `run` SHALL
+verify **after** writing that the run directory contains no file the reuse check reads as evidence
+of a completed run and that `source_config.yaml` is byte-identical to the input; on a violation it
+SHALL restore that state, refuse, and not invoke the backend.
 
 #### Scenario: Both artifacts land in the run directory
 
@@ -130,7 +148,18 @@ config itself.
 - **WHEN** `run` writes its artifacts on Windows
 - **THEN** `emitted_config.yaml` contains no CR byte, and `source_config.yaml` is a byte-for-byte
   copy of the input
-- **AND** a subsequent invocation recognizes them as unchanged rather than as differing content
+- **AND** running the same config again produces both files byte-for-byte identical to the first
+  invocation's, so anything that compares them sees no change
+
+#### Scenario: The run records which backend produced it
+
+- **WHEN** `run` has resolved the backend and is about to invoke it
+- **THEN** `run_metadata.yaml` in the run directory names the backend's reported version, the
+  resolved path of the executable, this package's version, and when the run started
+- **AND** that file exists before the backend process is started, so a run that dies during setup
+  still records what would have trained it
+- **AND** a backend that cannot report a version is recorded as having none, rather than omitted
+- **AND** `emitted_config.yaml` is still byte-identical to `emit -o`'s output
 
 #### Scenario: An unset checkpoint directory follows the backend's default
 
@@ -170,10 +199,19 @@ config itself.
 
 #### Scenario: A run name that is not portable to the training host is refused
 
-- **WHEN** `trainer_config.run_name` carries a character Windows forbids in a path, or is a Windows
-  reserved device name
+- **WHEN** `trainer_config.run_name` carries a character Windows forbids in a path, is a Windows
+  reserved device name, or contains an invisible Unicode formatting character (two names that
+  render identically would be two directories, and the name becomes a W&B run id)
 - **THEN** the command exits non-zero naming `trainer_config.run_name`, on every platform rather
   than only on Windows
+
+#### Scenario: Every accepted run name lands inside the checkpoint directory
+
+- **WHEN** any `trainer_config.run_name` is accepted, whatever the accept rule turns out to be
+- **THEN** the resolved run directory is an immediate child of the resolved
+  `trainer_config.ckpt_dir`
+- **AND** this holds as a property of every accepted name rather than as a list of refused ones,
+  so a name shape this project has not enumerated cannot escape the checkpoint directory
 
 #### Scenario: A run path that is not a directory is refused
 
@@ -191,12 +229,22 @@ config itself.
 - **AND** no flag overrides this refusal
 - **AND** the backend is not invoked
 
-#### Scenario: Retrying a run that never completed proceeds without a flag
+#### Scenario: Retrying a run that died before the backend built anything proceeds
 
-- **WHEN** the run directory exists but holds neither a `best.ckpt` nor a `training_config.yaml` (a
-  run that died before the backend wrote either)
-- **THEN** `run` overwrites its own two artifacts and proceeds
+- **WHEN** the run directory exists but holds none of the backend's own artifacts — only the files
+  `run` itself wrote, which are regenerated from the same input
+- **THEN** `run` overwrites its own artifacts and proceeds
 - **AND** no flag is required
+
+#### Scenario: A run that crashed after the trainer was built is not overwritten
+
+- **WHEN** the run directory holds the `initial_config.yaml` the backend writes at
+  trainer-construction time, but no completion marker (a run killed by an OOM or a device fault
+  partway through)
+- **THEN** the command exits non-zero naming that directory and that marker
+- **AND** the existing directory is left byte-for-byte unchanged, since that file is the only
+  record of what the crashed run was going to train
+- **AND** the operator is told to choose a new `trainer_config.run_name`
 
 #### Scenario: Relocating the emitted config
 
@@ -208,11 +256,33 @@ config itself.
 #### Scenario: An override may not bypass the run-directory guard
 
 - **WHEN** `--emitted-config` points at a directory that already holds a previous run, or at any
-  subdirectory beneath one within the checkpoint directory (the model upload is recursive), or
-  names a file the reuse check reads as evidence of a completed run **in any letter case**, since
-  the training host's filesystem is case-insensitive
+  directory beneath one at any depth, up to the deepest directory the destination shares with the
+  checkpoint directory (the model upload is recursive), or at the checkpoint directory itself when
+  that directory holds a previous run
 - **THEN** the command exits non-zero naming the path
 - **AND** the backend is not invoked, so `run` cannot fabricate the evidence it later refuses
+
+#### Scenario: A destination the filesystem would rename cannot fabricate evidence
+
+- **WHEN** `--emitted-config` names a file the reuse check reads as evidence of a completed run,
+  or the verbatim source copy, under **any** spelling the training host's filesystem would resolve
+  to that name — a different letter case, or a trailing dot or space, which Windows strips when
+  the file is created
+- **THEN** the command exits non-zero naming the path, and the backend is not invoked
+- **AND** regardless of the spelling, after `run` has written anything the run directory contains
+  no file the reuse check reads as evidence of a completed run, and no `source_config.yaml` whose
+  bytes differ from the input
+- **AND** that holds for spellings this project has not enumerated, because it is verified against
+  the run directory after the writes rather than against the path before them
+
+#### Scenario: An unportable destination filename is refused on every platform
+
+- **WHEN** `--emitted-config`'s filename is a Windows reserved device name, carries a character
+  Windows forbids in a path, ends in a dot or a space, or contains a control or invisible
+  formatting character
+- **THEN** the command exits non-zero naming `--emitted-config`, on every platform rather than
+  only on Windows
+- **AND** no file is written and the backend is not invoked
 
 #### Scenario: A destination that would destroy input or is not a file is refused
 
@@ -304,6 +374,14 @@ run, SHALL NOT emit a traceback, and SHALL NOT delete the artifacts of a failed 
   the second and kills it on the third
 - **AND** a backend that ignores the first interrupt can therefore still be stopped
 
+#### Scenario: An interrupt reaches the escalation while the backend is still running
+
+- **WHEN** the operator interrupts a run whose backend is still running and does not act on the
+  first interrupt
+- **THEN** each interrupt is observed while the backend runs, not deferred until it exits
+- **AND** the escalation therefore reaches `terminate` and `kill` on every platform, including one
+  whose blocking process wait cannot be interrupted
+
 #### Scenario: A platform interrupt status is reported as an interrupt
 
 - **WHEN** the backend exits with the status a platform uses for a console interrupt rather than a
@@ -346,20 +424,55 @@ so a credential referenced as `${oc.env:...}` is persisted as the reference rath
 - **WHEN** a config references an environment variable in a field the backend reads
 - **THEN** the emitted config contains the interpolation itself, not the resolved value
 
+### Requirement: The Recorded Dataset Identity Is Reported When It Disagrees
+
+`run` promotes `experiment.dataset.path` into `source_config.yaml`, which this package publishes
+as a run's lineage record, so a config in which that field disagrees with the labels the backend
+will actually read produces a faithful record of the wrong dataset. `run` SHALL report that
+disagreement, naming both the recorded dataset and the paths the backend will read, and SHALL
+proceed: the two are not required to be equal, since a packaged split can legitimately differ, and
+failing a multi-hour run over it would exceed what the wrapper can justify. `run` SHALL treat a
+scalar `data_config.train_labels_path` as a single path rather than as a sequence of characters.
+
+#### Scenario: A dataset identity the backend will not read is reported
+
+- **WHEN** `run` executes a config whose `experiment.dataset.path` is not among
+  `data_config.train_labels_path`
+- **THEN** the command reports both values and explains that `source_config.yaml` will record the
+  former as the run's dataset identity
+- **AND** the run proceeds and the backend is invoked
+
+#### Scenario: A matching dataset identity is not reported
+
+- **WHEN** `experiment.dataset.path` is among `data_config.train_labels_path`, given either as a
+  list or as a single string
+- **THEN** no such note is printed
+
 ### Requirement: Credential Safety For Persisted Configs
 
 Because `run` writes configs into the run directory — a directory this package uploads wholesale
-when publishing a model — `run` SHALL refuse a config that carries a non-empty
-`trainer_config.wandb.api_key`, naming the supported credential paths instead. When a config enables
+when publishing a model — `run` SHALL refuse a config that carries a non-empty **literal**
+`trainer_config.wandb.api_key`, naming the supported credential paths instead. It SHALL read that
+field **unresolved**: an interpolation is persisted as itself and therefore carries no credential,
+so refusing it would refuse a safe config and prescribe a remedy the operator had already
+applied. When a config enables
 W&B, `run` SHALL verify that a credential resolves before writing anything or starting the backend,
 using the same check the registry commands use.
 
 #### Scenario: An in-config W&B API key is refused, never persisted
 
-- **WHEN** `run` executes a config whose `trainer_config.wandb.api_key` is set to a non-empty value
+- **WHEN** `run` executes a config whose `trainer_config.wandb.api_key` is set to a non-empty
+  **literal** value
 - **THEN** the command exits non-zero naming `WANDB_API_KEY` / `wandb login` as the supported ways to
   supply the credential
 - **AND** no file is written and the backend is not invoked
+
+#### Scenario: An interpolated credential is not treated as a persisted one
+
+- **WHEN** `trainer_config.wandb.api_key` is an interpolation such as `${oc.env:WANDB_API_KEY}`,
+  and that variable resolves in the environment
+- **THEN** the run is not refused, because nothing `run` writes carries the resolved value
+- **AND** the emitted config contains the interpolation itself, not the value it resolves to
 
 #### Scenario: W&B is enabled but no credential resolves
 
