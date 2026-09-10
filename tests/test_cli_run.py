@@ -509,6 +509,87 @@ def test_an_unresolvable_interpolation_is_reported_without_a_traceback(
     assert backend_stub.calls == []
 
 
+def test_run_accepts_the_env_interpolation_the_credential_guidance_points_at(
+    backend_stub, run_config, tmp_path, monkeypatch
+):
+    """The two halves of the credential story, asserted together on one input.
+
+    ``${oc.env:WANDB_API_KEY}`` is the pattern the credential guidance points operators
+    toward, and it must (a) not be refused as an inline credential and (b) reach the artifact
+    as the interpolation rather than the secret. With the guard reading the resolved value,
+    (a) failed; with the guard relaxed and nothing pinning (b), a ``resolve=True`` regression
+    would bake the secret into a file a model publish uploads. Neither half is safe alone,
+    which is why they are pinned on one input.
+    """
+    monkeypatch.setenv("WANDB_API_KEY", "supersecret")
+    path = run_config(
+        overrides={"trainer_config": {"wandb": {"api_key": "${oc.env:WANDB_API_KEY}"}}}
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code == 0, result.output
+    emitted = (tmp_path / "ckpt" / "r1" / "emitted_config.yaml").read_bytes()
+    assert b"${oc.env:WANDB_API_KEY}" in emitted
+    assert b"supersecret" not in emitted
+
+
+def test_run_still_refuses_a_literal_api_key(backend_stub, run_config, tmp_path):
+    """The relaxation above must not have opened the hole the guard was built for."""
+    path = run_config(
+        overrides={"trainer_config": {"wandb": {"api_key": "literal-secret"}}}
+    )
+    before = _snapshot(tmp_path)
+    result = _invoke(["run", str(path)])
+    _assert_nothing_happened(result, backend_stub, tmp_path, before)
+    assert "WANDB_API_KEY" in result.output
+
+
+def test_run_reports_the_field_when_its_interpolation_cannot_resolve(
+    backend_stub, run_config, tmp_path
+):
+    """The field-named error was unreachable through `run`.
+
+    The coarse resolvability gate ran first and resolves the *entire* sleap-nn portion, so
+    every field-level failure surfaced as the generic experiment-block message instead. The
+    field name is the only actionable part of the error, so it is what is asserted.
+    """
+    path = run_config(
+        overrides={
+            "trainer_config": {"ckpt_dir": "${oc.env:SLEAP_ROOTS_NOT_SET_ANYWHERE}"}
+        }
+    )
+    before = _snapshot(tmp_path)
+    result = _invoke(["run", str(path)])
+    _assert_nothing_happened(result, backend_stub, tmp_path, before)
+    assert "trainer_config.ckpt_dir" in result.output
+    # ...and it must not assert a cause that is wrong for this input. The generic message
+    # blamed the repo-owned `experiment` block and prescribed "write the value literally",
+    # which for the field this guard most often fires on (a credential) is precisely what the
+    # credential guard exists to prevent.
+    assert "most likely" not in result.output
+    assert "write the value literally" not in result.output
+
+
+def test_run_refuses_an_interpolation_into_the_stripped_experiment_block(
+    backend_stub, run_config, tmp_path
+):
+    """The scenario is specified at the *command*, and only a unit test held it.
+
+    Replacing `run`'s call to `check_emitted_config_resolvable` with `pass` failed zero tests:
+    the near-miss case (`${oc.env:UNSET}` in `ckpt_dir`) is caught independently by the field
+    read, so it stayed green with the gate gone. `${experiment.species}_v1` is the input only
+    this gate refuses -- every field read resolves it happily against the full config, then
+    stages under a name the backend can never reproduce.
+    """
+    path = run_config(
+        overrides={"trainer_config": {"run_name": "${experiment.species}_v1"}}
+    )
+    before = _snapshot(tmp_path)
+    result = _invoke(["run", str(path)])
+    _assert_nothing_happened(result, backend_stub, tmp_path, before)
+    assert "cannot be resolved on its own" in result.output
+    assert not (tmp_path / "ckpt" / "arabidopsis_v1").exists()
+
+
 def test_run_persists_interpolations_rather_than_the_values_behind_them(
     backend_stub, run_config, tmp_path, monkeypatch
 ):

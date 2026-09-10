@@ -218,6 +218,36 @@ def _select(cfg, key: str, default=None):
         raise BackendError(f"{key} could not be resolved: {error}") from error
 
 
+def _unresolved(cfg, key: str):
+    """Read ``key`` without resolving an interpolation stored there.
+
+    ``OmegaConf.select`` resolves, which is right for a value this process *acts on* and wrong
+    for a value it only needs to *classify*. ``trainer_config.wandb.api_key:
+    ${oc.env:WANDB_API_KEY}`` resolves to the secret while the artifact records the reference,
+    so a guard against a **persisted** credential has to read what is persisted.
+
+    Args:
+        cfg: A loaded training config.
+        key: A dotted key path whose last segment names the leaf to read.
+
+    Returns:
+        ``(value, is_interpolation)`` -- the raw stored value (an interpolation comes back as
+        its own ``${...}`` text) and whether it is one. ``(None, False)`` when the leaf or any
+        parent is absent.
+
+    Raises:
+        BackendError: A parent of the leaf is itself an interpolation that cannot resolve.
+    """
+    parent_key, _, leaf = key.rpartition(".")
+    parent = _select(cfg, parent_key) if parent_key else cfg
+    if parent is None or not OmegaConf.is_dict(parent):
+        return None, False
+    node = parent._get_node(leaf)
+    if node is None:
+        return None, False
+    return node._value(), OmegaConf.is_interpolation(parent, leaf)
+
+
 def check_emitted_config_resolvable(cfg) -> None:
     """Refuse a config whose emitted form the backend could not load.
 
@@ -233,7 +263,13 @@ def check_emitted_config_resolvable(cfg) -> None:
 
     This resolves a throwaway copy purely as a check. The emitted file itself stays unresolved on
     purpose -- that is what keeps ``${oc.env:WANDB_API_KEY}`` a literal interpolation in the
-    artifact instead of a baked secret.
+    artifact instead of a baked secret (pinned by
+    ``test_run_persists_interpolations_rather_than_the_values_behind_them``).
+
+    Runs **after** the field reads, not before them. It resolves the entire sleap-nn portion,
+    so going first meant every field-level interpolation failure -- an unexported
+    ``${oc.env:...}`` in ``ckpt_dir``, say -- surfaced as this generic message instead of the
+    field-named one :func:`_select` raises, and the field name is the only actionable part.
 
     Args:
         cfg: A loaded, validated training config.
@@ -247,11 +283,16 @@ def check_emitted_config_resolvable(cfg) -> None:
             training_config.to_sleap_nn_config(cfg), resolve=True, throw_on_missing=True
         )
     except OmegaConfBaseException as error:
+        # No prescribed remedy: this fires for two unrelated causes (a reference into the
+        # stripped `experiment` block, and an environment variable that is not exported on this
+        # host), and the one remedy that fits the first -- "write the value literally" -- is
+        # exactly what the credential guard below exists to prevent when it fires on the second.
         raise BackendError(
             "the emitted sleap-nn config cannot be resolved on its own: "
-            f"{error}. An interpolation most likely points at the repo-owned 'experiment' "
-            "block, which is stripped from the config the backend receives -- write the value "
-            "literally instead."
+            f"{error}. The backend receives this config with the repo-owned 'experiment' "
+            "block removed, and `run` does not resolve interpolations into the file it "
+            "writes, so every interpolation left in it has to resolve from the sleap-nn "
+            "blocks and this host's environment alone."
         ) from error
 
 
@@ -431,13 +472,25 @@ def reject_inline_api_key(cfg) -> None:
     (``training/model_trainer.py:997``); we cannot mask it in ours without breaking
     byte-identity with ``emit``, so we refuse it instead.
 
+    An **interpolation** is not refused. ``${oc.env:WANDB_API_KEY}`` persists as itself, so
+    nothing ships: the rationale above is about a value on disk, and there is none. That
+    relaxation is only safe because the emitted config is written unresolved, which is now
+    pinned by a test at three levels rather than resting on a defaulted keyword.
+
     Args:
         cfg: A loaded training config.
 
     Raises:
-        BackendError: ``trainer_config.wandb.api_key`` is set to a non-empty value.
+        BackendError: ``trainer_config.wandb.api_key`` holds a non-empty literal value.
     """
-    api_key = _select(cfg, "trainer_config.wandb.api_key")
+    api_key, is_interpolation = _unresolved(cfg, "trainer_config.wandb.api_key")
+    if is_interpolation:
+        # Not a persisted credential. `to_sleap_nn_yaml` never resolves, so the artifact keeps
+        # the reference verbatim and nothing this command writes carries the value -- the
+        # rationale above does not apply to this input. Reading through `_select` resolved it,
+        # so with the variable exported the guard refused the very pattern the credential
+        # guidance points operators toward, and told them to do what they had already done.
+        return
     if isinstance(api_key, str) and api_key.strip():
         raise BackendError(
             "trainer_config.wandb.api_key is set in the config. `run` copies configs into "

@@ -490,6 +490,42 @@ def test_inline_wandb_api_key_is_refused(write_config):
         backend.reject_inline_api_key(cfg)
 
 
+def test_an_api_key_interpolation_is_not_an_inline_credential(
+    write_config, monkeypatch
+):
+    """The guard reads the **unresolved** node, so the documented pattern is not refused.
+
+    Reading through ``OmegaConf.select`` *resolves*, so with ``WANDB_API_KEY`` exported the
+    guard saw the secret and refused a config whose artifact would have carried only the
+    literal ``${oc.env:WANDB_API_KEY}`` -- the check's own rationale ("the key would ship with
+    it") does not apply to that input, and the remedy it printed was what the operator had
+    already done. The variable is set deliberately: with it unset the old code raised a
+    different error instead, so the bug was invisible to any test that left it unset.
+    """
+    monkeypatch.setenv("WANDB_API_KEY", "supersecret")
+    cfg, _ = _cfg(
+        write_config,
+        overrides={"trainer_config": {"wandb": {"api_key": "${oc.env:WANDB_API_KEY}"}}},
+    )
+    backend.reject_inline_api_key(cfg)  # must not raise
+
+
+def test_an_api_key_written_literally_is_still_refused(write_config, monkeypatch):
+    """The relaxation above is about *interpolations*, not about literals.
+
+    A literal is what gets persisted verbatim into a directory a model publish uploads, which
+    is what the guard exists for. Exercised with ``WANDB_API_KEY`` exported too, so the
+    refusal cannot be passing merely because nothing in the environment resolves.
+    """
+    monkeypatch.setenv("WANDB_API_KEY", "irrelevant")
+    cfg, _ = _cfg(
+        write_config,
+        overrides={"trainer_config": {"wandb": {"api_key": "literal-secret"}}},
+    )
+    with pytest.raises(backend.BackendError, match="api_key"):
+        backend.reject_inline_api_key(cfg)
+
+
 @pytest.mark.parametrize("value", [None, ""])
 def test_absent_or_empty_api_key_is_fine(write_config, value):
     overrides = (

@@ -732,13 +732,19 @@ def run_command(
         click.echo(f"note: {note}")
 
     try:
-        # Every gate below reads through OmegaConf, which *resolves*, while the emitted config is
-        # written unresolved and with the `experiment` block stripped. Reconcile the two before
-        # anything is staged, or `run_name: ${experiment.species}_v1` would gate and stage under
-        # a value the backend can never resolve.
-        backend.check_emitted_config_resolvable(cfg)
+        # Field reads first. Each one reports the field that carries an unresolvable
+        # interpolation; the coarse gate below resolves the *whole* sleap-nn portion, so
+        # running it first replaced every one of those field-named errors with one generic
+        # message -- and left `_select`'s error path unreachable through this command.
+        run_dir = backend.run_directory(cfg)
         backend.reject_inline_api_key(cfg)
         wandb_on = backend.wandb_enabled(cfg)
+        # Still before anything is staged, which is the part that matters. Every read above
+        # resolves against the **full** config, while the emitted file is written unresolved
+        # and with the `experiment` block stripped -- so `run_name: ${experiment.species}_v1`
+        # gates and stages happily under `arabidopsis_v1` and then hands the backend a config
+        # it cannot reload at all.
+        backend.check_emitted_config_resolvable(cfg)
     except backend.BackendError as error:
         raise click.ClickException(str(error))
     _warn_on_dataset_mismatch(cfg)
@@ -748,7 +754,6 @@ def run_command(
         _require_api_key()
 
     try:
-        run_dir = backend.run_directory(cfg)
         backend.check_run_directory(run_dir)
         destination = backend.emitted_config_path(run_dir, emitted_config)
         backend.stage_artifacts(cfg, config_path, run_dir, destination)
