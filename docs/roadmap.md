@@ -248,19 +248,25 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
      automated checks.
 
   Deferred until the inventory lands, because they only matter if these collections are preserved
-  as-is: recording the original collection name on the card (`LabelCard` is
-  `frozen=True, extra="ignore"`, so the value is silently dropped — needs a contracts field, a
-  narrower scope, or an explicit accepted loss), de-aliasing `production` from the old collections,
-  the "W&B collections cannot be renamed or deleted" premise (the pinned `wandb` 0.28.0 client
-  exposes `delete()` and a `name` setter; whether the *server* refuses this for
-  `wandb-registry-*` collections is uncited), and most of the migration rollback ceremony.
-  Renaming, rebuilding, or discarding collections are all still on the table.
-- **Wheat's collection is `wheat-cylinder-crown` (decided 2026-09-01).** The team's `seminal`
-  nickname does not become a `RootType` member; the root type is `crown`, and that propagates into
-  the normalized collection name rather than making wheat the one collection of eight whose name
-  doesn't derive from its own card. Note the mitigation originally offered for the lost nickname —
-  recording it on the card — is the deferred item above, so `wheat-cylinder-crown` should not
-  execute until the nickname has somewhere real to live.
+  as-is: de-aliasing `production` from the old collections, the "W&B collections cannot be renamed
+  or deleted" premise (the pinned `wandb` 0.28.0 client exposes `delete()` and a `name` setter;
+  whether the *server* refuses this for `wandb-registry-*` collections is uncited), and most of the
+  migration rollback ceremony. Renaming, rebuilding, or discarding collections are all still on the
+  table.
+- **The original collection names are not recorded on the cards (decided 2026-09-10).** `LabelCard`
+  is `frozen=True, extra="ignore"`, so a name passed to it is accepted and silently discarded — and
+  the tolerance cannot simply be tightened, because both card docstrings name the consumers a future
+  `extra="forbid"` would break (this backfill on one side, predict's registry lister on the other).
+  Rather than add a contract field for it, **the loss is accepted**: the nickname does not survive
+  into the registry. The original names still live in #49's committed YAML mapping, which the
+  migration needs anyway — it is what the cards are built from, what proves the old artifacts are
+  not orphaned, and what the rollback record keys on. `sleap-roots-contracts#34` remains the
+  low-priority home for a real alias mechanism if one is ever wanted.
+- **Wheat's collection is `wheat-cylinder-crown` (decided 2026-09-01, confirmed 2026-09-10).** The
+  team's `seminal` nickname does not become a `RootType` member; the root type is `crown`, and that
+  propagates into the normalized collection name rather than making wheat the one collection of
+  eight whose name doesn't derive from its own card. Originally ratified on the nickname surviving
+  on the card; with that mitigation withdrawn above, it now stands on the accepted loss instead.
 
 ### Tier 2.2 — Per-model training-backend parity (sleap-nn vs. legacy TF, full production fleet)
 - **Deliverable:** for every **physically distinct** production model (dedup on `weights_checksum`,
@@ -885,3 +891,15 @@ verify.
 - **MINOR (housekeeping):** #11 was closed on 2026-08-31 by #50's merge commit, whose message read
   `closes #11's sibling #51` — GitHub matched the keyword to #11 and ignored the possessive, closing
   the backfill and leaving #51 open. Both corrected: #11 reopened, #51 closed as completed.
+
+**Roadmap revision (2026-09-10, second)** — the nickname-provenance question settled, after
+reviewing `sleap-roots-contracts#36` surfaced the same `extra="ignore"` behaviour from the docs side.
+- **IMPORTANT (decision taken):** **original collection names are not recorded on the cards.**
+  `LabelCard`'s `extra="ignore"` discards them silently, and the tolerance is load-bearing on the
+  read path — both card docstrings name the consumers `extra="forbid"` would break. The three
+  options (add a contracts field, narrow to wandb metadata, accept the loss) resolved to **accept
+  the loss**: no contracts release, no pin bump, no second D7 trigger, and no consumer currently
+  needs the value programmatically. The committed YAML mapping keeps the names for the migration's
+  own use. Recorded on #49; `sleap-roots-contracts#34` stays the home for a real alias concept.
+- **MINOR:** `wheat-cylinder-crown` re-confirmed on the new footing — it was ratified on the
+  nickname surviving on the card, and now stands on the accepted loss instead. §7 is unblocked.
