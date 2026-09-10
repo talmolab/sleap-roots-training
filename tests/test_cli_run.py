@@ -230,6 +230,22 @@ def test_the_run_metadata_does_not_disturb_the_emitted_configs_bytes(
     assert emitted == out.read_bytes()
 
 
+def test_a_metadata_write_failure_is_reported_without_a_traceback(
+    backend_stub, run_config, tmp_path, monkeypatch
+):
+    """The sidecar is written after the configs and before the backend, so it has its own path."""
+    monkeypatch.setattr(
+        backend,
+        "stage_run_metadata",
+        lambda *_: (_ for _ in ()).throw(backend.BackendError("disk full")),
+    )
+    result = _invoke(["run", str(run_config())])
+    assert result.exit_code != 0
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "disk full" in result.output
+    assert backend_stub.calls == []
+
+
 def test_run_names_the_resolved_backend_before_starting(
     backend_stub, run_config, tmp_path
 ):

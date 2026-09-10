@@ -1403,6 +1403,65 @@ def test_an_aliasing_rule_the_module_does_not_model_cannot_destroy_the_source_co
     assert (run_dir / backend.SOURCE_CONFIG_NAME).read_bytes() == source.read_bytes()
 
 
+def test_evidence_that_cannot_be_removed_is_named_in_the_error(
+    write_config, tmp_path, monkeypatch
+):
+    """A purge that fails must say so: that directory is bricked until someone deletes it.
+
+    There is no `--force`, so "we tried and could not" is the operator's only signal that hand
+    intervention is required.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    before = set(os.listdir(run_dir))
+    source_bytes = source.read_bytes()
+    (run_dir / backend.SOURCE_CONFIG_NAME).write_bytes(source_bytes)
+    (run_dir / "best.ckpt").write_bytes(b"")
+
+    def refuse_unlink(self, *args, **kwargs):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "unlink", refuse_unlink)
+    with pytest.raises(backend.BackendError, match="could NOT remove"):
+        backend._verify_staging(
+            run_dir, run_dir / backend.SOURCE_CONFIG_NAME, source_bytes, before
+        )
+
+
+def test_a_destination_symlinked_onto_the_source_copy_is_refused(
+    write_config, tmp_path
+):
+    """The name check cannot see this one: the basename is innocent, the target is not.
+
+    A symlink is why the resolved-path collision guard stays even though the mangled-name
+    check subsumes every *spelling* of `source_config.yaml`.
+    """
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    link = elsewhere / "emitted.yaml"
+    try:
+        link.symlink_to(run_dir / backend.SOURCE_CONFIG_NAME)
+    except (OSError, NotImplementedError) as error:  # pragma: no cover - host policy
+        pytest.skip(f"this host does not allow creating symlinks: {error}")
+    with pytest.raises(backend.BackendError, match="which `run` writes itself"):
+        backend.stage_artifacts(cfg, source, run_dir, link)
+
+
+def test_a_metadata_write_failure_is_a_clean_error(write_config, tmp_path, monkeypatch):
+    """The sidecar is written after the configs, so its failure needs its own message."""
+    cfg, _source, run_dir = _staging_fixture(write_config, tmp_path)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    def failing_write(path, payload):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(backend, "_atomic_write", failing_write)
+    with pytest.raises(backend.BackendError, match="run's metadata"):
+        backend.stage_run_metadata(run_dir, tmp_path / "bin" / "sleap-nn", "0.2.0")
+
+
 def test_the_post_write_check_catches_evidence_it_did_not_predict(
     write_config, tmp_path
 ):
