@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Records what the label corpus actually contains, by reconciling three independent sources
-— the label registry, the SLEAP share, and Bloom's scan metadata — so that the corpus is
+Records what the label corpus actually contains, by reconciling three sources — the label
+registry, the SLEAP share, and Bloom's cylinder scan metadata — so that the corpus is
 described by evidence rather than by whichever snapshot happened to seed a table.
 
 Division of authority, which this capability depends on and does not change: **W&B is the
@@ -20,11 +20,30 @@ cards from this evidence and supply the rest themselves.
 
 Its central rule is that a fact is asserted only when two derivations agree — with one
 honest qualification. For **species** the two derivations are genuinely independent: a
-human typed the folder name, and Bloom records `species_name` from experiment metadata. For
+human typed the folder name, and Bloom records the species from experiment metadata. For
 **age and scan date** they are not: the download tooling wrote the directory name *from*
 those same columns, so agreement is a **staleness check** — did the record change after
 download, through a re-key or a correction — rather than corroboration. Both checks are
 worth running; only the first is evidence of correctness.
+
+Two scope facts shape every requirement below. First, **the unit is the labels file, not
+the folder**: directories on the share hold several distinct labeling efforts side by side,
+including files of different species, so a rule that selected one file per folder would
+discard most of the corpus. Second, **a person decides what counts as a collection and
+adjudicates every conflict**: an input file, a finished collection and a scratch file cannot
+be told apart by name or structure, and a conflict between two sources is a finding to
+review rather than a value to pick.
+
+Named artifacts this specification refers to, so that it stands alone once archived:
+
+- **the skeleton table** — `src/sleap_roots_training/labeling/data/skeletons.yaml`, keyed
+  `(species, root_type, age)` and advisory by its own header.
+- **the contract library** — `sleap_roots_contracts`, which owns the species, capture-mode
+  and root-type vocabularies and the `LabelCard` shape.
+- **the scan-metadata client** — `bloomctl`, and through it Bloom's PostgREST **gateway**.
+- **the redaction floor** — the substitutions in `scripts/pull_tf_reference.py`'s
+  `_REDACTIONS`.
+- **the documentation** — `docs/labeling-packages.md`.
 
 This capability **reports**. It writes nothing to any external system and changes no
 existing vocabulary or table. Every correction it implies is a separate change; that
@@ -32,9 +51,156 @@ separation is what makes it safe to run against production data.
 
 ## ADDED Requirements
 
+### Requirement: The Command Emits Three Named Artifacts And One Decision Input
+
+The capability SHALL expose an `inventory labels` command that, given a walk root, an output
+directory, a decision file and a scan-metadata profile, emits exactly three artifacts into
+the output directory and reads one decision file it never writes.
+
+The artifacts are: a **per-scan table** named `<collection-slug>.csv` for each promoted
+collection, one row per scan, whose columns are grouped by the source each field is derived
+from; one **aggregate** named `aggregate.yaml` carrying one **aggregate entry** per
+enumerated labels file; and one **skeleton diff** named `skeleton-diff.md`. There is no
+fourth artifact: a file's classification, a collection's outcome, its skip reason, its
+per-field confidence and its adjudication state are all recorded in its aggregate entry, and
+"the report" elsewhere in this specification means the aggregate.
+
+Withholding a **field** SHALL NOT withhold an **entry**. A collection whose
+reconciliation-derived fields are withheld still emits its aggregate entry, its file-derived
+fields, and the reason each withheld field is absent.
+
+The option surface SHALL be `--walk-root` (required), `--out` (default `inventory/`),
+`--decisions` (default `inventory/decisions.yaml`) and `--bloom-profile`. The registry
+entity SHALL be read from `WANDB_ENTITY` rather than a flag, following the `seed-registry`
+command. Every option SHALL be documented, and the documentation SHALL be locked against the
+implemented surface.
+
+Exit codes SHALL be distinct and documented: `0` on completion, `3` when a required source is
+unavailable, and `4` when the run completed with one or more collection failures. Code `2` is
+reserved for the CLI framework's usage errors.
+
+#### Scenario: A run emits the three artifacts
+
+- **WHEN** the command completes over a walk root holding two promoted collections
+- **THEN** a per-scan table exists for each, one aggregate holds an entry for every
+  enumerated labels file, and one skeleton diff is emitted
+
+#### Scenario: A withheld field does not remove the entry
+
+- **WHEN** a collection's reconciliation-derived fields are withheld
+- **THEN** its aggregate entry is still present, carries its file-derived fields, and names
+  each withheld field with the reason
+
+#### Scenario: The decision file is never written
+
+- **WHEN** the capability runs to completion
+- **THEN** the decision file's bytes are unchanged
+
+#### Scenario: Exit codes distinguish the failure kinds
+
+- **WHEN** a required source is unavailable, and separately when the run completes with a
+  failing collection
+- **THEN** the first exits `3` and the second exits `4`, and both are documented
+
+### Requirement: Every Labels File Is Enumerated And A Person Promotes It
+
+The capability SHALL enumerate every labels file under the walk root and SHALL NOT decide by
+itself which of them is a collection. Each enumerated file SHALL be classified, and the
+classification that admits a file to full inventory SHALL come from the decision file.
+
+A directory on this share commonly holds several distinct labeling efforts at once — a
+finished superset, the per-day and per-labeler files that were merged into it, files of a
+different species entirely, and scratch. Those tiers are not distinguishable by name or
+structure, so a structural rule cannot separate them, and a rule that selected one file per
+directory would drop whole species from the inventory. Enumeration is therefore structural
+and complete, and promotion is a judgment recorded in a committed file.
+
+Files SHALL be grouped into **version families** by basename with the version suffix
+removed. Within a family the highest version is the family's current file; earlier versions
+SHALL be recorded as superseded, naming the file, and SHALL NOT be read or digest-verified.
+A file carrying no version suffix SHALL be classified as scratch and reported without being
+read.
+
+Only a **promoted** file SHALL be read, digest-verified, reconciled against scan metadata, or
+entered in the skeleton diff. Every other enumerated file SHALL still receive an aggregate
+entry recording its classification, its path and its version family, so that nothing on the
+share is silently absent from the inventory.
+
+The decision file SHALL be a supplied input the capability reads and never writes, so that a
+re-run cannot erase a judgment. A file absent from the decision file SHALL be classified
+unclassified and reported as awaiting a decision, never promoted by default.
+
+#### Scenario: An unclassified file is reported, not promoted
+
+- **WHEN** an enumerated labels file appears in no entry of the decision file
+- **THEN** it is classified unclassified, receives an aggregate entry, and is not read
+
+#### Scenario: A promoted file is inventoried in full
+
+- **WHEN** the decision file promotes a labels file
+- **THEN** it is read, digest-verified where a registry artifact exists, and reconciled
+
+#### Scenario: Earlier versions are superseded without being read
+
+- **WHEN** a version family holds three versions
+- **THEN** the highest is the family's current file and the other two are reported as
+  superseded, naming each file, and neither is opened
+
+#### Scenario: A file with no version suffix is scratch
+
+- **WHEN** an enumerated labels file carries no version suffix
+- **THEN** it is classified scratch and reported without being read
+
+#### Scenario: Several promoted files in one directory are all inventoried
+
+- **WHEN** one directory holds promoted files of three different species
+- **THEN** all three are inventoried as separate collections
+
+### Requirement: Disagreements Are Surfaced For A Person To Adjudicate
+
+The capability SHALL emit every disagreed scan into an adjudication queue in the aggregate,
+and SHALL withhold only those fields derived from the facts in conflict until a verdict for
+that scan appears in the decision file.
+
+An unresolved scan and a disagreed scan are different events. An unresolved scan carries no
+comparison — a legacy scan predating ingestion, a re-keyed plant, an unparseable path — and
+SHALL never block a field; it simply does not contribute. A disagreed scan means the recorded
+path and the scan metadata actively conflict, which is an anomaly a person should see before
+a number resting on it is published.
+
+Each disagreed scan SHALL record which field the conflict was in, so that the emitter
+withholds the fields that field feeds and no others. A field withheld this way SHALL carry
+the confidence `awaiting_adjudication` and the count of scans awaiting a verdict.
+
+A verdict recorded in the decision file SHALL name the scan, the field and the value to
+accept, and the capability SHALL then treat that scan as agreed for that field alone. The
+decision file is an input to determinism: two runs over unchanged inputs **including
+unchanged verdicts** produce identical artifacts.
+
+#### Scenario: A disagreement withholds only what it touches
+
+- **WHEN** two of a collection's scans disagree on age and none disagree on anything else
+- **THEN** the age-derived fields carry `awaiting_adjudication` and the species and plant
+  count are still emitted
+
+#### Scenario: An unresolved scan blocks nothing
+
+- **WHEN** ten of a collection's scans are unresolved and none are disagreed
+- **THEN** no field is withheld on their account and they do not contribute
+
+#### Scenario: Disagreed scans appear in the queue
+
+- **WHEN** a collection holds disagreed scans
+- **THEN** each appears in the adjudication queue naming the scan, the field, and both values
+
+#### Scenario: An adjudicated scan stops withholding its field
+
+- **WHEN** the decision file records a verdict for every disagreed scan of a collection
+- **THEN** the previously withheld fields are emitted and carry the contributing scan count
+
 ### Requirement: Source Resolution Is Digest-Verified Where A Registry Artifact Exists
 
-The capability SHALL resolve each registry collection's recorded source path onto the local
+The capability SHALL resolve a promoted collection's recorded source path onto the local
 share and SHALL verify the resolved file's digest against the digest the registry records
 for that file **in the artifact's manifest entry** — the base64 MD5 of the file's bytes. It
 SHALL NOT compare against the artifact-level digest, which is computed over the manifest
@@ -43,31 +209,54 @@ and the plausible repair under time pressure is a size comparison, which this re
 exists to forbid. Verification SHALL read manifest metadata only and SHALL NOT download the
 artifact.
 
-A collection discovered on the share with **no registry counterpart** SHALL be inventoried
-and reported as unregistered, with its facts read from the share file directly and every
-field so derived marked share-only. The digest gate applies only where a registry artifact
-exists to compare against. This is the majority of the corpus, not an edge case, and a
-capability that excluded it would emit only the collections already known.
+A manifest entry added as a reference to an external object store carries that store's ETag
+rather than a file hash. Such an entry SHALL be reported as unverifiable, distinctly from
+mismatching, because an ETag over a multipart upload is not an MD5 of the bytes and a
+mismatch verdict would be an accusation against an intact file.
 
-The registry and the share are each required for what only they can supply: without the
-share there is no file to read, and without the registry no collection can be verified or
-its provenance version chosen. When either is unavailable the capability SHALL exit naming
-which one is absent and SHALL emit nothing.
+A promoted collection with **no registry counterpart** SHALL be inventoried and reported as
+unregistered, with its facts read from the share file directly and every field so derived
+marked `share_only`. The digest gate applies only where a registry artifact exists to
+compare against. This is the majority of the corpus, not an edge case, and a capability that
+excluded it would emit only the collections already known.
 
-Recorded paths use several prefixes for one tree. The mapping SHALL be explicit and
-enumerated, so an unrecognized prefix is a reported failure rather than a silent miss, and
-SHALL be evaluated under Windows path semantics on every platform, including the
-drive-relative form, so a run on one operating system resolves a recorded path as another
-would.
+Both sources SHALL be required, for different reasons. Without the share there is no file to
+read. The registry is required not because every collection is registered but because an
+unreachable registry is indistinguishable from a collection that was never registered:
+reporting an outage as `unregistered` would launder a transient failure into permanent
+provenance. When either is unavailable the capability SHALL exit naming which one is absent
+and SHALL emit nothing.
+
+Recorded paths use several prefixes for one tree, and the mapping SHALL be this enumeration
+rather than an implementer's choice:
+
+| recorded prefix | resolves to |
+| --- | --- |
+| `D:/SLEAP/` | `<walk-root>/` |
+| `//<smb-host>/hpi_dev/users/` | `<share>/users/` |
+| `Z:/users/` | `<share>/users/` |
+| `Z:users/` (drive-relative) | `<share>/users/` |
+
+Each prefix SHALL be recognised in both its backslash and its forward-slash rendering,
+because artifact metadata records the backslash form while the labels layer returns a
+normalised forward-slash form. `<smb-host>` is the internal host segment the redaction floor
+already covers. An unrecognized prefix SHALL be a reported failure rather than a silent
+miss, and the mapping SHALL be evaluated under Windows path semantics on every platform so
+that a run on one operating system resolves a recorded path as another would.
 
 A collection's provenance SHALL be read from the artifact version carrying the original
 recorded source path, not from a later repair derived from it: a repair re-embeds images to
 restore trainability and in doing so drops the source metadata and records a temporary
-working path. The value reported for whether images are embedded SHALL describe the version
-a consumer receives, which in a repaired collection is a different artifact.
+working path. Where a collection has exactly one version, provenance and the images-embedded
+value are both read from that version. The value reported for whether images are embedded
+SHALL describe the version a consumer receives, which in a repaired collection is a
+different artifact.
 
 Two collections whose recorded paths resolve to the same file SHALL both be reported, naming
-the shared path; neither SHALL silently replace the other's row.
+the shared path and marking the pair as sharing bytes so a consumer summing frames does not
+double-count them; neither SHALL silently replace the other's row. Where the two versions'
+metadata records different species for identical bytes, that SHALL be reported as a
+contradiction rather than resolved.
 
 A collection whose digest does not match, whose recorded path cannot be mapped, or whose
 resolved path is not a readable file SHALL be reported and excluded. Being unreadable SHALL
@@ -76,14 +265,20 @@ against a file that may be intact.
 
 #### Scenario: A digest-matching file is read
 
-- **WHEN** a collection's recorded source path maps to a share file whose digest equals the
-  digest in the registry artifact's manifest entry
+- **WHEN** a promoted collection's recorded source path maps to a share file whose digest
+  equals the digest in the registry artifact's manifest entry
 - **THEN** the file is read and the collection proceeds
 
 #### Scenario: Verification downloads nothing
 
 - **WHEN** a collection is verified
 - **THEN** no artifact download is performed, and only manifest metadata is fetched
+
+#### Scenario: The artifact-level digest is never compared
+
+- **WHEN** a collection is verified
+- **THEN** the value compared is the manifest entry's per-file digest and the artifact-level
+  digest is not read for comparison
 
 #### Scenario: A same-size file with different content is excluded
 
@@ -92,28 +287,32 @@ against a file that may be intact.
 - **THEN** the collection is reported as failing verification, so the check is not a size
   comparison
 
+#### Scenario: A reference entry's ETag is unverifiable, not mismatching
+
+- **WHEN** a manifest entry carries an external store's ETag rather than a file hash
+- **THEN** the collection is reported as unverifiable, distinctly from failing verification
+
 #### Scenario: A share collection absent from the registry is inventoried
 
-- **WHEN** a discovered collection has no matching registry entry
+- **WHEN** a promoted collection has no matching registry entry
 - **THEN** it is inventoried, reported as unregistered, and its derived fields are marked
-  share-only
+  `share_only`
 
 #### Scenario: Unregistered is distinct from failing verification
 
 - **WHEN** one collection has no registry entry and another has one whose digest differs
-- **THEN** the first is reported as unregistered and the second as failing verification,
-  under distinct outcomes
+- **THEN** the first is reported `unregistered` and the second `digest_mismatch`
 
 #### Scenario: An unmappable recorded path is reported
 
-- **WHEN** a collection's recorded source path begins with a prefix the mapping does not
-  enumerate
+- **WHEN** a collection's recorded source path begins with a prefix the enumeration does not
+  contain
 - **THEN** it is reported as unmappable and excluded, naming the path
 
 #### Scenario: A recorded path resolving to a directory is refused
 
 - **WHEN** a collection's recorded source path resolves to a directory rather than a file
-- **THEN** it is reported as unresolvable and is not opened
+- **THEN** it is reported `path_not_a_file` and is not opened
 
 #### Scenario: An unreadable file is distinguished from a mismatch
 
@@ -123,9 +322,9 @@ against a file that may be intact.
 
 #### Scenario: Prefix mapping is platform-independent
 
-- **WHEN** the same recorded path is mapped on a POSIX host and on a Windows host, including
-  the drive-relative form
-- **THEN** both produce the same resolved share path
+- **WHEN** the same recorded path is mapped on a POSIX host and on a Windows host, in both
+  renderings and including the drive-relative form
+- **THEN** every case produces the same resolved share path
 
 #### Scenario: Provenance comes from the original version, not the repair
 
@@ -142,12 +341,12 @@ against a file that may be intact.
 #### Scenario: Two collections resolving to one file are both reported
 
 - **WHEN** two collections' recorded paths resolve to the same share file
-- **THEN** both are reported, naming the shared path
+- **THEN** both are reported, naming the shared path and marking the pair as sharing bytes
 
 #### Scenario: An absent registry or share is named and nothing is emitted
 
 - **WHEN** either the registry or the share is unavailable
-- **THEN** the capability exits naming the missing source and emits no artifact
+- **THEN** the capability exits `3` naming the missing source and emits no artifact
 
 ### Requirement: One Collection's Failure Is Contained
 
@@ -163,32 +362,37 @@ it.
 #### Scenario: One failing collection does not block the rest
 
 - **WHEN** one collection fails verification and the others succeed
-- **THEN** the run completes and emits output for the collections that succeeded
-- **AND** the failing collection appears in the report under its own outcome
+- **THEN** the run completes, emits output for the collections that succeeded, and exits `4`
+- **AND** the failing collection appears in the aggregate under its own outcome
 
-#### Scenario: A withheld aggregate does not withhold the corpus
+#### Scenario: A withheld field does not withhold the corpus
 
-- **WHEN** one collection's aggregate is withheld
+- **WHEN** one collection's fields are withheld pending adjudication
 - **THEN** the other collections are inventoried and emitted unaffected
 
-### Requirement: Recorded Video Paths Take More Than One Shape
+### Requirement: Recorded Video Paths Take Four Shapes, One Of Which Yields No Key
 
-The capability SHALL recognise every shape a recorded video path takes in this corpus, and
-SHALL state per shape which facts it can yield. There are three, and treating them as one
+The capability SHALL recognise every shape a recorded video path takes in this corpus and
+SHALL state per shape which facts it can yield. There are four, and treating them as one
 would silently withhold whole collections.
 
 A **referenced** video records a path whose directory carries the scan's age, date and
-scanning device and whose filename carries the scan's identifying code. An **embedded**
-package records the package's own path in the same field; the original scan path is held
-separately as the embedded source, which may be a list and may have been deliberately
-cleared. A **generated** package records a list of curated per-view filenames carrying the
-identifying code and the age but no date and no device.
+scanning device and whose filename carries the plant code. An **embedded** package records
+the package's own path in the same field; the original scan path is held separately as the
+embedded source, which may be a list and may have been deliberately cleared. A **generated**
+package records a list of curated per-view filenames carrying the plant code and the age but
+no date and no device; such a package ships a sample manifest beside its labels file, and the
+scan identifier SHALL be read from that manifest rather than parsed from the filename. A
+**plate** path records a plate identifier and a capture timestamp and carries **no plant
+code, no age and no device**; a plate scan therefore yields no key and SHALL be reported
+unresolved with the reason `no_identifying_code`, which is a property of the upstream schema
+and not a defect in the file.
 
-A shape yielding no date SHALL NOT thereby render its scans unresolved: the comparison
-SHALL use the facts a shape can supply. Two of the corpus's collections are embedded
-packages and are the only ones whose skeleton rows are already independently verified —
-losing them would remove the diff's sole confirmed anchor — and generated packages are the
-shape every future package takes.
+A shape yielding no date SHALL NOT thereby render its scans unresolved: the comparison SHALL
+use the facts a shape can supply. Two of the corpus's collections are embedded packages and
+are the only ones whose skeleton rows are already independently verified — losing them would
+remove the diff's sole confirmed anchor — and generated packages are the shape every future
+package takes.
 
 The capability SHALL open labels files without resolving their video backends, because a
 host without the share attached cannot resolve them and does not need to.
@@ -196,104 +400,152 @@ host without the share attached cannot resolve them and does not need to.
 #### Scenario: A referenced path yields code, age, date and device
 
 - **WHEN** a referenced video path is parsed
-- **THEN** the identifying code, age, date and device are available
+- **THEN** the plant code, age, date and device are available
 
 #### Scenario: An embedded package reads the embedded source, not the package path
 
 - **WHEN** an embedded package's video is parsed
-- **THEN** the identifying code is taken from the embedded source path, not from the
-  package's own filename
+- **THEN** the plant code is taken from the embedded source path, not from the package's own
+  filename
 
-#### Scenario: A cleared embedded source is reported, not mis-parsed
+#### Scenario: A cleared embedded source is unresolved with its own reason
 
 - **WHEN** an embedded video's source has been cleared
-- **THEN** its scans are reported as having no recoverable path, naming the reason
+- **THEN** its scans are unresolved with the reason `no_recoverable_path`, naming the cleared
+  source
 
-#### Scenario: A generated package resolves without a date
+#### Scenario: A generated package takes its scan identifier from the manifest
 
 - **WHEN** a generated package's video is parsed
-- **THEN** the identifying code and age are available and the scan resolves
-- **AND** the absence of a date does not by itself make the scan unresolved
+- **THEN** the scan identifier is read from the sample manifest beside the labels file
+- **AND** the absence of a date in the filename does not by itself make the scan unresolved
+
+#### Scenario: A plate path yields no key and is unresolved
+
+- **WHEN** a plate collection's video path is parsed
+- **THEN** its scans are unresolved with the reason `no_identifying_code` and no lookup is
+  attempted
 
 #### Scenario: Labels files open without resolving video backends
 
 - **WHEN** a labels file is opened on a host with no access to its video backends
 - **THEN** it opens and its facts are read
 
-### Requirement: Every Scan Is Derived Twice And Reconciled
+### Requirement: Every Cylinder Scan Is Derived Twice And Reconciled
 
-For each scan the capability SHALL derive facts independently from the recorded video path
-and from Bloom's scan metadata, joined on the scan's identifying code, and SHALL classify
-the result as **agreed**, **disagreed**, or **unresolved**. An unresolved row SHALL record
-which of three reasons applies: no usable identifying code, no Bloom record for that code,
-or nothing comparable on the labels side.
+For each cylinder scan the capability SHALL derive facts independently from the recorded
+video path and from Bloom's cylinder scan metadata, and SHALL classify the result as
+`agreed`, `disagreed`, or `unresolved`. Scan metadata is read from the cylinder view only;
+plate collections have no reconcilable scan metadata and are inventoried from the file alone.
 
-A disagreement SHALL be recorded with both values and SHALL NOT be resolved by preferring
-one source. An unresolved scan SHALL NOT be an error; legacy scans may predate ingestion or
-have been re-keyed.
+The key SHALL be stated rather than assumed. The ten-character code in a recorded path is
+the **plant's** code, not the scan's: one plant is scanned at several ages, and on one day by
+more than one device, so a code alone selects many scan rows. A scan is therefore identified
+by the plant code together with the age and the device, or — for a generated package — by the
+scan identifier its manifest carries. The plant code alone SHALL NOT be used to select a
+single scan row.
+
+An unresolved row SHALL record exactly one reason from this closed set:
+`no_identifying_code` (the path yields no usable plant code, including a plate path),
+`no_recoverable_path` (an embedded source has been cleared), `no_bloom_record` (the key is
+well formed but Bloom holds no row for it), `unparseable_date` (a recorded date cannot be
+parsed unambiguously), and `nothing_comparable` (the shape supplies no fact the scan row also
+carries, as in a labels file holding no video or no labeled frame).
+
+A disagreement SHALL be recorded with both values and the field it occurred in, and SHALL NOT
+be resolved by preferring one source. An unresolved scan SHALL NOT be an error; legacy scans
+may predate ingestion or have been re-keyed.
 
 The comparison SHALL normalise both sides before comparing, and the normalisation SHALL be
 specified rather than left to the implementer: an age rendered in a directory name is the
 same quantity Bloom records, but a date rendered in a directory name is ambiguous between
 day-first and month-first and may carry a two-digit year. An unparseable date SHALL make a
-row unresolved for that reason, never disagreed — a parse failure reported as a
-disagreement would withhold a collection's aggregate on the strength of a formatting
-convention.
+row unresolved for that reason, never disagreed — a parse failure reported as a disagreement
+would withhold a field on the strength of a formatting convention.
 
 Lookups SHALL be batched so that no request's rendered, percent-encoded URL exceeds the
-gateway's length limit, and identifiers SHALL be quoted as the gateway requires. A
-collection can hold more scans than one filter can carry, so an unbatched implementation
-succeeds on small collections and fails only on the largest.
+gateway's length limit, using the upstream client's batching helper and its measured
+character budget. The quoting rule for string identifiers SHALL be specified and tested
+**here**: the upstream client filters only on numeric identifiers and so provides no
+precedent, and a plant code containing a character the filter grammar reserves would
+otherwise corrupt the request silently.
 
 #### Scenario: Matching sources yield an agreed row
 
 - **WHEN** a scan's path-derived age and Bloom's recorded age are equal, and the dates match
-- **THEN** the row is classified agreed
+- **THEN** the row is classified `agreed`
 
-#### Scenario: A disagreement is recorded rather than resolved
+#### Scenario: A disagreement is recorded with its field
 
 - **WHEN** a scan's path-derived age and Bloom's recorded age differ
-- **THEN** the row is classified disagreed and carries both values
+- **THEN** the row is classified `disagreed`, carries both values, and names age as the field
 
 #### Scenario: A scan absent from Bloom is unresolved, not fatal
 
-- **WHEN** a scan's identifying code has no record in Bloom
-- **THEN** the row is classified unresolved with that reason
+- **WHEN** a scan's key has no record in Bloom
+- **THEN** the row is classified unresolved with the reason `no_bloom_record`
 - **AND** the remaining scans are still processed
 
-#### Scenario: An unusable identifying code is unresolved with a distinct reason
+#### Scenario: An unusable code is unresolved and no lookup is attempted
 
-- **WHEN** a video path yields no usable identifying code
-- **THEN** the row is unresolved recording that reason, and no lookup is attempted
+- **WHEN** a video path yields no usable plant code
+- **THEN** the row is unresolved with the reason `no_identifying_code`, and no lookup is
+  issued
 
 #### Scenario: An unparseable date is unresolved, not disagreed
 
 - **WHEN** a recorded date cannot be parsed unambiguously
-- **THEN** the row is unresolved for that reason
-- **AND** it is not classified disagreed
+- **THEN** the row is unresolved with the reason `unparseable_date`
+- **AND** it is not classified `disagreed`
+
+#### Scenario: A plant code alone does not select a scan
+
+- **WHEN** one plant code has two Bloom rows at the same age from different devices
+- **THEN** the device distinguishes them and neither row is chosen arbitrarily
 
 #### Scenario: Lookups are batched below the gateway's limit
 
 - **WHEN** a collection holds more scans than one request's filter can carry
-- **THEN** the lookups are split across requests, each within the limit, and every scan
-  resolves
+- **THEN** the lookups are split across requests, each request's rendered URL is within the
+  limit, and every scan resolves
+
+#### Scenario: A reserved character in a code is quoted
+
+- **WHEN** a plant code contains a character the filter grammar reserves
+- **THEN** it is quoted so the request selects that code and no other
 
 ### Requirement: Species Is Sourced From Bloom, And A Mixed Collection Is A Defect
 
 The species reported for a collection SHALL be taken from Bloom's records and SHALL NEVER be
-inferred from the collection name, the containing folder name, or the labels filename. Those
-names are what this capability exists to check. It SHALL be normalised by the same rule the
-contract library applies to a species, so one spelling does not fail to join.
+emitted from the collection name, the containing folder name, or the labels filename. Those
+names are what this capability exists to check. Comparison SHALL be on the species
+identifier from Bloom's controlled species table, not on the free-text common name, and the
+emitted evidence SHALL carry the identifier, the common name, the genus and the species.
+
+Two distinct species identifiers sharing a genus and species SHALL be reported as the same
+taxon carrying both identifiers, not as a mixed collection. The common name is user-writable
+free text under a case-sensitive uniqueness constraint, so one taxon can acquire two names —
+`medicago` and `alfalfa` both denote *Medicago sativa* — and a name-based comparison would
+report a single-species collection as mixed.
+
+Where a common name must be rendered for a consumer, it SHALL be normalised by the contract
+library's species-normalisation rule, which strips surrounding whitespace and lowercases.
+That rule SHALL be reached directly and not through the library's parameter-resolution entry
+point, which fixes the capture mode to cylinder and raises when an age is absent — both
+wrong for this capability.
 
 A collection whose scans resolve to more than one species SHALL be reported as a **defect
-blocking its card**, not as a species value. A label collection is single-species by
-program decision — multi-species training data is combined from separate single-species
-collections at training time — and the consuming card carries one species, so "mixed" is
-not a value any consumer can store.
+blocking its card**, not as a species value, and the aggregate SHALL carry the
+experiment-to-species mapping **with a scan count per species**, which is the evidence needed
+to split it. The grounds are three: `LabelCard` carries one species and cannot express two;
+the training backend accepts a list of labels files, so combining species inside one file is
+unnecessary; and the corpus's own generalist experiments are already organised as per-species
+directories. A defect verdict here concerns card eligibility, not file integrity — models
+were demonstrably trained from several of these files.
 
-Because species is an experiment-level property in Bloom, a mixed result means the
-collection pools scans from more than one experiment. The capability SHALL emit the
-experiment-to-species mapping it found, which is the evidence, rather than only the verdict.
+Because species is an experiment-level property in Bloom, a mixed result means the collection
+pools scans from more than one experiment. Mixed-species detection SHALL consider every scan
+carrying a Bloom row, agreed or not, so that a thin join cannot hide a pooling.
 
 The reported species MAY fall outside the repo's model-side species vocabulary. That is
 expected output, not an error, and widening the vocabulary is not this capability's concern.
@@ -302,19 +554,25 @@ expected output, not an error, and widening the vocabulary is not this capabilit
 
 - **WHEN** a collection's name indicates one species while Bloom records another for its
   scans
-- **THEN** the reported species is Bloom's, and the disagreement is recorded
+- **THEN** the reported species is Bloom's, and the name-derived value is recorded separately
+  as name-derived
 
-#### Scenario: A mixed collection is reported as a defect with its evidence
+#### Scenario: A mixed collection is a defect with its evidence
 
 - **WHEN** a collection's scans resolve to more than one species
 - **THEN** it is reported as a defect blocking its card, and no species value is chosen
-- **AND** the experiment-to-species mapping found is emitted
+- **AND** the experiment-to-species mapping is emitted with a scan count per species
 
-#### Scenario: Species spelling is normalised before comparison
+#### Scenario: Mixed detection uses every scan with a Bloom row
 
-- **WHEN** Bloom records a species whose spelling differs only in case or surrounding
-  whitespace from the expected value
-- **THEN** it normalises to the same species and does not register as mixed
+- **WHEN** a collection's agreed scans are one species and an unresolved-heavy remainder
+  carries a second
+- **THEN** the collection is still reported as mixed
+
+#### Scenario: Two identifiers for one taxon are not mixed
+
+- **WHEN** two species identifiers share a genus and species
+- **THEN** the collection reports one taxon carrying both identifiers and is not mixed
 
 #### Scenario: A species outside the model-side vocabulary is reported, not rejected
 
@@ -323,19 +581,26 @@ expected output, not an error, and widening the vocabulary is not this capabilit
 
 ### Requirement: Scans And Plants Are Counted As Distinct Quantities
 
-The capability SHALL report scan count and plant count as separate values, derived from
-distinct scan identity and distinct Bloom plant identity. The plant count SHALL NOT be
-derived from the identifying code recorded in a filename, which is a human-assigned proxy.
+The capability SHALL report scan count and plant count as separate values, and SHALL state
+which capture mode's record structure each count rests on. Scan count is the count of
+distinct scans in the labels file and is file-derived, so it survives a scan-metadata
+failure. Plant count is the count of distinct Bloom plant records and SHALL NOT be derived
+from the code recorded in a filename, which identifies a plant but is human-assigned.
 
 One scan is one video; the rotational views of a scan are frames within it, not separate
 scans. A plant is imaged at more than one age, and on one day by more than one device, so
 scan count exceeds plant count wherever a plant was imaged repeatedly.
 
-The reported plant count SHALL be documented as a count of **distinct Bloom plant records**,
+The invariant that scan count is at least plant count SHALL be asserted **for cylinder
+collections only**, and SHALL be justified on the cylinder record structure: the cylinder
+scan view joins one plant per scan row, so the bound follows by counting and not from
+biology. It does **not** hold for plate, where one capture carries many sections and each
+section many plants, so plant count may exceed scan count legitimately. A plate collection
+SHALL NOT have its aggregate withheld on that account.
+
+The reported plant count SHALL be documented as a count of distinct Bloom plant records,
 which is not a botanical plant count under a capture mode that places several plants in one
-scan. The invariant that scan count is at least plant count follows from that record
-structure, not from biology, and SHALL be asserted before emission as a guard against an
-inconsistent intermediate.
+scan.
 
 #### Scenario: A plant imaged at two ages is one plant and two scans
 
@@ -354,130 +619,187 @@ inconsistent intermediate.
   in number
 - **THEN** the reported plant count is the count of Bloom plant identities
 
-#### Scenario: An inconsistent count withholds that collection only
+#### Scenario: Scan count survives a scan-metadata failure
 
-- **WHEN** a collection's computed scan count is lower than its computed plant count
-- **THEN** it is reported, naming the collection, and no aggregate is emitted for it
+- **WHEN** every scan in a collection is unresolved because Bloom was unavailable
+- **THEN** the scan count is still emitted, marked `file_only`
 
-### Requirement: Counts Distinguish Labels From Predictions
+#### Scenario: An inconsistent cylinder count withholds that collection's counts only
+
+- **WHEN** a cylinder collection's computed scan count is lower than its computed plant count
+- **THEN** the Bloom-derived counts are withheld and the inversion reported as
+  `count_inconsistent`, while its file-derived fields are still emitted
+
+#### Scenario: A plate collection with more plants than scans is not a defect
+
+- **WHEN** a plate collection's plant count exceeds its scan count
+- **THEN** no inconsistency is reported and no aggregate is withheld
+
+### Requirement: Counts Distinguish Labels, Predictions And Confirmed Absences
 
 The capability SHALL report frame and instance counts that distinguish user-made labels from
-model predictions, and SHALL report the predicted counts separately rather than merging
-them.
+model predictions and from confirmed absences, and SHALL report each separately rather than
+merging them.
 
 A labeling package's starting version carries predicted instances as a labeler's starting
 point, and packages deliberately ship frames with no instance at all where a root type is
-absent. A single total therefore describes the labeling *request* for any collection
-published before labeling finished, not the labeled corpus — and it is the labeled corpus a
-consumer believes it is reading.
+absent — that frame is a *result*, a labeler's confirmation that the model found nothing, and
+it is ground truth the corpus could not previously record. A single total therefore describes
+the labeling *request* for any collection published before labeling finished, not the labeled
+corpus.
 
-The capability SHALL report the count of frames carrying a user label, the count of user
-instances, and the count of predicted instances, each named for what it counts.
+Four counts SHALL be reported, each named for what it counts and for the property it is read
+from: frames carrying at least one user instance, frames marked as a confirmed absence, their
+sum, which is the frame set the training backend exports, and the counts of user instances
+and predicted instances.
 
 #### Scenario: User and predicted instances are counted separately
 
 - **WHEN** a collection carries both user labels and model predictions
 - **THEN** the user instance count and the predicted instance count are reported separately
 
-#### Scenario: Frames with no instance do not inflate the labeled count
+#### Scenario: A confirmed absence is counted as its own quantity
 
-- **WHEN** a collection carries frames with no instance
-- **THEN** those frames are excluded from the count of frames carrying a user label
+- **WHEN** a collection carries frames with no instance that are marked as confirmed absences
+- **THEN** they are excluded from the count of frames carrying a user instance and reported
+  as confirmed absences
+- **AND** their sum with that count is reported as the exported frame set
 
 ### Requirement: Confidence Is Per Field, And File Facts Do Not Depend On Bloom
 
 The capability SHALL record confidence per field rather than per collection, and SHALL NOT
 withhold a field whose derivation did not depend on the source that failed.
 
-Facts read from the labels file — the skeleton's name, its node names and count, and the
-frame and instance counts — have no Bloom dependency. Withholding them because one scan's
-filename was malformed would suppress exactly the evidence the skeleton table is waiting on,
-and would make this capability's output weaker than the check it replaces, which needs no
-Bloom at all.
+Facts read from the labels file — the skeleton's name, its node names and count, the scan
+count, and the frame and instance counts — have no Bloom dependency. Withholding them because
+one scan's filename was malformed would suppress exactly the evidence the skeleton table is
+waiting on, and would make this capability's output weaker than the check it complements,
+which needs no Bloom at all.
 
-Fields derived by reconciliation SHALL be computed from agreed rows only. Where a collection
-has disagreed or unresolved rows, those fields SHALL be withheld and the rows surfaced for
-adjudication; the file-derived fields SHALL still be emitted, marked with their own
-confidence.
+A reconciliation-derived field SHALL be computed from agreed scans only, and SHALL carry the
+count of scans that contributed and the count excluded. A field SHALL be withheld in exactly
+two cases: no scan agreed, or a disagreement in the field's inputs is awaiting adjudication.
+An unresolved scan SHALL NOT withhold anything. Excluded scans SHALL be surfaced in the
+per-scan table and, where disagreed, in the adjudication queue.
 
-A collection with no scans surviving reconciliation SHALL be emitted as an entry recording
-that, never as a verified aggregate of zero.
+A collection with no scan agreed SHALL be emitted as an entry recording that, never as a
+verified aggregate of zero.
 
 #### Scenario: File facts survive a Bloom failure
 
 - **WHEN** every scan in a collection is unresolved because Bloom was unavailable
-- **THEN** the skeleton name, node count, node names and frame counts are still emitted
+- **THEN** the skeleton name, node count, node names, scan count and frame counts are still
+  emitted, marked `file_only`
 - **AND** the reconciliation-derived fields are withheld
 
-#### Scenario: Reconciled fields use agreed rows only
+#### Scenario: Reconciled fields use agreed scans only and state their coverage
 
-- **WHEN** a collection has agreed rows and disagreed rows
-- **THEN** the reconciliation-derived fields are computed from the agreed rows only
+- **WHEN** a collection has agreed scans and unresolved scans
+- **THEN** the reconciliation-derived fields are computed from the agreed scans only and each
+  carries the contributing and excluded counts
 
 #### Scenario: Confidence is recorded per field
 
 - **WHEN** a collection has a verified species and an underivable plant count
 - **THEN** each field carries its own confidence rather than the collection carrying one
 
-#### Scenario: A collection with no surviving scans is not a verified zero
+#### Scenario: A collection with no agreed scan is not a verified zero
 
-- **WHEN** no scan in a collection survives reconciliation
+- **WHEN** no scan in a collection is agreed
 - **THEN** the collection is emitted as an entry recording that it could not be verified
 
-### Requirement: The Age Window Is Emitted As An Observed Range With Its Epoch
+### Requirement: The Age Window Is Emitted As An Observed Range With Its Provenance
 
 The capability SHALL emit the age window as the **observed** range across a collection's
-agreed scans, labelled as observed, and SHALL record the epoch that range is measured in.
+agreed scans, labelled as observed, and SHALL record both the upstream field the ages came
+from and the epoch that field is measured in.
 
-The sibling contract's age window denotes an approved selection window curated at
+The epoch SHALL be emitted as a repo-owned constant per capture mode, carried at the
+confidence `convention` and never `verified`, because no upstream record states it. For
+cylinder the ages come from the scan view's age column, which Bloom's own interface labels
+days after germination. For plate there is **no upstream age at all** — the plate schema
+carries a capture date and a transplant date and nothing else time-like — so a plate
+collection's ages are share-derived, from the collection name or a curated local age file,
+marked `share_only`, and its window SHALL NOT be presented as reconciled. Days after
+transplant is a third epoch and SHALL NOT be reported as either of the other two.
+
+The contract library's `LabelCard` age window is inclusive and **contiguous**, and a
+non-contiguous observed set is not expressible as one. A collection whose observed ages have
+gaps SHALL be reported as `age_set_non_contiguous` so a consumer does not mint a card
+asserting a range the data does not fill. The capability SHALL emit the set of ages actually
+observed alongside the range, because a range alone asserts a contiguity it cannot establish.
+
+The sibling contract's model-side age window denotes an approved selection window curated at
 promotion, which may be wider than the data. An observed range emitted without that
-distinction will later be read as an approved one. The capability SHALL also emit the set of
-ages actually observed, because a range alone asserts a contiguity it cannot establish.
+distinction will later be read as an approved one.
 
-Age epochs differ across capture modes in the upstream data, and the epoch is a convention
-recorded nowhere upstream. A window pooled across modes without its epoch is therefore not
-interpretable, and SHALL NOT be emitted without one.
-
-#### Scenario: The window is labelled observed and carries its epoch
+#### Scenario: The window is labelled observed and carries its provenance
 
 - **WHEN** a collection's age window is emitted
-- **THEN** it is labelled as an observed range and records the epoch it is measured in
+- **THEN** it is labelled as an observed range and records the upstream field and the epoch
+  constant, with the epoch marked `convention`
 
 #### Scenario: The observed age set accompanies the range
 
 - **WHEN** a collection's scans span a range with gaps
 - **THEN** the emitted evidence records the ages actually observed, not only the bounds
+- **AND** the collection is reported `age_set_non_contiguous`
+
+#### Scenario: A plate age window is share-derived, not reconciled
+
+- **WHEN** a plate collection's age window is emitted
+- **THEN** it is marked `share_only`, names its local source, and is not presented as
+  reconciled
 
 ### Requirement: Only Read Operations Are Issued
 
 The capability SHALL issue only read operations against the registry and against Bloom.
 
-For Bloom the prohibition SHALL be enforced on the **data plane**: every request to the data
-endpoint SHALL use the read method. Every table write and every volatile remote procedure
-requires another method, so a read-only data plane cannot perform one regardless of what
-authority its credentials carry. The session exchange that mints credentials is exempt; it
-writes no application data and without it no read is possible. A read-only remote procedure
-may itself be served by the read method, so the guarantee rests on the gateway refusing the
-read method for a volatile procedure, not on procedures being writes.
+For Bloom the prohibition SHALL be enforced on the **data plane**: every HTTP request to the
+data endpoint SHALL use the `GET` method. Every table write and every volatile remote
+procedure requires another method, so a `GET`-only data plane cannot perform one regardless
+of what authority its credentials carry. The session exchange that mints credentials is
+exempt; it is a `POST`, it writes no application data, and without it no read is possible. A
+read-only remote procedure may itself be served by `GET`, so the guarantee rests on the
+gateway refusing `GET` for a volatile procedure, not on procedures being writes.
 
-The capability SHALL call only the upstream client's documented read entry points, SHALL NOT
-import or reference its ingest surface, and SHALL receive its clients rather than
-constructing them, so an unintended write fails a test rather than reaching production.
+The capability SHALL NOT call the upstream client's ingest surface, and SHALL receive its
+clients rather than constructing them, so an unintended write fails a test rather than
+reaching production. The upstream client is a command-line application whose package
+initialiser imports every command module, including ingest; an import-graph assertion is
+therefore unavailable, because importing any read symbol also loads the ingest module. The
+enforceable guarantee is a **source-level** assertion that no module of this capability names
+an ingest symbol, layered on the data-plane method assertion, which catches an actual write
+whatever is imported.
+
+The symbols this capability imports from the upstream client SHALL be enumerated in one
+adapter module and guarded by a test that fails loudly when one moves, because they are
+internal to a pre-release command-line application and are not a published interface.
 
 Loaded credentials SHALL be kept out of every representation, log line, exception message,
 and emitted artifact. The artifacts are committed to a public repository, so a credential
 reaching a traceback is a published credential.
 
-#### Scenario: The data plane issues only reads
+#### Scenario: The data plane issues only GET
 
 - **WHEN** the capability runs to completion against a supplied client
-- **THEN** every request it issued to the data endpoint used the read method
+- **THEN** every request it issued to the data endpoint used `GET`
 - **AND** a data-plane request using any other method fails the run
 
-#### Scenario: The ingest surface is never reached
+#### Scenario: The session exchange is exempt
 
-- **WHEN** the modules the capability imports are inspected
-- **THEN** none of them imports or references the upstream ingest surface
+- **WHEN** the client mints a session
+- **THEN** that request may use `POST` and does not fail the run
+
+#### Scenario: No module names an ingest symbol
+
+- **WHEN** the source of every module of this capability is inspected
+- **THEN** none of them names an ingest symbol
+
+#### Scenario: A moved upstream symbol fails loudly
+
+- **WHEN** an enumerated upstream symbol is absent from the installed client
+- **THEN** the guard fails naming the symbol
 
 #### Scenario: A run performs no registry write
 
@@ -500,8 +822,14 @@ one user's directory, so every walked path carries one user segment — but a re
 artifact's **recorded** path is historical metadata this capability does not control and
 cannot re-scope, and may name a host or user segment no enumerated substitution covers. The
 rule SHALL redact the segment following a user-directory marker whatever its value, and any
-host segment of a network path, with the substitutions the repository already applies as a
-compatibility floor.
+host segment of a network path, with the redaction floor's substitutions kept as a
+compatibility floor. The marker set SHALL include the share's user-directory marker and the
+temporary-directory shape a repair version's recorded path takes.
+
+The rule governs **emitted artifacts**, which carry hundreds of recorded paths. Prose
+documentation naming the share root or host once is existing repository practice and is out
+of scope; the prefix enumeration above records prefix *shapes* with the host segment given in
+its redacted form for the same reason.
 
 Fields identifying a person SHALL NOT be emitted. Fields describing plants and experiments —
 genotype, accession and experiment name — are emitted by decision.
@@ -517,73 +845,97 @@ genotype, accession and experiment name — are emitted by decision.
 - **WHEN** a recorded path's user segment appears in no enumerated substitution
 - **THEN** it is redacted
 
+#### Scenario: A temporary-directory path from a repair is redacted
+
+- **WHEN** a repair version's recorded path names a temporary directory carrying a user
+  segment
+- **THEN** that segment is redacted
+
 #### Scenario: A person-identifying field is not emitted
 
 - **WHEN** the scan metadata contains a field identifying a person
 - **THEN** that field appears in no emitted artifact
 
-### Requirement: Collections Are Discovered Structurally
+#### Scenario: Approved plant and experiment fields are emitted
 
-Share collections SHALL be discovered by structure rather than from a maintained list: a
-folder is inventoried when it holds a labels file at its top level. Folders holding no such
-file SHALL be reported as skipped, with the reason.
+- **WHEN** the scan metadata carries genotype, accession and experiment name
+- **THEN** each appears in the emitted artifact
 
-A maintained list would encode only what is already remembered, which defeats an inventory.
-Derived training artifacts SHALL NOT be treated as collections — a split describes a
+### Requirement: The Walk Is Structural And Bounded
+
+Labels files SHALL be discovered by walking the supplied root rather than from a maintained
+list, and every directory beneath that root SHALL be walked. A maintained list would encode
+only what is already remembered, which defeats an inventory.
+
+Derived training artifacts SHALL NOT be enumerated as labels files — a split describes a
 training run, not a corpus, and counting one would report a subset's frame count as the
-corpus's. Where a folder holds more than one candidate labels file, the rule that selects
-among them SHALL be stated and applied consistently rather than left to directory order.
+corpus's. A directory holding no labels file SHALL be reported as skipped, with the reason.
 
 The root walked SHALL be a supplied parameter. In production it is the project owner's
 directory; other users' directories are out of scope and SHALL NOT be walked, and discovery
 SHALL NOT ascend above the supplied root.
 
-#### Scenario: A folder with a top-level labels file is inventoried
+A labels file whose skeleton or content is unrelated to root phenotyping — a different
+imaging subject entirely — SHALL be reportable as out of scope through the decision file
+rather than admitted silently, because the structural filter cannot exclude it.
 
-- **WHEN** a folder holds a labels file at its top level
-- **THEN** it is inventoried as a collection
+#### Scenario: Labels files are found at any depth
 
-#### Scenario: A folder with no top-level labels file is skipped and reported
+- **WHEN** a directory beneath the root holds labels files while the root itself holds none
+- **THEN** those files are enumerated
 
-- **WHEN** a folder holds no labels file at its top level
-- **THEN** it is not inventoried and appears in the report as skipped with a reason
+#### Scenario: A directory with no labels file is skipped and reported
 
-#### Scenario: A split is not a collection
+- **WHEN** a directory holds no labels file
+- **THEN** nothing is enumerated from it and it appears in the aggregate as skipped with a
+  reason
 
-- **WHEN** a folder contains a labels file at its top level and derived split files beneath
-- **THEN** only the top-level file is inventoried, and the reported frame count is its own
+#### Scenario: A split is not a labels file
 
-#### Scenario: Sibling candidates are selected by a stated rule
-
-- **WHEN** a folder holds more than one candidate labels file at its top level
-- **THEN** the selected file is chosen by the stated rule and the others are recorded as
-  not selected
+- **WHEN** a directory contains a labels file and derived split files beneath it
+- **THEN** only the labels file is enumerated, and the reported frame count is its own
 
 #### Scenario: Discovery runs against a supplied root and does not ascend
 
 - **WHEN** discovery is given a root other than the production share
 - **THEN** it walks that root and does not ascend above it
 
+#### Scenario: An out-of-scope subject is excluded by decision, not by guess
+
+- **WHEN** the decision file marks an enumerated labels file as out of scope
+- **THEN** it is reported as such and not inventoried
+
 ### Requirement: The Skeleton Table Is Diffed, Never Used As A Source Of Values
 
-The capability SHALL emit a diff between what the corpus demonstrates and what the
-repo-owned skeleton table asserts, and SHALL NOT read that table to fill in a value. Each
-collection SHALL be reported as verifying a row, contradicting a row, having no row, or
-exposing a keying gap.
+The capability SHALL emit a diff between what the corpus demonstrates and what the skeleton
+table asserts, and SHALL NOT read that table to fill in a value. Each promoted collection
+SHALL be reported as verifying a row, contradicting a row, having no row, exposing a keying
+gap, or naming a root type the contract vocabulary does not contain.
 
-Root type and capture mode are not available from scan metadata; where the diff needs them
-to select a row they SHALL be derived from the collection's name, used **only** to select
-the row to compare against, and SHALL NOT be emitted as evidence. A name-derived value is
-adequate to choose what to compare and inadequate to record as provenance, and the
-distinction SHALL be visible in the output.
+Selecting a row needs the table's three keys, and none of them is available from scan
+metadata. Species, root type, capture mode and age SHALL therefore be derived from the
+collection's name and the file's observed ages, used **only** to select the row to compare
+against, and SHALL NOT be emitted as evidence. A name-derived value is adequate to choose
+what to compare and inadequate to record as provenance, and the distinction SHALL be visible
+in the output. Because selection needs no Bloom, the diff SHALL be emitted even when scan
+metadata is unavailable.
+
+The name-to-root-type mapping SHALL be stated: `seminal`, `sr` and `seminal_root` select the
+`crown` row, because the team's seminal roots are the contract's crown root type and the
+contract vocabulary has no `seminal` member. A name yielding a root type outside the contract
+vocabulary — `tertiary` and `adventitious` occur in the corpus — SHALL be reported as
+out-of-vocabulary rather than as a missing row, because the two need different fixes.
 
 The table's rows are keyed without capture mode while the corpus contains collections of one
 species and root type whose node counts differ by mode — a missing key rather than a wrong
-value, which no per-row correction fixes. The age key is not implicated: node counts do not
-vary by age in the observed corpus, and the age key governs which root types exist.
+value, which no per-row correction fixes. Whether node counts also vary by age is a
+hypothesis this diff tests rather than an established fact, and an age-dependent node count
+SHALL likewise be reportable as a keying gap.
 
-The observed skeleton name SHALL be reported as the literal value the file carries. A file
-carrying more than one skeleton SHALL be reported as such rather than reduced to one.
+The observed skeleton name SHALL be reported as the literal value the file carries, with no
+normalisation. A file carrying more than one skeleton SHALL be reported as such rather than
+reduced to one, and a file carrying none SHALL be reported distinctly, because both raise
+identically in the labels layer and conflating them would hide an empty file.
 
 #### Scenario: A collection matching a row verifies it
 
@@ -607,34 +959,70 @@ carrying more than one skeleton SHALL be reported as such rather than reduced to
   different node counts
 - **THEN** the diff reports a keying gap rather than a contradiction on either row
 
+#### Scenario: An age-dependent node count is reported as a keying gap
+
+- **WHEN** two collections share species, root type and mode, differ in age, and have
+  different node counts
+- **THEN** the diff reports a keying gap on the age key
+
+#### Scenario: A seminal-named collection selects the crown row
+
+- **WHEN** a collection's name carries `seminal` or `sr`
+- **THEN** the crown row is selected for comparison
+
+#### Scenario: An out-of-vocabulary root type is reported as such
+
+- **WHEN** a collection's name yields a root type the contract vocabulary does not contain
+- **THEN** it is reported as out-of-vocabulary rather than as a missing row
+
 #### Scenario: Name-derived selectors are not emitted as evidence
 
-- **WHEN** root type or capture mode is derived from a collection's name to select a row
+- **WHEN** species, root type, capture mode or age is derived from a collection's name to
+  select a row
 - **THEN** that value is used for selection and does not appear as emitted evidence
+
+#### Scenario: The diff is emitted without scan metadata
+
+- **WHEN** Bloom is unavailable
+- **THEN** the diff is still emitted, using name-derived selectors and file-derived node
+  counts
 
 #### Scenario: A multi-skeleton file is reported, not reduced
 
 - **WHEN** a labels file carries more than one skeleton
 - **THEN** the collection is reported as carrying multiple skeletons
 
+#### Scenario: A file with no skeleton is reported distinctly
+
+- **WHEN** a labels file carries no skeleton
+- **THEN** the collection is reported as carrying none, distinctly from carrying several
+
 ### Requirement: Artifacts Are Emitted Atomically And Deterministically
 
-Artifact content SHALL be a deterministic function of the inputs alone. The capability SHALL
-NOT embed a run timestamp, hostname, run identifier, or any value varying between runs over
-unchanged inputs, and SHALL emit collections, rows and keys in a defined, input-derived
-order, with a fixed line ending and a fixed rendering of numbers and absent values so that
-output is identical across operating systems.
+Artifact content SHALL be a deterministic function of the inputs alone, the decision file
+among them. The capability SHALL NOT embed a run timestamp, hostname, run identifier, or any
+value varying between runs over unchanged inputs.
 
-An artifact SHALL be rendered in full and then moved into place, so a run failing during
-emission leaves the previous artifact intact. A failure the capability observes SHALL remove
-its staging file; a staging file orphaned by a process killed outright SHALL be overwritten
-by the next run rather than treated as state. An atomic replace requires the staging file
-beside its destination, so a hard kill can leave one there — the guarantee is that the
-destination is never partial.
+Rendering SHALL be pinned rather than left to the host. Collections SHALL be emitted ordered
+by collection slug, scan rows by plant code then age then device then source path, and
+mapping keys in the documented field order. Every artifact SHALL use `LF` line endings, a
+fixed rendering of numbers and absent values, and **every emitted path rendered with forward
+slashes whatever the host** — the artifacts are largely paths, and the platform's native
+rendering would otherwise differ between operating systems. Because the artifacts are
+committed, the repository SHALL also pin their line endings so that a checkout cannot
+reintroduce the difference.
+
+An artifact SHALL be rendered in full and then moved into place with an operation that
+replaces an existing destination, so a run failing during emission leaves the previous
+artifact intact. Replacement over an existing destination is the normal case, not the
+exception, because the artifacts are committed and re-emitted. A failure the capability
+observes SHALL remove its staging file; a staging file orphaned by a process killed outright
+SHALL be overwritten by the next run rather than treated as state.
 
 Running twice against unchanged inputs SHALL produce identical artifacts, and adding a
 collection SHALL add its entries without altering those of collections whose inputs have not
-changed. There SHALL be no resume; a re-run is a full re-run.
+changed. There SHALL be no resume; a re-run is a full re-run, which is why no judgment may
+live in a file the run writes.
 
 #### Scenario: Unchanged inputs produce identical artifacts
 
@@ -644,7 +1032,8 @@ changed. There SHALL be no resume; a re-run is a full re-run.
 #### Scenario: Output is identical across operating systems
 
 - **WHEN** the capability is run on different operating systems over the same inputs
-- **THEN** the emitted artifacts are byte-identical
+- **THEN** the emitted artifacts are byte-identical, and every emitted path uses forward
+  slashes
 
 #### Scenario: No varying value is embedded
 
@@ -653,44 +1042,80 @@ changed. There SHALL be no resume; a re-run is a full re-run.
 
 #### Scenario: A new collection does not disturb existing entries
 
-- **WHEN** a collection is added and the capability is re-run
+- **WHEN** a collection is promoted and the capability is re-run
 - **THEN** the new entries appear, and unchanged collections' artifacts are byte-identical
   and their aggregate entries unchanged
+
+#### Scenario: Emission replaces an existing artifact
+
+- **WHEN** an artifact is emitted over a non-empty destination
+- **THEN** the destination is replaced and the run succeeds
 
 #### Scenario: A failure during emission leaves the previous artifact intact
 
 - **WHEN** emission raises partway through
 - **THEN** the previous artifact is unchanged and the staging file is removed
 
-### Requirement: The Emitted Evidence Schema And Its Vocabularies Are Documented And Locked
+### Requirement: The Emitted Schema And Its Vocabularies Are Documented And Locked
 
-The repository SHALL document the emitted schema and **every** closed vocabulary it uses,
-and a test SHALL lock each documented vocabulary against the values the emitter writes.
+The documentation SHALL carry the emitted schema of all three artifacts and **every** closed
+vocabulary this capability uses, and a test SHALL lock each documented vocabulary against the
+values the emitter writes, by set equality in both directions.
 
-Four vocabularies are closed and all four are load-bearing: the per-scan reconciliation
-status, the reason recorded on an unresolved row, the per-field confidence, and the
-collection-level outcome. A reader who cannot distinguish an unregistered collection from an
-excluded one cannot tell an unverifiable collection from a suspect one.
+Five vocabularies are closed and all five are load-bearing. A reader who cannot distinguish
+an unregistered collection from an excluded one cannot tell an unverifiable collection from a
+suspect one:
 
-The vocabularies SHALL be defined as constants in a module importable without the registry
-or scan-metadata client libraries, so the locking test stays cheap.
+- **per-scan reconciliation status** — `agreed`, `disagreed`, `unresolved`.
+- **unresolved reason** — `no_identifying_code`, `no_recoverable_path`, `no_bloom_record`,
+  `unparseable_date`, `nothing_comparable`.
+- **per-field confidence** — `verified`, `share_only`, `file_only`, `convention`,
+  `awaiting_adjudication`, `withheld`.
+- **file classification** — `promoted`, `superseded_version`, `unclassified`, `scratch`,
+  `out_of_scope`.
+- **collection outcome**, which is two fields because the values are not mutually exclusive:
+  an exclusive **resolution** outcome — `inventoried`, `unregistered`, `digest_mismatch`,
+  `unverifiable_reference`, `path_unmappable`, `path_not_a_file`, `unreadable`,
+  `not_promoted`, `skipped_no_labels_file` — and a non-exclusive **defect** set —
+  `mixed_species`, `count_inconsistent`, `multiple_skeletons`, `no_skeleton`,
+  `no_agreed_scan`, `duplicate_resolved_path`, `age_set_non_contiguous`,
+  `root_type_out_of_vocabulary`.
 
-The documentation SHALL state, for each reconciliation status, whether rows carrying it
+No requirement SHALL introduce an outcome, reason, confidence or classification value outside
+these sets.
+
+The vocabularies SHALL be defined as constants in a module importable without the registry or
+scan-metadata client libraries, so the locking test stays cheap and a consumer can read the
+vocabulary without installing either.
+
+The documentation SHALL state, for each reconciliation status, whether scans carrying it
 contribute to reconciliation-derived fields — so a reader comparing a per-scan row count
-against a reported scan count understands why they differ.
+against a reported scan count understands why they differ — and a test SHALL lock that
+statement against the emitter's behaviour.
+
+The documentation SHALL state that `inventory/` is the pinned output path, because
+regenerating and diffing only works if everyone regenerates to the same place.
 
 #### Scenario: Every documented vocabulary matches the emitter
 
-- **WHEN** each documented vocabulary is compared with the values the emitter writes
-- **THEN** each is equal to its counterpart
+- **WHEN** each of the five documented vocabularies is compared with the values the emitter
+  writes
+- **THEN** each is equal to its counterpart in both directions
 
 #### Scenario: The vocabularies import without client libraries
 
-- **WHEN** the module defining the vocabularies is imported
-- **THEN** it imports without requiring the registry or scan-metadata client libraries
+- **WHEN** the module defining the vocabularies is imported with the registry and
+  scan-metadata client libraries absent
+- **THEN** it imports successfully
 
 #### Scenario: The documentation states what each status implies
 
 - **WHEN** the documentation is read
-- **THEN** it states for each reconciliation status whether rows carrying it contribute to
+- **THEN** it states for each reconciliation status whether scans carrying it contribute to
   reconciliation-derived fields
+- **AND** a test asserts that statement against the emitter
+
+#### Scenario: The pinned output path is documented
+
+- **WHEN** the documentation is read
+- **THEN** it names `inventory/` as the pinned output path
