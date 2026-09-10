@@ -765,12 +765,13 @@ def test_real_subprocess_propagates_its_exit_status(status, capfd):
 #: A child that ignores SIGINT and then sleeps -- the shape of a trainer with a graceful
 #: shutdown handler, which is exactly the case the escalation ladder exists for.
 _DEAF_CHILD = (
-    "import signal, sys, time; signal.signal(signal.SIGINT, signal.SIG_IGN); "
-    "sys.stderr.write('ready\\n'); sys.stderr.flush(); time.sleep(30)"
+    "import signal, time; signal.signal(signal.SIGINT, signal.SIG_IGN); time.sleep(30)"
 )
 
 
-def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(capfd):
+def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(
+    capfd, monkeypatch
+):
     """The escalation ladder is reachable *during* the run, not only after it ends.
 
     `Popen.wait()` with no timeout is a non-alertable `WaitForSingleObject(INFINITE)` on
@@ -780,8 +781,8 @@ def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(capfd):
     already gone, and for a child that *defers* the interrupt the second and third Ctrl-C could
     not be delivered at all, so `terminate()` and `kill()` never ran.
 
-    The existing interrupt tests raise `KeyboardInterrupt` synchronously from a fake `wait()`,
-    so they cannot see this: the fake has no blocking syscall to be stuck in. This drives a
+    The other interrupt tests raise `KeyboardInterrupt` synchronously from a fake `wait()`, so
+    they cannot see this: the fake has no blocking syscall to be stuck in. This drives a
     **real** subprocess and simulates the interrupts from another thread, which is the only
     arrangement where a blocking wait behaves differently from a polled one.
 
@@ -790,18 +791,33 @@ def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(capfd):
     indefinitely inside a blocking `wait()`, seen within one poll interval otherwise. That is
     also why the child never receives a real SIGINT here, which conveniently models the
     "child ignores the first interrupt" case on every platform.
+
+    The interrupts are gated on the child having actually launched rather than on a wall-clock
+    delay: on a cold runner, process startup can outlast a fixed delay, and an interrupt
+    arriving during `Popen(...)` would escape as an unhandled `KeyboardInterrupt` and fail
+    this test for a reason that has nothing to do with what it is checking.
     """
-    interrupter = threading.Thread(
-        target=lambda: (
-            time.sleep(1.0),
-            _thread_interrupt(),
-            time.sleep(1.5),
-            _thread_interrupt(),
-        ),
-        daemon=True,
-    )
+    import _thread
+
+    launched = threading.Event()
+    real_popen = backend.subprocess.Popen
+
+    class _WatchedPopen(real_popen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            launched.set()
+
+    monkeypatch.setattr(backend.subprocess, "Popen", _WatchedPopen)
+
+    def interrupt_twice():
+        launched.wait(timeout=30)
+        time.sleep(0.5)
+        _thread.interrupt_main()
+        time.sleep(1.0)  # long relative to the handler's one `print`
+        _thread.interrupt_main()
+
+    threading.Thread(target=interrupt_twice, daemon=True).start()
     started = time.monotonic()
-    interrupter.start()
     outcome = backend.run_backend([sys.executable, "-c", _DEAF_CHILD])
     elapsed = time.monotonic() - started
     captured = capfd.readouterr()
@@ -811,13 +827,6 @@ def test_repeated_interrupts_reach_the_escalation_while_the_child_runs(capfd):
     assert "press Ctrl-C again" in captured.err
     assert "terminating sleap-nn" in captured.err
     assert outcome.exit_code != 0
-
-
-def _thread_interrupt():
-    """Raise ``KeyboardInterrupt`` in the main thread, as a console Ctrl-C does."""
-    import _thread
-
-    _thread.interrupt_main()
 
 
 @pytest.mark.integration
