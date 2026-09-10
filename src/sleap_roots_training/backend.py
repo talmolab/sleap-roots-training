@@ -6,9 +6,10 @@ libraries, and a subprocess additionally keeps Lightning's process-level side ef
 (signal handlers, CUDA init, ``sys.exit``) out of this CLI's process while handing us the
 backend's exit status for free.
 
-Nothing here imports ``sleap_nn``. The module is base-install safe and stdlib-only, so the
-cross-platform CI matrix -- which never installs the ``train`` extra -- exercises every
-path in it through stub executables.
+Nothing here imports ``sleap_nn``. The module is **base-install safe** -- its only
+non-stdlib imports are ``omegaconf`` and this package's own ``config`` module, both of which
+the base install already provides -- so the cross-platform CI matrix, which never installs
+the ``train`` extra, exercises every path in it through stub executables.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import NamedTuple, Optional
 
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from omegaconf.errors import OmegaConfBaseException
 
 from sleap_roots_training import config as training_config
@@ -175,6 +176,25 @@ _GUARDED_RUN_DIR_NAMES = frozenset(
 #: absolute, and joining it discards everything to its left.
 _WINDOWS_RESERVED_CHARS = frozenset('<>:"|?*')
 
+#: The first printable code point. Everything below it is a control character, which no
+#: filesystem should be asked to carry in a name and no console can render.
+_FIRST_PRINTABLE_ORD = 32
+
+#: How long to wait for ``sleap-nn --version``. Generous, because the probe imports torch on
+#: some installs; bounded, because it must never be what makes a run hang.
+_VERSION_PROBE_TIMEOUT_SECONDS = 60
+
+#: POSIX convention: a process killed by signal N is reported as this plus N.
+_SIGNAL_EXIT_BASE = 128
+
+#: The largest value a process exit status can carry. Anything above wraps modulo 256, which
+#: is how a large Windows NTSTATUS would otherwise be reported as success.
+_MAX_EXIT_STATUS = 255
+
+#: What a POSIX shell reports for a SIGINT-terminated process (128 + SIGINT). Used for the
+#: Windows console-interrupt status too, so the same event yields the same code on both.
+_INTERRUPT_EXIT_CODE = 130
+
 #: Windows device names, which cannot be used as a directory component regardless of extension.
 _WINDOWS_RESERVED_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
@@ -251,7 +271,7 @@ def _check_portable_component(value: str, field: str) -> None:
             f"dot or space, got {value!r} (Windows strips trailing dots and spaces, so the "
             "same name would identify a different file there than here)"
         )
-    control = sorted(char for char in value if ord(char) < 32)
+    control = sorted(char for char in value if ord(char) < _FIRST_PRINTABLE_ORD)
     if control:
         raise BackendError(
             f"{field} contains control character(s) {control!r}; got {value!r}"
@@ -281,7 +301,7 @@ def _check_portable_component(value: str, field: str) -> None:
         )
 
 
-def _select(cfg, key: str, default=None):
+def _select(cfg: DictConfig, key: str, default=None):
     """Read ``key`` off ``cfg``, turning an interpolation failure into a named error.
 
     ``OmegaConf.select`` **resolves**, so a field carrying ``${oc.env:UNSET}`` or a dangling
@@ -307,7 +327,7 @@ def _select(cfg, key: str, default=None):
         raise BackendError(f"{key} could not be resolved: {error}") from error
 
 
-def _unresolved(cfg, key: str):
+def _unresolved(cfg: DictConfig, key: str):
     """Read ``key`` without resolving an interpolation stored there.
 
     ``OmegaConf.select`` resolves, which is right for a value this process *acts on* and wrong
@@ -337,7 +357,7 @@ def _unresolved(cfg, key: str):
     return node._value(), OmegaConf.is_interpolation(parent, leaf)
 
 
-def check_emitted_config_resolvable(cfg) -> None:
+def check_emitted_config_resolvable(cfg: DictConfig) -> None:
     """Refuse a config whose emitted form the backend could not load.
 
     Two different things are true at once and they have to be reconciled *before* anything is
@@ -505,7 +525,7 @@ def _purge_fabricated_evidence(run_dir: Path, before: set) -> str:
     return f" ({'; '.join(parts)})" if parts else ""
 
 
-def run_directory(cfg) -> Path:
+def run_directory(cfg: DictConfig) -> Path:
     """Return the directory the backend will train into, validating the run name.
 
     Args:
@@ -541,12 +561,12 @@ def run_directory(cfg) -> Path:
         # Absent is documented: the backend defaults to "." (config/trainer_config.py:368).
         ckpt_dir = "."
     elif not isinstance(ckpt_dir, str) or not ckpt_dir.strip():
-        # Malformed is NOT absent. `or "."` used to swallow "" / false / null alike, so a
-        # typo silently sent the run's provenance to ./<run_name> while the operator believed
-        # it was going somewhere else; a list or int reached `Path(str(...))` and produced a
-        # directory named "['a', 'b']". config.py type-checks seed, use_wandb and both
-        # preprocessing flags -- this field supplies the left-hand side of every path the
-        # run-directory guard rests on, so it gets the same treatment.
+        # Malformed is NOT absent, and must not be treated as it. A falsy-but-present value
+        # ("" / false / null) would otherwise send the run's provenance to ./<run_name> while
+        # the operator believes it is going somewhere else; a list or int would reach
+        # `Path(str(...))` and produce a directory named "['a', 'b']". config.py type-checks
+        # seed, use_wandb and both preprocessing flags -- this field supplies the left-hand
+        # side of every path the run-directory guard rests on, so it gets the same treatment.
         raise BackendError(
             f"trainer_config.ckpt_dir must be a non-empty string, got {ckpt_dir!r}"
         )
@@ -653,7 +673,7 @@ def emitted_config_path(run_dir: Path, override: Optional[Path]) -> Path:
     return override if override is not None else run_dir / EMITTED_CONFIG_NAME
 
 
-def wandb_enabled(cfg) -> bool:
+def wandb_enabled(cfg: DictConfig) -> bool:
     """Whether the config turns W&B on, read through the interpolation-safe accessor.
 
     Args:
@@ -668,7 +688,7 @@ def wandb_enabled(cfg) -> bool:
     return bool(_select(cfg, "trainer_config.use_wandb", default=False))
 
 
-def reject_inline_api_key(cfg) -> None:
+def reject_inline_api_key(cfg: DictConfig) -> None:
     """Refuse a config carrying a literal W&B credential.
 
     ``run`` writes configs into the run directory, and ``registry/publish.py`` uploads that
@@ -755,8 +775,9 @@ def _check_destination_name(destination: Path) -> None:
     """
     name = destination.name
     if not name:
-        # `--emitted-config ''` arrives here as `Path('.')`, which used to be reported as
-        # "must not name a file, but . is a directory" -- accurate and baffling.
+        # `--emitted-config ''` arrives here as `Path('.')`. Report the empty filename, not
+        # the directory it degenerates into: "must not name a file, but . is a directory" is
+        # accurate and baffling.
         raise BackendError(
             f"--emitted-config needs a filename; {str(destination)!r} names a directory"
         )
@@ -835,7 +856,9 @@ def _verify_staging(
         )
 
 
-def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) -> None:
+def stage_artifacts(
+    cfg: DictConfig, source_path: Path, run_dir: Path, resolved_dest: Path
+) -> None:
     """Write the run's two provenance artifacts, before the backend is started.
 
     The emitted config is written with LF line endings so its bytes are host-independent
@@ -910,12 +933,12 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
 def stage_run_metadata(run_dir: Path, binary: Path, version: Optional[str]) -> None:
     """Record what would have trained this run, before the backend is started.
 
-    Everything here was previously echoed to a console and persisted nowhere. For a repo
-    grading reproduce-or-beat against a PyTorch baseline the backend version is the single
-    most result-determining variable, and the resolved backend *path* is the only thing that
-    says which of several installed environments actually ran -- the interpreter-first search
-    can pick a different one than the operator expects, and visibility was the whole stated
-    mitigation for that.
+    For a repo grading reproduce-or-beat against a PyTorch baseline the backend version is
+    the single most result-determining variable, and the resolved backend *path* is the only
+    thing that says which of several installed environments actually ran -- the
+    interpreter-first search in :func:`resolve_sleap_nn` can pick a different one than the
+    operator expects, and visibility is that function's whole stated mitigation. A console
+    line does not survive the session; this does.
 
     The reason given for not stamping the version into the staged config -- byte-identity
     with ``emit -o`` -- binds ``emitted_config.yaml`` only, so a separate sidecar costs
@@ -1007,15 +1030,18 @@ def backend_version(binary: Path) -> Optional[str]:
     """
     try:
         completed = subprocess.run(
-            [str(binary), "--version"], capture_output=True, text=True, timeout=60
+            [str(binary), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=_VERSION_PROBE_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.SubprocessError):
         return None
     if completed.returncode != 0:
-        # A failed probe used to echo its own usage text *as* the version. Since this line is
-        # the substitute for stamping the version into an artifact, a wrong string here is
-        # worse than none -- and the flag only disappears on a future bump, which is exactly
-        # the case the probe exists for.
+        # A non-zero probe has said nothing about the version; its stdout is usage text, not
+        # a version string. Since this value is recorded as the run's backend identity, a
+        # wrong string is worse than none -- and the flag disappearing is exactly the future
+        # bump the probe exists to notice.
         return None
     reported = (completed.stdout or completed.stderr).strip()
     return reported or None
@@ -1070,15 +1096,17 @@ def _translate_status(returncode: int) -> BackendOutcome:
     if returncode < 0:
         signal_number = -returncode
         return BackendOutcome(
-            128 + signal_number,
+            _SIGNAL_EXIT_BASE + signal_number,
             f"sleap-nn train was terminated by signal {signal_number}",
         )
     if returncode == _STATUS_CONTROL_C_EXIT:
         # Windows never reports POSIX-style negative codes, so a console Ctrl-C arrives as this
         # NTSTATUS. Reporting it raw gave exit 1 and a 10-digit number no operator recognizes,
         # for the same event that yields 130 on POSIX.
-        return BackendOutcome(130, "sleap-nn train was interrupted (Ctrl-C)")
-    if returncode > 255:
+        return BackendOutcome(
+            _INTERRUPT_EXIT_CODE, "sleap-nn train was interrupted (Ctrl-C)"
+        )
+    if returncode > _MAX_EXIT_STATUS:
         return BackendOutcome(
             1, f"sleap-nn train exited with status {returncode} (reported as-is)"
         )
@@ -1142,10 +1170,9 @@ def run_backend(argv: list[str]) -> BackendOutcome:
                         flush=True,
                     )
                 elif interrupts == 2:
-                    # There has to be a ceiling. Every further Ctrl-C used to hit the same
-                    # `continue`, so a child that ignores SIGINT could not be aborted at all.
-                    # Escalating only on an explicit second request keeps the graceful path
-                    # for the ordinary case.
+                    # The ladder needs a ceiling, or a child that ignores SIGINT could not be
+                    # aborted at all. Escalating only on an explicit second request keeps the
+                    # graceful path for the ordinary case.
                     print("terminating sleap-nn", file=sys.stderr, flush=True)
                     process.terminate()
                 else:

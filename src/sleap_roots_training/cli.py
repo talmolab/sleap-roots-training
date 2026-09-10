@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 import click
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 from sleap_roots_training import __version__
 from sleap_roots_training import backend
@@ -652,7 +652,7 @@ def labeling_validate_command(package_dir: Path) -> None:
     )
 
 
-def _warn_on_dataset_mismatch(cfg) -> None:
+def _warn_on_dataset_mismatch(cfg: DictConfig) -> None:
     """Note when the recorded dataset identity is not what the backend will actually read.
 
     ``run`` promotes ``experiment.dataset.path`` into the published lineage record, so a config
@@ -784,8 +784,8 @@ def run_command(
         click.echo(outcome.note, err=True)
     if outcome.exit_code != 0:
         ctx.exit(outcome.exit_code)
-    # Name what was actually written. Hard-coding both constants told the operator that both
-    # files were in the run directory even when --resolved-config had put one elsewhere.
+    # Name what was actually written: hard-coding the constants would claim both configs are
+    # in the run directory even when --emitted-config put one elsewhere.
     click.echo(
         f"OK: training finished; {run_dir.resolve()} holds {backend.SOURCE_CONFIG_NAME} "
         f"and {backend.RUN_METADATA_NAME}, emitted config at {destination.resolve()}"
