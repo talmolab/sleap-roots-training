@@ -1078,12 +1078,20 @@ def test_the_source_config_is_written_before_the_emitted_one(
 
 
 def test_backend_version_reports_what_the_binary_prints(tmp_path):
-    """A real probe, not a stub: this is the only record of the backend for an early death."""
+    """A real probe, not a stub: this is the only record of the backend for an early death.
+
+    Runs on Windows too. The `.bat` pattern beside it was added to the *failure* test only,
+    so the success path -- the one asserting the reported version is the backend's real
+    output -- skipped on `nt`, leaving the two reporting lines in `backend_version` uncovered
+    there. Coverage on that leg was 99%, not the 100% previously reported.
+    """
     if os.name == "nt":
-        pytest.skip("POSIX: fabricating an executable stub")
-    stub = tmp_path / "sleap-nn"
-    stub.write_text("#!/bin/sh\necho 'sleap-nn 9.9.9'\n", encoding="utf-8")
-    stub.chmod(0o755)
+        stub = tmp_path / "sleap-nn.bat"
+        stub.write_text("@echo off\r\necho sleap-nn 9.9.9\r\n")
+    else:
+        stub = tmp_path / "sleap-nn"
+        stub.write_text("#!/bin/sh\necho 'sleap-nn 9.9.9'\n", encoding="utf-8")
+        stub.chmod(0o755)
     assert backend.backend_version(stub) == "sleap-nn 9.9.9"
 
 

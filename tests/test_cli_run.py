@@ -268,6 +268,108 @@ def test_run_echoes_the_skipped_deep_validation_note(backend_stub, run_config):
     assert "skipped" in result.output.lower()
 
 
+# --- the recorded dataset identity -------------------------------------------------------
+
+
+def test_run_notes_a_dataset_identity_the_backend_will_not_read(
+    backend_stub, run_config, tmp_path
+):
+    """`_warn_on_dataset_mismatch` had no test, no spec scenario and no task.
+
+    `VALID_CONFIG` sets `experiment.dataset.path` equal to `data_config.train_labels_path[0]`,
+    so every one of the ~40 `run` tests took the false branch and replacing the body with
+    `return None` failed none of them.
+
+    `run` promotes `experiment.dataset.path` into `source_config.yaml`, which
+    `registry/publish.py` uploads as the run's lineage record -- so a config where the two
+    disagree produces a faithful record of the *wrong* dataset. A note rather than a refusal:
+    the two are not required to be equal (a packaged split can legitimately differ), and
+    failing a multi-hour run over it would be a step too far.
+    """
+    path = run_config(
+        overrides={"experiment": {"dataset": {"path": "data/other.pkg.slp"}}}
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code == 0, result.output
+    assert "data/other.pkg.slp" in result.output
+    assert "data/train.pkg.slp" in result.output
+    assert backend_stub.calls, "a note, not a refusal: the run must still start"
+
+
+def test_a_scalar_train_labels_path_is_compared_rather_than_iterated(
+    backend_stub, run_config
+):
+    """A `str` is a sequence of *characters*, so comparing against it would match nothing.
+
+    The `isinstance(train_paths, str)` branch exists for exactly this shape and never
+    executed, which means the note would have fired spuriously on every scalar config.
+    """
+    path = run_config(
+        overrides={"data_config": {"train_labels_path": "data/train.pkg.slp"}}
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code == 0, result.output
+    assert "is not among" not in result.output
+
+
+def test_a_matching_dataset_identity_says_nothing(backend_stub, run_config):
+    """The quiet branch, pinned so the note cannot become unconditional noise."""
+    result = _invoke(["run", str(run_config())])
+    assert result.exit_code == 0, result.output
+    assert "is not among" not in result.output
+
+
+# --- reported paths, and reproducibility across invocations ------------------------------
+
+
+def test_run_reports_absolute_paths_for_a_relative_checkpoint_dir(
+    backend_stub, write_config, tmp_path
+):
+    """The spec says every path `run` reports SHALL be absolute; nothing held it.
+
+    Every existing test passes an already-absolute `ckpt_dir`, so `.resolve()` was a no-op in
+    all of them and dropping it failed nothing. With a relative `ckpt_dir` the printed path
+    is the only clue about where the files went, and a bare relative one is no clue at all.
+    """
+    path = write_config(
+        overrides={"trainer_config": {"ckpt_dir": "relckpt", "run_name": "r1"}}
+    )
+    result = _invoke(["run", str(path)])
+    assert result.exit_code == 0, result.output
+    reported = [
+        line
+        for line in result.output.splitlines()
+        if line.startswith(("config:", "run dir:"))
+    ]
+    assert len(reported) == 2, result.output
+    for line in reported:
+        assert Path(line.split(":", 1)[1].strip()).is_absolute(), line
+
+
+def test_a_second_run_reproduces_both_config_artifacts_byte_for_byte(
+    backend_stub, run_config, tmp_path
+):
+    """What the LF guarantee actually buys, asserted instead of only described.
+
+    The spec sentence said a subsequent invocation "recognizes them as unchanged rather than
+    as differing content", which reads as a comparison `run` performs -- and it performs
+    none. What is true, and what host-independent bytes are *for*, is that the second
+    invocation's config artifacts are identical to the first's, so anything that does compare
+    (a hash, a diff, `git status`) sees no change.
+
+    `run_metadata.yaml` is deliberately excluded: it carries a timestamp and is not part of
+    any byte-identity guarantee.
+    """
+    path = run_config()
+    assert _invoke(["run", str(path)]).exit_code == 0
+    run_dir = tmp_path / "ckpt" / "r1"
+    names = (backend.EMITTED_CONFIG_NAME, backend.SOURCE_CONFIG_NAME)
+    first = {name: (run_dir / name).read_bytes() for name in names}
+    assert _invoke(["run", str(path)]).exit_code == 0
+    for name, payload in first.items():
+        assert (run_dir / name).read_bytes() == payload
+
+
 # --- step order: every cheap failure happens before any side effect ----------------------
 
 
