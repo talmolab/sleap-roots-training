@@ -1485,6 +1485,17 @@ def test_the_destination_basename_gets_run_names_portability_rules(
         backend.stage_artifacts(cfg, source, run_dir, run_dir / name)
 
 
+def test_the_run_metadata_sidecar_is_also_guarded_against_the_override(
+    write_config, tmp_path
+):
+    """`run` writes it, so `--emitted-config` must not be able to land on top of it."""
+    cfg, source, run_dir = _staging_fixture(write_config, tmp_path)
+    with pytest.raises(backend.BackendError, match="--emitted-config"):
+        backend.stage_artifacts(
+            cfg, source, run_dir, run_dir / backend.RUN_METADATA_NAME
+        )
+
+
 def test_an_empty_destination_says_what_is_actually_wrong(write_config, tmp_path):
     """`--emitted-config ''` reported "must not name a file, but . is a directory"."""
     cfg, source, run_dir = _staging_fixture(write_config, tmp_path)

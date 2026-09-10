@@ -761,8 +761,13 @@ def run_command(
         raise click.ClickException(str(error))
 
     # Echo the resolved backend before a multi-hour run: this is the only signal that the
-    # interpreter-first search picked a different environment than the operator expected.
+    # interpreter-first search picked a different environment than the operator expected --
+    # and record it, so the signal survives the console session.
     version = backend.backend_version(binary)
+    try:
+        backend.stage_run_metadata(run_dir, binary, version)
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
     click.echo(f"backend: {binary}" + (f" ({version})" if version else ""))
     # Absolute: with a relative or drive-relative `ckpt_dir`, the printed path is the only clue
     # about where the files actually went, and a bare relative path is no clue at all.
@@ -782,8 +787,8 @@ def run_command(
     # Name what was actually written. Hard-coding both constants told the operator that both
     # files were in the run directory even when --resolved-config had put one elsewhere.
     click.echo(
-        f"OK: training finished; {run_dir.resolve()} holds {backend.SOURCE_CONFIG_NAME}, "
-        f"emitted config at {destination.resolve()}"
+        f"OK: training finished; {run_dir.resolve()} holds {backend.SOURCE_CONFIG_NAME} "
+        f"and {backend.RUN_METADATA_NAME}, emitted config at {destination.resolve()}"
     )
 
 

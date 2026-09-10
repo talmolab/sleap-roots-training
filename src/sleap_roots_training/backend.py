@@ -20,6 +20,7 @@ import sys
 import sysconfig
 import tempfile
 import unicodedata
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import NamedTuple, Optional
 
@@ -109,6 +110,11 @@ EMITTED_CONFIG_NAME = "emitted_config.yaml"
 #: dataset identity.
 SOURCE_CONFIG_NAME = "source_config.yaml"
 
+#: What this command records about the run *itself*, as opposed to its config. Not evidence:
+#: `run` writes it, so a retry legitimately overwrites it -- but it is guarded against
+#: ``--emitted-config`` for the same reason the other two are.
+RUN_METADATA_NAME = "run_metadata.yaml"
+
 #: What, found in a run directory, means a run already happened there -- each mapped to why,
 #: so the refusal can say something true about the marker it actually found. Every one of
 #: these is written by the backend, none by this command.
@@ -161,7 +167,7 @@ def _mangled(name: str) -> str:
 #: Names a run directory must never gain from ``--emitted-config``, as comparison keys. The two
 #: the reuse check reads as a completed run, plus the one artifact nothing else can reproduce.
 _GUARDED_RUN_DIR_NAMES = frozenset(
-    _mangled(name) for name in (*RUN_EVIDENCE, SOURCE_CONFIG_NAME)
+    _mangled(name) for name in (*RUN_EVIDENCE, SOURCE_CONFIG_NAME, RUN_METADATA_NAME)
 )
 
 #: Characters Windows forbids in a path component. ``/`` and ``\\`` are already excluded by the
@@ -899,6 +905,74 @@ def stage_artifacts(cfg, source_path: Path, run_dir: Path, resolved_dest: Path) 
             f"{error}{_purge_fabricated_evidence(run_dir, before)}"
         ) from error
     _verify_staging(run_dir, source_copy, source_bytes, before)
+
+
+def stage_run_metadata(run_dir: Path, binary: Path, version: Optional[str]) -> None:
+    """Record what would have trained this run, before the backend is started.
+
+    Everything here was previously echoed to a console and persisted nowhere. For a repo
+    grading reproduce-or-beat against a PyTorch baseline the backend version is the single
+    most result-determining variable, and the resolved backend *path* is the only thing that
+    says which of several installed environments actually ran -- the interpreter-first search
+    can pick a different one than the operator expects, and visibility was the whole stated
+    mitigation for that.
+
+    The reason given for not stamping the version into the staged config -- byte-identity
+    with ``emit -o`` -- binds ``emitted_config.yaml`` only, so a separate sidecar costs
+    nothing. Written **before** the subprocess starts, because the window it covers is a run
+    that dies during setup, which is the same window the emitted config exists for.
+
+    With ``source_config.yaml`` already giving the config bytes verbatim, this closes the code
+    and environment halves of the provenance gap tracked in #32; the dataset checksum and the
+    git commit stay there.
+
+    Args:
+        run_dir: The directory the backend will train into.
+        binary: The resolved ``sleap-nn`` console script.
+        version: What that backend reported, or ``None`` when it could not be asked -- which
+            is itself recorded, rather than the key being dropped.
+
+    Raises:
+        BackendError: The sidecar could not be written.
+    """
+    metadata = OmegaConf.create(
+        {
+            "sleap_nn_version": version,
+            "sleap_nn_path": str(binary),
+            "sleap_roots_training_version": _package_version(),
+            # Not reproducible by construction, and deliberately not part of any
+            # byte-identity guarantee -- `emitted_config.yaml` carries that one.
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    try:
+        _atomic_write(
+            run_dir / RUN_METADATA_NAME, OmegaConf.to_yaml(metadata).encode("utf-8")
+        )
+    except OSError as error:
+        raise BackendError(f"could not write the run's metadata: {error}") from error
+
+
+def _package_version() -> str:
+    """Return this package's version, preferring the installed distribution's metadata.
+
+    ``__version__`` is the fallback rather than the source: an editable install of a working
+    tree reports the distribution version, which is what a reader trying to reproduce the run
+    would go looking for.
+
+    Returns:
+        The version string.
+    """
+    from importlib import metadata
+
+    try:
+        return metadata.version("sleap-roots-training")
+    except (
+        metadata.PackageNotFoundError
+    ):  # pragma: no cover - needs an uninstalled tree
+        from sleap_roots_training import __version__
+
+        return __version__
 
 
 class BackendOutcome(NamedTuple):

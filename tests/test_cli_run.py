@@ -23,6 +23,7 @@ import pytest
 from click.testing import CliRunner
 from omegaconf import OmegaConf
 
+import sleap_roots_training
 from sleap_roots_training import backend, cli, config
 
 
@@ -159,6 +160,74 @@ def test_run_stages_artifacts_and_invokes_the_backend(
         "--config",
         str(resolved.resolve()),
     ]
+
+
+def test_run_records_the_backend_it_used_in_an_artifact(
+    backend_stub, run_config, tmp_path
+):
+    """The backend version was recorded in no file, only echoed to a console.
+
+    For a repo grading reproduce-or-beat against a PyTorch baseline, the backend version is
+    the single most result-determining variable, and the resolved backend *path* is what says
+    which of several installed environments actually ran. Both were echo-only, and the reason
+    given for not persisting the version -- byte-identity with `emit` -- binds
+    `emitted_config.yaml` only. A third sidecar breaks nothing.
+    """
+    result = _invoke(["run", str(run_config())])
+    assert result.exit_code == 0, result.output
+    metadata = OmegaConf.load(tmp_path / "ckpt" / "r1" / "run_metadata.yaml")
+    assert metadata.sleap_nn_version == "sleap-nn 0.2.0"
+    assert Path(metadata.sleap_nn_path) == tmp_path / "bin" / "sleap-nn"
+    assert metadata.sleap_roots_training_version == sleap_roots_training.__version__
+    assert (
+        metadata.started_at
+    )  # an ISO-8601 stamp; the value is not reproducible by design
+
+
+def test_the_run_metadata_exists_before_the_backend_is_started(
+    backend_stub, run_config, tmp_path
+):
+    """The window it covers is a run that dies during setup, so it cannot be written after.
+
+    That is the same window `emitted_config.yaml` exists for, and the same window the
+    docstring for the version probe concedes the console line was the only record of.
+    """
+    seen = []
+    real_init = backend_stub.__init__
+
+    def recording_init(self, argv, **kwargs):
+        seen.append((tmp_path / "ckpt" / "r1" / "run_metadata.yaml").is_file())
+        return real_init(self, argv, **kwargs)
+
+    backend_stub.__init__ = recording_init
+    try:
+        assert _invoke(["run", str(run_config())]).exit_code == 0
+    finally:
+        backend_stub.__init__ = real_init
+    assert seen == [True]
+
+
+def test_a_backend_that_cannot_report_a_version_still_records_the_rest(
+    backend_stub, run_config, tmp_path, monkeypatch
+):
+    """The probe is a diagnostic, never a gate -- and its failure is itself worth recording."""
+    monkeypatch.setattr(backend, "backend_version", lambda binary: None)
+    assert _invoke(["run", str(run_config())]).exit_code == 0
+    metadata = OmegaConf.load(tmp_path / "ckpt" / "r1" / "run_metadata.yaml")
+    assert metadata.sleap_nn_version is None
+    assert Path(metadata.sleap_nn_path) == tmp_path / "bin" / "sleap-nn"
+
+
+def test_the_run_metadata_does_not_disturb_the_emitted_configs_bytes(
+    backend_stub, run_config, tmp_path
+):
+    """The stated reason for not persisting the version was byte-identity with `emit`."""
+    path = run_config()
+    assert _invoke(["run", str(path)]).exit_code == 0
+    emitted = (tmp_path / "ckpt" / "r1" / "emitted_config.yaml").read_bytes()
+    out = tmp_path / "via_emit.yaml"
+    assert _invoke(["emit", str(path), "-o", str(out)]).exit_code == 0
+    assert emitted == out.read_bytes()
 
 
 def test_run_names_the_resolved_backend_before_starting(
