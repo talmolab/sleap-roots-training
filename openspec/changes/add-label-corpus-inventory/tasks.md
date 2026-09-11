@@ -60,7 +60,7 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       `seed-registry` command and before the `validate` command** in `cli.py` — a location
       none of `#48`'s four `cli.py` hunks touches. Reconcile with `#48`'s amendment moving
       archiving to a separate follow-up PR, which contradicts task 10.3.
-- [ ] 0.6 **(RED)** Test `inventory/vocab.py`: each of the **five** closed vocabularies is a
+- [ ] 0.6 **(RED)** Test `inventory/vocab.py`: each of the **six** closed vocabularies is a
       non-empty frozen collection with the members the spec enumerates, the resolution
       outcomes and the defect set are separate fields, and the module imports with `wandb`
       and `bloomctl` blocked by a `meta_path` finder — spec scenario *The vocabularies import
@@ -68,8 +68,8 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       `registry/chooser.py`'s `_vocab_from_contract_literal` shape guard.
 - [ ] 0.7 **(GREEN)** Define the five closed vocabularies as constants in a leaf
       `inventory/vocab.py`, importable without the registry or scan-metadata clients:
-      per-scan status, unresolved reason, per-field confidence, file classification, and the
-      collection resolution/defect pair. First because groups 1-6 assert vocabulary members,
+      per-scan status, unresolved reason, per-field confidence, file classification,
+      skeleton-diff outcome, and the collection resolution/defect pair. First because groups 1-6 assert vocabulary members,
       and defining it later means several modules carry local literals and a refactor.
 
 ## 1. Resolution, digest verification, containment
@@ -131,10 +131,14 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       with `sio.load_slp`**, using `open_videos=False` — a host without the share cannot
       resolve video backends, and `scripts/clean_pkg.py` documents that resolving them raises
       `PermissionError`.
-- [ ] 2.2 **(RED)** Test the counts distinguish user labels, predictions and **confirmed
-      absences**: assert user-instance and predicted-instance counts, frames carrying a user
-      instance, frames marked as a confirmed absence, and their sum — the frame set the
-      backend exports. `sleap_io` 0.7.1 has **no `Labels`-level** `user_instances` /
+- [ ] 2.2 **(RED)** Test the **five** counts and the property each is read from: user-instance
+      and predicted-instance counts, frames carrying a user instance, frames marked a confirmed
+      absence, and the exported frame set — read from the labels layer's own property, **not**
+      summed, since a frame can be both user-labelled and marked absent. Assert that a file
+      carrying **no** confirmed-absence marker reports that count **unreadable, not `0`**: the
+      marker is a real persisted property but no file in this corpus sets it and
+      `labeling/build_package.py` does not set it when it writes deliberately-empty frames, so
+      a `0` would be a positive false claim published to a public repo. `sleap_io` 0.7.1 has **no `Labels`-level** `user_instances` /
       `predicted_instances`, so sum over `LabeledFrame.user_instances` /
       `.predicted_instances`; `len(labels.user_labeled_frames)` is the exported set and
       counts negative frames, while `Labels.n_user_frames` does not.
@@ -188,7 +192,12 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       holds a duplicate list and `plate/download.py` a different one.
 - [ ] 3.6 **(RED)** Test that a scan is keyed by **plant code plus age plus device**, or by
       the manifest's scan identifier, and that a plant code alone never selects a single row —
-      one plant has two rows at Day 11, from the Fast and Slow scanners.
+      one plant has two rows at Day 11, from the Fast and Slow scanners. Test the **device
+      resolution**: the scan view exposes `scanner_id`, not a name, and the name is nullable
+      free text in `cyl_scanners`, while the path carries a suffix like `FastScanner` — so
+      read that table, normalise both sides, and match to an id. An unmatched suffix yields
+      `nothing_comparable`, never a silent collapse to code-and-age; add `cyl_scanners` to the
+      enumerated upstream reads, since `bloomctl` does not expose it.
 - [ ] 3.7 **(RED)** Test batching via `bloomctl`'s `fetch_in_batches`: a collection larger
       than one filter resolves every scan, **each request's rendered percent-encoded URL is
       under the measured budget** (assert the length, not just the split), and a code
@@ -235,7 +244,10 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
 - [ ] 4.5 **(RED)** Test that species comes from Bloom when the name says otherwise, that
       comparison is on the **species identifier** rather than the common name, and that two
       identifiers sharing a genus and species are one taxon and not mixed — `medicago` and
-      `alfalfa` both denote *Medicago sativa*. Where a common name is rendered, assert
+      `alfalfa` both denote *Medicago sativa* — and that the clause that actually fires is the
+      **null-binomial** one, since `species` constrains `(genus, species)` UNIQUE so two rows
+      cannot share a non-null binomial; assert such a pair is reported for confirmation rather
+      than silently merged. Where a common name is rendered, assert
       agreement with the contract library's `params._normalize_species` (private in
       `0.1.0a8`, with an empty alias map, so it is strip-and-lowercase); do **not** normalise
       via `resolve_params`, which fixes `mode="cylinder"` and raises when an age is absent.
@@ -322,10 +334,14 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
 
 ## 6. Redaction, emission, determinism
 
-- [ ] 6.1 **(RED)** Test that redaction is **structural**: a user segment appearing in no
-      enumerated substitution is still redacted, any network-path host segment is redacted,
-      and the marker set covers the share's user-directory marker **and** the
-      temp-directory shape a repair version's recorded path takes.
+- [ ] 6.1 **(RED)** Test that redaction is **structural**, against the two real shapes that
+      defeat a marker-only rule: a personal `C:/Users/<name>/OneDrive...` path, whose marker is
+      not the share's, and a `Z:/<name>/experiments/...` path with **no marker at all**, whose
+      user segment is the first segment after the drive. Both name individuals and both land
+      in the per-scan video-path column for every scan of their collection. Assert the marker
+      set is case-insensitive and covers `users/`, `Users/`, `home/`, the share's marker and
+      the temp-directory shape a repair records; assert any network-path host segment is
+      redacted; and assert the first-segment rule fires where no marker precedes it.
 - [ ] 6.2 **(RED)** Test the rule still covers `scripts/pull_tf_reference.py`'s `_REDACTIONS`
       as a floor — three substitutions over two entities — loading that script **by path** as
       `tests/test_scripts.py` does, since `scripts/` has no `__init__.py`.
@@ -390,7 +406,7 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       aggregate's shape, and the skeleton diff's shape and format — plus the decision file's
       shape, which exists in no document today and must be written from the requirement rather
       than migrated: the background design doc contains no decision-file shape at all.
-- [ ] 8.3 In the same section, define **all five** closed vocabularies, each as its own
+- [ ] 8.3 In the same section, define **all six** closed vocabularies, each as its own
       Markdown table under a stable `#### <Vocabulary name>` heading, first column the literal
       member value, second column whether rows carrying it contribute to
       reconciliation-derived fields. The doc-lock parses these tables; prose alone cannot be
@@ -494,6 +510,10 @@ would keep the change out of the archive, as it has for three other changes on `
   plate age column. File the upstream request.
 - **A public `normalize_species` in `sleap-roots-contracts`** → upstream request, so this
   repo stops importing a private symbol.
+- **Making the package builder set the confirmed-absence marker** — a one-line change in
+  `labeling/build_package.py`, in a different capability. Until it lands, the
+  confirmed-absence count is unreadable for every collection and this change reports it as
+  such rather than as zero.
 - **Splitting the pooled multi-species files** → separate change, informed by this change's
   experiment-to-species mapping with its per-species scan counts.
 - **Retiring `verify-skeleton-table.yml`** → separate change. This capability does *not*

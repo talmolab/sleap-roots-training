@@ -696,6 +696,16 @@ by the plant code together with the age and the device, or — for a generated p
 scan identifier its manifest carries. The plant code alone SHALL NOT be used to select a
 single scan row.
 
+The device SHALL be resolved rather than compared as a string. The scan view exposes a
+scanner **identifier**, not a name; the name lives in a separate scanner table as nullable
+free text, and the recorded path carries a free-text suffix such as `FastScanner`. The
+capability SHALL read that scanner table once, normalise both sides, and match the path's
+suffix to an identifier. A device string matching no scanner row SHALL make the scan
+unresolved with the reason `nothing_comparable`, never silently collapse to a plant-code-and-
+age key. A recorded path shape that carries **no** device — which is the shape the download
+tooling now generates — SHALL likewise not be forced to a single row where a plant has more
+than one scan at that age.
+
 An unresolved row SHALL record exactly one reason from this closed set:
 `no_identifying_code` (the path yields no usable plant code, including a plate path),
 `no_recoverable_path` (an embedded source has been cleared), `no_bloom_record` (the key is
@@ -750,6 +760,18 @@ otherwise corrupt the request silently.
 - **THEN** the row is unresolved with the reason `unparseable_date`
 - **AND** it is not classified `disagreed`
 
+#### Scenario: A device suffix is resolved to a scanner identifier
+
+- **WHEN** a recorded path carries a device suffix
+- **THEN** it is matched to a scanner identifier read from the scanner table, not compared
+  against the scan view directly
+
+#### Scenario: An unmatched device leaves the scan unresolved
+
+- **WHEN** a recorded path's device suffix matches no scanner row
+- **THEN** the scan is unresolved with the reason `nothing_comparable` rather than resolved on
+  code and age alone
+
 #### Scenario: A plant code alone does not select a scan
 
 - **WHEN** one plant code has two Bloom rows at the same age from different devices
@@ -782,11 +804,16 @@ consumer from mistaking it for evidence. Comparison SHALL be on the species
 identifier from Bloom's controlled species table, not on the free-text common name, and the
 emitted evidence SHALL carry the identifier, the common name, the genus and the species.
 
-Two distinct species identifiers sharing a genus and species SHALL be reported as the same
-taxon carrying both identifiers, not as a mixed collection. The common name is user-writable
-free text under a case-sensitive uniqueness constraint, so one taxon can acquire two names —
-`medicago` and `alfalfa` both denote *Medicago sativa* — and a name-based comparison would
-report a single-species collection as mixed.
+Two distinct species identifiers SHALL be reported as one taxon, not as a mixed collection,
+when their genus and species are equal **or when one carries a null or blank binomial and the
+other does not**. The second clause is the one that fires: the species table constrains
+`(genus, species)` to be unique, so two rows cannot share a non-null binomial, and the only
+way one taxon acquires two rows is a null or misspelled binomial on one side — where equality
+is false and a naive rule would report a single-species collection as mixed. Common names are
+user-writable free text under a separate uniqueness constraint, which is how `medicago` and
+`alfalfa` — both *Medicago sativa* — come to exist as two rows at all. A pair matched by the
+second clause SHALL be reported for a person to confirm rather than silently merged, since
+a null binomial is an upstream gap rather than evidence of sameness.
 
 Where a common name must be rendered for a consumer, it SHALL be normalised by the contract
 library's species-normalisation rule, which strips surrounding whitespace and lowercases.
@@ -838,6 +865,11 @@ expected output, not an error, and widening the vocabulary is not this capabilit
 
 - **WHEN** two species identifiers share a genus and species
 - **THEN** the collection reports one taxon carrying both identifiers and is not mixed
+
+#### Scenario: A null binomial does not make a collection mixed
+
+- **WHEN** two species identifiers differ and one carries a null or blank genus and species
+- **THEN** the pair is reported as one taxon for a person to confirm, not as `mixed_species`
 
 #### Scenario: A species outside the model-side vocabulary is reported, not rejected
 
@@ -916,15 +948,31 @@ it is ground truth the corpus could not previously record. A single total theref
 the labeling *request* for any collection published before labeling finished, not the labeled
 corpus.
 
-Four counts SHALL be reported, each named for what it counts and for the property it is read
-from: frames carrying at least one user instance, frames marked as a confirmed absence, their
-sum, which is the frame set the training backend exports, and the counts of user instances
-and predicted instances.
+Five counts SHALL be reported, each named for what it counts **and for the property it is
+read from**: frames carrying at least one user instance, frames marked as a confirmed
+absence, the frame set the training backend exports, and the counts of user instances and
+predicted instances. The exported set SHALL be read from the labels layer's own property for
+it rather than computed as a sum, because a frame can be both user-labelled and marked absent
+and would otherwise be counted twice.
+
+The confirmed-absence marker is a real persisted property, but **no file in this corpus sets
+it**, and the package builder that writes deliberately-empty frames does not set it either.
+A collection whose file carries no such marker SHALL therefore report the confirmed-absence
+count as **unreadable**, naming that the marker is absent, and SHALL NOT report it as `0`.
+Reporting zero would be a positive claim that the collection contains no confirmed absences,
+published into a public repository, when the truth is that the distinction was never recorded.
+Making the builder set the marker is a separate change, named in the follow-ups.
 
 #### Scenario: User and predicted instances are counted separately
 
 - **WHEN** a collection carries both user labels and model predictions
 - **THEN** the user instance count and the predicted instance count are reported separately
+
+#### Scenario: An absent confirmed-absence marker is unreadable, not zero
+
+- **WHEN** a labels file carries no confirmed-absence markers at all
+- **THEN** the confirmed-absence count is reported as unreadable, naming the absent marker,
+  and is not reported as `0`
 
 #### Scenario: A confirmed absence is counted as its own quantity
 
@@ -1132,8 +1180,18 @@ artifact's **recorded** path is historical metadata this capability does not con
 cannot re-scope, and may name a host or user segment no enumerated substitution covers. The
 rule SHALL redact the segment following a user-directory marker whatever its value, and any
 host segment of a network path, with the redaction floor's substitutions kept as a
-compatibility floor. The marker set SHALL include the share's user-directory marker and the
-temporary-directory shape a repair version's recorded path takes.
+compatibility floor. The marker set SHALL be case-insensitive and SHALL include `users/`,
+`Users/` and `home/`, the share's user-directory marker, and the temporary-directory shape a
+repair version's recorded path takes.
+
+A marker set alone is not sufficient, because the corpus holds recorded paths that carry a
+person's name with **no marker to follow**. The rule SHALL therefore also redact the **first
+segment** of a drive-rooted or UNC path whose first segment is not a recognised marker. Two
+real recorded paths defeat the marker rule on its own: one rooted at a personal
+`C:/Users/<name>/OneDrive…` directory, whose marker is not the share's, and one rooted at
+`Z:/<name>/experiments/…`, which has no marker at all. Both name individuals, and both land
+in the per-scan table's video-path column for every scan of their collection — six hundred
+rows for one of them — in a repository this specification elsewhere calls public.
 
 The rule governs **emitted artifacts**, which carry hundreds of recorded paths. Prose
 documentation naming the share root or host once is existing repository practice and is out
@@ -1153,6 +1211,17 @@ genotype, accession and experiment name — are emitted by decision.
 
 - **WHEN** a recorded path's user segment appears in no enumerated substitution
 - **THEN** it is redacted
+
+#### Scenario: A personal user directory with an unrecognised marker is redacted
+
+- **WHEN** a recorded path is rooted at a personal `C:/Users/<name>/` directory
+- **THEN** the name segment is redacted, though the marker is not the share's
+
+#### Scenario: A marker-less path has its first segment redacted
+
+- **WHEN** a drive-rooted recorded path's first segment is a person's name and no
+  user-directory marker precedes it
+- **THEN** that first segment is redacted
 
 #### Scenario: A temporary-directory path from a repair is redacted
 
@@ -1406,7 +1475,7 @@ The documentation SHALL carry the emitted schema of all three artifacts and **ev
 vocabulary this capability uses, and a test SHALL lock each documented vocabulary against the
 values the emitter writes, by set equality in both directions.
 
-Five vocabularies are closed and all five are load-bearing. A reader who cannot distinguish
+Six vocabularies are closed and all six are load-bearing. A reader who cannot distinguish
 an unregistered collection from an excluded one cannot tell an unverifiable collection from a
 suspect one:
 
@@ -1417,6 +1486,9 @@ suspect one:
   `convention`, `adjudicated`, `awaiting_adjudication`, `withheld`.
 - **file classification** — `promoted`, `superseded_version`, `unclassified`, `scratch`,
   `out_of_scope`.
+- **skeleton-diff outcome** — `verifies_row`, `contradicts_row`, `no_row`, `keying_gap`,
+  `root_type_out_of_vocabulary`. The emitter writes these into the diff, so they are closed
+  and locked like the rest.
 - **collection outcome**, which is two fields because the values are not mutually exclusive:
   an exclusive **resolution** outcome — `inventoried`, `unregistered`, `digest_mismatch`,
   `unverifiable_reference`, `path_unmappable`, `path_not_a_file`, `unreadable`,
@@ -1443,7 +1515,7 @@ regenerating and diffing only works if everyone regenerates to the same place.
 
 #### Scenario: Every documented vocabulary matches the emitter
 
-- **WHEN** each of the five documented vocabularies is compared with the values the emitter
+- **WHEN** each of the six documented vocabularies is compared with the values the emitter
   writes
 - **THEN** each is equal to its counterpart in both directions
 

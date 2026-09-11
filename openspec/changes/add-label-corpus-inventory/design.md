@@ -331,13 +331,16 @@ the `sleap-roots-contracts==0.1.0a8` pin.
   unresolved for want of a key. **The `mode` keying gap still lands**, because the node counts
   that demonstrate it are file-derived and the mode that selects the rows is a name-derived
   selector (D9) — so the finding this proposal leads with does not depend on plate Bloom
-  access. Reconciling plate metadata is a follow-up, and a better-scoped one once Bloom
-  carries a plate age.
+  access. Reconciling plate metadata is a follow-up, and would start from `plates_exp`
+  rather than from the gravi view.
 - **D17. A multi-species collection is a defect blocking its card, and the grounds are not
-  the ones first cited.** The earlier draft cited a "program decision" that label collections
-  are single-species; that decision is scoped in `docs/roadmap.md` to the **eight registered
-  collections**, not to the 25-30 this walks, so it cannot carry the rule. The grounds that
-  do: `LabelCard` carries one species and cannot express two; the training backend's
+  the ones first cited.** The earlier draft claimed the "program decision" that label
+  collections are single-species was scoped in `docs/roadmap.md` to the eight registered
+  collections and so could not carry the rule. That was a **misreading**: the roadmap states
+  it program-wide — "a `LabelCard` never represents more than one species" — and only the
+  *verification* obligation, that each of the eight be checked before backfilling, is scoped
+  to eight. This decision restates a standing program decision rather than substituting for
+  one, and adds three mechanical grounds: `LabelCard` carries one species and cannot express two; the training backend's
   `train_labels_path` is list-valued, so combining species inside one `.slp` is unnecessary;
   and the corpus's own generalist experiments are already organised as per-species
   directories.
