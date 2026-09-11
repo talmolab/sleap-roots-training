@@ -204,7 +204,10 @@ the `sleap-roots-contracts==0.1.0a8` pin.
   rows, and redaction strips what it claims to. The remaining collections are adjudicated and
   committed in a follow-up PR. `inventory/**` is added to `ci.yml`'s paths filter in the same
   change, since a commit touching only the artifacts would otherwise report a green check
-  meaning nothing ran, and `.gitattributes` pins `inventory/** text eol=lf`.
+  meaning nothing ran. `.gitattributes` already pins `*.md`, `*.yaml` and `*.csv` to
+  `eol=lf`, so pinning `inventory/**` is redundancy rather than a fix; the real gap is
+  `tests/fixtures/inventory/**`, which `inventory/**` cannot match because a slash-bearing
+  pattern is anchored to its own directory.
 - **D12. Emitted artifacts are redacted structurally, because the repo is public.** The
   recorded source paths carry an internal SMB hostname and a username, and
   `scripts/pull_tf_reference.py` already redacts those before committing captured payloads,

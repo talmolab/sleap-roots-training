@@ -23,8 +23,11 @@ which lands in its own `docs:` PR before this change (see Prerequisites). In bri
   one size-matches its registry copy. `#49` currently records these paths as unusable; that
   assessment reads the repair version.
 - **Bloom** is joinable, for cylinder scans, on the plant code embedded in each video path,
-  and supplies the species, plant identity and age the other two sources only imply. Its
-  plate schema carries no age at all, which is why plate is read from the file only.
+  and supplies the species, plant identity and age the other two sources only imply. Plate is
+  read from the file only because Bloom is not the source for our plate labels (eberrigan,
+  2026-09-10) — not because its schema lacks the columns; `plates_exp` carries `plant_age`
+  and a filename-keyed `scan_filename`. Whether Bloom holds rows for these legacy plate
+  captures has not been checked.
 
 ## What Changes
 
@@ -33,13 +36,13 @@ which lands in its own `docs:` PR before this change (see Prerequisites). In bri
 Add a **label-inventory** capability: a re-runnable command that enumerates every labels file
 under a walk root, resolves each promoted collection to a local file — digest-verified where
 a registry artifact exists — derives per-scan facts independently from the labels file and
-from Bloom, reconciles the two, and emits three artifacts.
+from Bloom, reconciles the two, and emits three kinds of artifact.
 
 ```
 sleap-roots-training inventory labels \
   --walk-root Z:/users/<owner>/SLEAP \
   --out inventory/ \
-  --decisions inventory/decisions.yaml \
+  --decisions inventory/decisions/ \
   --bloom-profile <profile>
 ```
 
@@ -98,10 +101,11 @@ remaining collections are adjudicated and committed in a follow-up PR.
 - **Fixing what it finds.** `skeletons.yaml`'s missing `mode` key and absent species rows,
   `#3`'s deferred plate models, the `RootType` gap for tip models, and splitting the pooled
   multi-species files are each a separate change. This capability reports.
-- **Reconciling plate scan metadata.** Bloom carries no plate age, and a plate path carries
-  no key to join on. Plate collections are inventoried from the file, with age and species
-  share-derived and marked as such. The `mode` keying gap still lands, because node counts are
-  file-derived — see `design.md` D16.
+- **Reconciling plate scan metadata.** Bloom is not the source for our plate labels, and a
+  plate path carries no plant code to join on. Plate collections are inventoried from the
+  file: ages from a curated `video_ages.csv` where one exists and from the collection name
+  otherwise, species from the name marked `name_derived`, and no plant count at all. The
+  `mode` keying gap still lands, because node counts are file-derived — see `design.md` D16.
 - **The model inventory.** A second change, sharing the share walk but feeding `#3` and the
   roadmap rather than `#49`.
 - **Train/test splits.** A split describes a training run, not a corpus.
@@ -121,13 +125,17 @@ remaining collections are adjudicated and committed in a follow-up PR.
 - **Affected tests:** new `tests/test_inventory_*.py`, including an `integration`-marked tier
   that exercises the real share, a real manifest digest and a real Bloom read. No existing
   test changes.
-- **Affected CI:** `.github/workflows/ci.yml` — add `inventory/**`, `README.md` and
-  `.claude/commands/**` to both paths filters, so the committed artifacts and the doc-locks
-  are actually run on the commits that can break them.
+- **Affected CI:** `.github/workflows/ci.yml` — add `inventory/**`, `README.md`,
+  `scripts/**` and `.claude/commands/**` to both paths filters, so the committed artifacts,
+  the doc-locks and the redaction floor's script are actually run on the commits that can
+  break them.
 - **Affected packaging:** `pyproject.toml` and `uv.lock` — see New dependency below.
-- **Affected repo config:** `.gitattributes` — pin `inventory/** text eol=lf`, since
-  `* text=auto` plus `core.autocrlf=true` would otherwise check the committed artifacts out
-  with CRLF on Windows and break the byte-identity guarantee.
+- **Affected repo config:** `.gitattributes` — pin `inventory/**` and
+  `tests/fixtures/inventory/**` to `text eol=lf`. Stated accurately: `*.md`, `*.yaml` and
+  `*.csv` are **already** pinned there, so the first is redundancy against a future narrowing
+  of those rules rather than a gap being closed. The fixture path is a real gap: a
+  `.gitattributes` pattern containing a slash is anchored to its own directory, so
+  `inventory/**` never matches `tests/fixtures/inventory/`.
 - **Affected docs:** `README.md` (a new operator section following the `seed-registry`
   pattern, with the full option surface in a fenced command line so the doc-lock can see it,
   plus a link to the guide from the doc list, which currently omits it),

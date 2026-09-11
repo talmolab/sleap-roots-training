@@ -12,8 +12,8 @@ five places the green-every-commit rule is written; see `design.md` Prerequisite
 honestly what it buys: because PRs here are squash-merged, the pair collapses on merge, so
 the labels serve *branch* review, not `main`'s history.
 
-**Push discipline.** The unit is the **group**, not a pair: groups 1, 3, 4 and 6 fan several
-REDs into one implementation commit. Push each group's REDs together with that group's GREEN
+**Push discipline.** The unit is the **group**, not a pair: every group from 0 to 7 fans
+several REDs into its implementation commit, and groups 5 and 6 land two each. Push each group's REDs together with that group's GREEN
 in one `git push`, so CI evaluates the pushed head and not an intermediate red state. A RED
 pushed alone against an open PR produces a genuine red run — permitted, but noisy. There is
 no branch protection on `main`, so a red run cannot block a merge.
@@ -41,25 +41,32 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       `bloomctl>=0.1.0` resolves to nothing (only `0.1.0aN` is published; the local `0.1.0a6`
       is changelogged but never released), and the cap is tight because the symbols used are
       private internals of a pre-release CLI. Record in `pyproject.toml`, beside the pin,
-      that it can re-floor this repo's exact `sleap-roots-contracts` pin.
+      that it can re-floor this repo's exact `sleap-roots-contracts` pin. Add `respx` (or an
+      equivalent `httpx` transport double) to the **dev group** in the same commit, since
+      task 3.2's read-method assertion needs a real transport and 3.1's attribute double
+      issues no HTTP.
 - [ ] 0.3 Record the placement decision in a comment on the pin: **core, not an extra**, on
       two grounds — `pyproject.toml`'s stated rule that extras are for heavy or
       platform-specific *backends*, and the fact that `ci.yml` runs
       `uv sync --locked --group dev` with no `--extra`, so an extra would leave every
       inventory test failing on import in all six matrix legs. State the accepted cost:
       +25 transitive packages over the core set, including compiled `cryptography`/`cffi`.
-- [ ] 0.4 **Its own commit, and it self-tests.** Add `inventory/**`, `README.md` and
-      `.claude/commands/**` to **both** the `pull_request` and `push` paths filters in
-      `.github/workflows/ci.yml`, and add `inventory/** text eol=lf` to `.gitattributes`.
-      Without the first, the artifact commit in group 9 and the doc-locks in group 8 report a
-      green check meaning nothing ran. Without the second, `* text=auto` plus
-      `core.autocrlf=true` checks the committed artifacts out with CRLF on the
-      `windows-latest` leg and breaks the byte-identity guarantee. `ci.yml` is itself inside
-      its own paths filter, so this commit gets a real run.
+- [ ] 0.4 **Its own commit, and it self-tests.** Add `inventory/**`, `README.md`,
+      `scripts/**` and `.claude/commands/**` to **both** the `pull_request` and `push` paths
+      filters in `.github/workflows/ci.yml`. Without them the artifact commit in group 9, the
+      doc-locks in group 8, and task 6.2's assertion against `scripts/pull_tf_reference.py`
+      all report a green check meaning nothing ran. `ci.yml` is itself inside its own paths
+      filter, so this commit gets a real run.
+      Also add `inventory/** text eol=lf` and `tests/fixtures/inventory/** text eol=lf` to
+      `.gitattributes`. State the reason accurately: `*.md`, `*.yaml` and `*.csv` are
+      **already** pinned there, so this is redundancy against a future narrowing of those
+      rules, not a gap being closed — except for the fixture path, where a `.gitattributes`
+      pattern containing a slash is anchored to its own directory, so `inventory/**` would
+      never have matched `tests/fixtures/inventory/`.
 - [ ] 0.5 Confirm `#48` has merged, or keep the `inventory` group **after the
       `seed-registry` command and before the `validate` command** in `cli.py` — a location
       none of `#48`'s four `cli.py` hunks touches. Reconcile with `#48`'s amendment moving
-      archiving to a separate follow-up PR, which contradicts task 10.3.
+      archiving to a separate follow-up PR, which contradicts task 10.4.
 - [ ] 0.6 **(RED)** Test `inventory/vocab.py`: each of the **six** closed vocabularies is a
       non-empty frozen collection with the members the spec enumerates, the resolution
       outcomes and the defect set are separate fields, and the module imports with `wandb`
@@ -103,9 +110,10 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       `monkeypatch.setattr(..., boom)` calls, not an allowlisted double, so this harness is
       new work.
 - [ ] 1.7 **(RED)** Test with `isolate_wandb_env` that **with an injected registry client the
-      run consults no ambient credential** — no `WANDB_API_KEY` / `WANDB_ENTITY` / `NETRC`
-      read, no netrc under the repointed `HOME` — so a host-configured key can neither
-      authorise nor mask a failure. Absent-registry behaviour is 1.9, not this task.
+      run consults no ambient **credential** — no `WANDB_API_KEY` read, no `NETRC`, no netrc
+      under the repointed `HOME` — so a host-configured key can neither authorise nor mask a
+      failure. `WANDB_ENTITY` is configuration, not a credential, and the spec makes it the
+      only source for the entity, so this task must **not** assert its absence. Absent-registry behaviour is 1.9, not this task.
 - [ ] 1.8 **(RED)** Test that a promoted collection with **no registry counterpart** is
       inventoried, reported `unregistered` with `share_only` fields, distinctly from a digest
       mismatch.
@@ -186,6 +194,13 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       import-graph one: `bloomctl/cyl/__init__.py` does `from .ingest import
       batch_ingest_result`, so `bloomctl.cyl.ingest` is in `sys.modules` after any read
       import — verified against `bloomctl==0.1.0a5`.
+- [ ] 3.4a **(RED)** Extend the drift guard to the **contract library**, not just the
+      scan-metadata client: `params._normalize_species` is private, ships an empty alias map,
+      and is the rule the spec defers to. Either assert agreement with a locally stated
+      strip-and-lowercase rule — mirroring how `redact.py` is held against
+      `scripts/pull_tf_reference.py` — or import it behind the same enumerated-symbol guard.
+      It is a second pinned pre-release library reached through a private name, which is the
+      exact risk D13 spends four paragraphs mitigating for the first.
 - [ ] 3.4 **(RED)** Test the drift guard: each enumerated upstream symbol
       (`_postgrest.fetch_in_batches`, `_postgrest.ID_FILTER_BUDGET_CHARS`,
       `cyl.download.CSV_COLUMNS`, `auth.make_authed_client`) is present in the installed
@@ -369,15 +384,23 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       table makes "regenerate and diff" show a clean diff over data no longer produced. Assert
       the aggregate records the digest of the decision content the run read, since CI cannot
       regenerate the artifacts to check them.
-- [ ] 6.6 **(RED)** Test determinism and idempotence: no timestamp, hostname or run
+- [ ] 6.6 **(RED)** Test determinism against **recorded** source responses, not live ones:
+      Bloom and the registry are inputs that change without any local change, so a byte-identity
+      assertion that re-derives against them turns red for reasons unrelated to this code and
+      only the share-holder can diagnose it. State that the fixtures replay. Then determinism
+      and idempotence: no timestamp, hostname or run
       identifier; the spec's declared sort order; `LF` line endings; **every emitted path
       rendered with forward slashes whatever the host**; two runs identical; a new promoted
       collection leaves the others byte-identical; and the decision file counted as an input,
       so an unchanged verdict set reproduces the bytes.
 - [ ] 6.7 **(RED)** Test byte-identity **across operating systems** against a **committed
-      golden** in `tests/fixtures/inventory/`, so every matrix leg compares the same bytes,
-      and give the fixture a `.csv`/`.yaml` extension so `.gitattributes`' explicit `eol=lf`
-      covers it — a `text=auto` extension is checked out CRLF on Windows under
+      golden** in `tests/fixtures/inventory/`, so every matrix leg compares the same bytes.
+      Build that golden **here**, from the synthetic fixtures this group already uses — task
+      9.3 later promotes the real worked-example artifacts alongside it, but 6.7 must not
+      depend on a file group 9 produces, or group 6's push is red by construction. Give the
+      fixture a `.csv`/`.yaml` extension **and** ensure 0.4 pinned
+      `tests/fixtures/inventory/**`, since a slash-bearing `.gitattributes` pattern is
+      anchored to its own directory — a `text=auto` extension is checked out CRLF on Windows under
       `core.autocrlf`. Assert the emitter writes `LF` explicitly: `csv.writer`'s default
       `lineterminator` is `\r\n`, which is what `bloomctl/cyl/download.py` uses.
 - [ ] 6.8 **(RED)** Test atomic emission **over an existing destination**, which is the normal
@@ -421,7 +444,8 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       than migrated: the background design doc contains no decision-file shape at all.
 - [ ] 8.3 In the same section, define **all six** closed vocabularies, each as its own
       Markdown table under a stable `#### <Vocabulary name>` heading, first column the literal
-      member value, second column whether rows carrying it contribute to
+      member value; and for the **reconciliation-status table only**, a second column stating
+      whether rows carrying it contribute to
       reconciliation-derived fields. The doc-lock parses these tables; prose alone cannot be
       locked.
 - [ ] 8.4 State that species comes from Bloom and may fall outside `SPECIES_VOCAB`; that the
