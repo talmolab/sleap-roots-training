@@ -144,7 +144,13 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       counts negative frames, while `Labels.n_user_frames` does not.
       `tests/test_labeling_package.py` asserts such empty frames really occur, and
       `labeling/build_package.py` documents them as ground truth.
-- [ ] 2.3 **(RED)** Test the four recorded-path shapes: a **referenced** path yielding code,
+- [ ] 2.3 **(RED)** Test the five recorded-path shapes, and record that one of them has no
+      instance on the share: a **legacy cylinder** path whose filename is not a plant code
+      (`1026_E_R1.h5`) yields `no_identifying_code` — this is the shape of the cylinder half of
+      the keying gap, so it is not marginal — and the **generated** shape is specified from the
+      builder's contract, not from an observed file, because no sample manifest exists anywhere
+      under the walk root; test it against a synthetic package and assert a generated package
+      is distinguished from a plain embedded one by that manifest. Then the original four: a **referenced** path yielding code,
       age, date and device; an **embedded** package whose code comes from the embedded source
       rather than the package's own filename, including the list form and the deliberately
       cleared form; a **generated** package whose scan identifier comes from the sample
@@ -319,9 +325,14 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       content byte-unchanged. Assert `rationale` and the deciding person are read as **data**
       and appear in no emitted artifact.
 - [ ] 5.5 **(RED)** Test the diff's five outcomes and that nothing is written back.
-- [ ] 5.6 **(RED)** Test the selectors: species, root type, mode and age are derived from the
-      collection's name and the file's observed ages, used for selection only, and appear in
-      no emitted evidence; `seminal` / `sr` / `seminal_root` select the `crown` row; and a
+- [ ] 5.6 **(RED)** Test the selectors and their **search order**: for each selector
+      independently, the first match scanning the labels filename, then each ancestor directory
+      from nearest to the walk root. Both directions fail somewhere in this corpus — a
+      filename-only rule finds no mode for `labels_ONLYarabidopsis_primary_6nodes` (its `cyl`
+      token is in the directory) and a directory-only rule reads
+      `labels_canola_pennycress_arabidopsis` as arabidopsis because of the directory it sits
+      in. A selector no token yields leaves the collection with no comparable row. Assert they
+      are used for selection only and appear in no emitted evidence; `seminal` / `sr` / `seminal_root` select the `crown` row; and a
       root type outside the contract vocabulary (`tertiary`, `adventitious`) is reported
       `root_type_out_of_vocabulary` rather than as a missing row.
 - [ ] 5.7 **(RED)** Test that a mode-dependent node count is a **keying gap**, not a
@@ -387,7 +398,9 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       directory — with the entity read from `WANDB_ENTITY` as `seed-registry` does. Include a
       first run that promotes nothing: an aggregate with an entry per enumerated file, no
       per-scan table, an empty skeleton diff, exit `0`.
-- [ ] 7.2 **(RED)** Test the exit codes: `0` on completion, `3` when the registry or share is
+- [ ] 7.2 **(RED)** Test that `--bloom-profile` is **optional**: absent one, the run completes
+      at exit `0` with every cylinder scan unresolved and the file-derived evidence and the
+      skeleton diff still emitted. Then the exit codes: `0` on completion, `3` when the registry or share is
       absent (naming it, emitting nothing), `4` when the run completed with a failing
       collection; and that absent Bloom emits the per-scan tables, the diff, and file-derived
       aggregate fields while withholding reconciled ones.

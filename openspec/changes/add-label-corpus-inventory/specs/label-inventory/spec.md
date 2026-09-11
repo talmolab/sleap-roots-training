@@ -70,8 +70,10 @@ so a basename-derived slug would let one promoted collection silently overwrite 
 per-scan table and exit `0` — and the worked example's own file exists in three directories
 at one version.
 
-The aggregate SHALL carry one **aggregate entry** per enumerated labels file, and derived
-files SHALL be reported as a count per directory rather than individually. An artifact
+The aggregate SHALL carry one **aggregate entry** per enumerated labels file, plus a
+directory-level section recording each walked directory that held no labels file, with its
+reason, and a count of derived files per directory. A skipped directory has no labels file, so
+no per-file entry can hold it, and derived files are counted rather than listed. An artifact
 carrying an entry for each of eighteen thousand files could not be reviewed in a pull
 request, which is the stated reason for committing it at all. There is no
 fourth artifact: a file's classification, a collection's outcome, its skip reason, its
@@ -83,7 +85,11 @@ reconciliation-derived fields are withheld still emits its aggregate entry, its 
 fields, and the reason each withheld field is absent.
 
 The option surface SHALL be `--walk-root` (required), `--out` (default `inventory/`),
-`--decisions` (default `inventory/decisions.yaml`) and `--bloom-profile`. The registry
+`--decisions` (default `inventory/decisions.yaml`, accepting a file or a directory) and
+`--bloom-profile` (**optional**). Scan metadata is not a required source: absent a profile the
+run completes, every cylinder scan is unresolved for want of a record, and the file-derived
+evidence and the skeleton diff are emitted as usual. Only the registry and the share are
+required. The registry
 entity SHALL be read from `WANDB_ENTITY` rather than a flag, following the `seed-registry`
 command. Every option SHALL be documented, and the documentation SHALL be locked against the
 implemented surface.
@@ -174,7 +180,8 @@ never writes stays in force until a person changes it, and naming the newer vers
 stale promotion visible in the diff rather than silently authoritative.
 
 Only a **promoted** file SHALL be read, digest-verified, reconciled against scan metadata, or
-entered in the skeleton diff. Every other enumerated file SHALL still receive an aggregate
+entered in the skeleton diff; every enumerated file that is not promoted SHALL carry the
+resolution outcome `not_promoted`, whatever its classification. Every other enumerated file SHALL still receive an aggregate
 entry recording its classification, its path and its version family, so that nothing on the
 share is silently absent from the inventory.
 
@@ -478,16 +485,22 @@ and SHALL emit nothing.
 Recorded paths use several prefixes for one tree, and the mapping SHALL be this enumeration
 rather than an implementer's choice:
 
-| recorded prefix | resolves to |
+| recorded prefix | what it names |
 | --- | --- |
-| `D:/SLEAP/` | `<walk-root>/` |
-| `//<smb-host>/hpi_dev/users/` | `<share>/users/` |
-| `Z:/users/` | `<share>/users/` |
-| `Z:users/` (drive-relative) | `<share>/users/` |
+| `D:/SLEAP/` | the walk root |
+| `//<smb-host>/hpi_dev/users/<owner>/SLEAP/` | the walk root |
+| `Z:/users/<owner>/SLEAP/` | the walk root |
 
-Each prefix SHALL be recognised in both its backslash and its forward-slash rendering,
-because artifact metadata records the backslash form while the labels layer returns a
-normalised forward-slash form. `<smb-host>` is the internal host segment the redaction floor
+All three name the same directory, which is the supplied walk root. A recorded path SHALL be
+resolved by stripping whichever prefix it carries and joining the remainder onto that walk
+root. The mapping therefore needs no second root, and the option surface supplies none;
+`<smb-host>` is the internal host segment the redaction floor covers and `<owner>` is the
+walk root's own user segment.
+
+Each prefix SHALL be recognised in three renderings — forward slash, backslash, and the
+drive-relative form `Z:users/...` — because artifact metadata records the backslash form
+while the labels layer returns a normalised forward-slash form. The drive-relative form is a
+rendering of the third prefix, not a fourth prefix. `<smb-host>` is the internal host segment the redaction floor
 already covers. An unrecognized prefix SHALL be a reported failure rather than a silent
 miss, and the mapping SHALL be evaluated under Windows path semantics on every platform so
 that a run on one operating system resolves a recorded path as another would.
@@ -543,8 +556,8 @@ against a file that may be intact.
 #### Scenario: A share collection absent from the registry is inventoried
 
 - **WHEN** a promoted collection has no matching registry entry
-- **THEN** it is inventoried, reported as unregistered, and its derived fields are marked
-  `share_only`
+- **THEN** it is inventoried, reported as unregistered, and its **share-derived** fields are
+  marked `share_only`, while its Bloom-derived fields keep their own confidence
 
 #### Scenario: Unregistered is distinct from failing verification
 
@@ -591,6 +604,13 @@ against a file that may be intact.
 - **WHEN** two collections' recorded paths resolve to the same share file
 - **THEN** both are reported, naming the shared path and marking the pair as sharing bytes
 
+#### Scenario: Every recorded prefix resolves against the supplied walk root
+
+- **WHEN** the same file is named by each of the three recorded prefixes, in each of the three
+  renderings
+- **THEN** all nine resolve to one path beneath the supplied walk root, and no second root is
+  required
+
 #### Scenario: An absent registry or share is named and nothing is emitted
 
 - **WHEN** either the registry or the share is unavailable
@@ -598,9 +618,10 @@ against a file that may be intact.
 
 ### Requirement: One Collection's Failure Is Contained
 
-The capability SHALL process collections in isolation. A failure attributable to one
+The capability SHALL process collections in isolation. A failure or hold attributable to one
 collection — a digest mismatch, an unmappable or unreadable path, an internally inconsistent
-count, or exceptions among its scans — SHALL affect that collection's output only, and SHALL
+count, exceptions among its scans, or fields withheld pending adjudication — SHALL affect that
+collection's output only, and SHALL
 NOT prevent any other collection from being inventoried and emitted.
 
 The corpus is the unit of interest and its members fail independently. A run that abandons
@@ -644,6 +665,19 @@ are the only ones whose skeleton rows are already independently verified — los
 remove the diff's sole confirmed anchor — and generated packages are the shape every future
 package takes.
 
+A **legacy cylinder** path is a further shape: it records a directory carrying the age and no
+device, and a filename that is not a plant code — `1026_E_R1.h5`, `5830_2.h5`. Its scans
+SHALL be unresolved with the reason `no_identifying_code`. It is not marginal: it is the shape
+of the cylinder half of the keying gap.
+
+The **generated** shape has no instance anywhere under the walk root — no sample manifest
+exists there — so it is specified from the package builder's contract rather than from an
+observed file, and its scenarios SHALL be tested against a synthetic package. That epistemic
+difference SHALL be recorded, because distinguishing derivations by provenance is this
+capability's whole discipline. A generated package is also an *embedded* one, since the
+builder embeds images as it writes; the two are told apart by the sample manifest beside the
+labels file.
+
 The capability SHALL open labels files without resolving their video backends, because a
 host without the share attached cannot resolve them and does not need to.
 
@@ -657,6 +691,11 @@ host without the share attached cannot resolve them and does not need to.
 - **WHEN** an embedded package's video is parsed
 - **THEN** the plant code is taken from the embedded source path, not from the package's own
   filename
+
+#### Scenario: A legacy cylinder filename is not a plant code
+
+- **WHEN** a recorded path's filename is a legacy identifier rather than a plant code
+- **THEN** its scans are unresolved with the reason `no_identifying_code`
 
 #### Scenario: A cleared embedded source is unresolved with its own reason
 
@@ -894,8 +933,8 @@ The invariant that scan count is at least plant count SHALL be asserted **for cy
 collections only**, and SHALL be justified on the cylinder record structure: the cylinder
 scan view joins one plant per scan row, so the bound follows by counting and not from
 biology. It does **not** hold for plate, where one capture carries many sections and each
-section many plants, so plant count may exceed scan count legitimately. A plate collection
-SHALL NOT have its aggregate withheld on that account.
+section many plants, so plant count may exceed scan count legitimately. A plate collection emits no plant count
+at all, so the guard has nothing to act on there.
 
 The reported plant count SHALL be documented as a count of distinct Bloom plant records,
 which is not a botanical plant count under a capture mode that places several plants in one
@@ -993,13 +1032,19 @@ waiting on, and would make this capability's output weaker than the check it com
 which needs no Bloom at all.
 
 A reconciliation-derived field SHALL be computed from agreed scans only, and SHALL carry the
-count of scans that contributed and the count excluded. A field SHALL be withheld in exactly
-two cases: no scan agreed, or a disagreement in the field's inputs is awaiting adjudication.
+count of scans that contributed and the count excluded. A field computed wholly from agreed
+scans SHALL carry the confidence `verified`, which this specification uses for that and for
+nothing else. A field SHALL be withheld in exactly
+three cases: no scan agreed; a disagreement in the field's inputs is awaiting adjudication;
+or the field is a Bloom-derived count on a cylinder collection whose counts are internally
+inconsistent, which carries the confidence `withheld` and the outcome `count_inconsistent`.
 An unresolved scan SHALL NOT withhold anything. Excluded scans SHALL be surfaced in the
 per-scan table and, where disagreed, in the adjudication queue.
 
 A collection with no scan agreed SHALL be emitted as an entry recording that, never as a
-verified aggregate of zero.
+verified aggregate of zero. Where a collection's capture mode admits no reconciliation at all
+— plate, which reads no scan metadata — that state is expected and SHALL NOT be reported as
+the defect `no_agreed_scan`, which exists to flag a cylinder collection whose join failed.
 
 #### Scenario: File facts survive a Bloom failure
 
@@ -1021,8 +1066,19 @@ verified aggregate of zero.
 
 #### Scenario: A collection with no agreed scan is not a verified zero
 
-- **WHEN** no scan in a collection is agreed
+- **WHEN** no scan in a cylinder collection is agreed
 - **THEN** the collection is emitted as an entry recording that it could not be verified
+
+#### Scenario: A mode that admits no reconciliation is not a defect
+
+- **WHEN** a plate collection has no agreed scan because its mode reads no scan metadata
+- **THEN** the defect `no_agreed_scan` is not reported against it
+
+#### Scenario: An absent scan-metadata profile still completes the run
+
+- **WHEN** no scan-metadata profile is supplied
+- **THEN** the run completes at exit `0`, every cylinder scan is unresolved, and the
+  file-derived evidence and the skeleton diff are emitted
 
 ### Requirement: The Age Window Is Emitted As An Observed Range With Its Provenance
 
@@ -1273,6 +1329,12 @@ rather than admitted silently, because the structural filter cannot exclude it.
 - **WHEN** a directory beneath the root holds labels files while the root itself holds none
 - **THEN** those files are enumerated
 
+#### Scenario: A skipped directory is recorded outside the per-file entries
+
+- **WHEN** a walked directory holds no labels file
+- **THEN** it appears in the aggregate's directory-level section with its reason, not as a
+  per-file entry
+
 #### Scenario: A directory with no labels file is skipped and reported
 
 - **WHEN** a directory holds no labels file
@@ -1308,14 +1370,27 @@ rather than admitted silently, because the structural filter cannot exclude it.
 ### Requirement: The Skeleton Table Is Diffed, Never Used As A Source Of Values
 
 The capability SHALL emit a diff between what the corpus demonstrates and what the skeleton
-table asserts, and SHALL NOT read that table to fill in a value. Each promoted collection
-SHALL be reported as verifying a row, contradicting a row, having no row, exposing a keying
-gap, or naming a root type the contract vocabulary does not contain.
+table asserts, and SHALL NOT read that table to fill in a value. Each promoted collection **that was
+read** SHALL be reported as verifying a row, contradicting a row, having no row, exposing a
+keying gap, or naming a root type the contract vocabulary does not contain. A promoted
+collection excluded before reading — a digest mismatch, an unmappable path, an unreadable
+file — SHALL be reported in the diff as not comparable, naming its resolution outcome, and
+SHALL NOT be assigned one of the five; it has no node count to compare, and no per-scan table
+SHALL be emitted for it.
 
 Selecting a row needs the table's three keys, and none of them is available from scan
 metadata. Species, root type, capture mode and age SHALL therefore be derived from the
 collection's name and the file's observed ages, used **only** to select the row to compare
-against, and SHALL NOT be emitted as evidence. A name-derived value is adequate to choose
+against, and SHALL NOT be emitted as evidence.
+
+"The collection's name" SHALL mean an ordered, per-selector search: for each selector
+independently, the first match scanning the labels **filename**, then each ancestor directory
+name from nearest to the walk root. Neither source alone suffices, and the corpus proves both
+directions — a filename-only rule finds no species for `primary_root_MK22_Day14_labels` and
+no mode for the cylinder half of the keying gap, whose `cyl` token lives only in its
+directory; a directory-only rule reads a three-species generalist file as `arabidopsis`
+because that is the directory it sits in. A selector no token yields SHALL leave the
+collection reported as having no comparable row, rather than silently matching one. A name-derived value is adequate to choose
 what to compare and inadequate to record as provenance, and the distinction SHALL be visible
 in the output. Because selection needs no Bloom, the diff SHALL be emitted even when scan
 metadata is unavailable.
@@ -1381,11 +1456,30 @@ identically in the labels layer and conflating them would hide an empty file.
   select a row
 - **THEN** that value is used for selection and does not appear as emitted evidence
 
+#### Scenario: A collection excluded before reading is not given a diff outcome
+
+- **WHEN** a promoted collection fails verification and is never read
+- **THEN** the diff reports it as not comparable, naming its resolution outcome, and no
+  per-scan table is emitted for it
+
+#### Scenario: A selector is searched from the filename outward
+
+- **WHEN** a collection's filename carries no capture-mode token and an ancestor directory
+  does
+- **THEN** the mode selector is taken from that directory, and a selector no token yields
+  leaves the collection reported as having no comparable row
+
 #### Scenario: The diff is emitted without scan metadata
 
 - **WHEN** Bloom is unavailable
 - **THEN** the diff is still emitted, using name-derived selectors and file-derived node
   counts
+
+#### Scenario: An auto-generated skeleton name is reported verbatim
+
+- **WHEN** a labels file's skeleton carries an auto-generated name such as `Skeleton-2`
+- **THEN** that literal value is reported, with no normalisation and no substitution from the
+  skeleton table
 
 #### Scenario: A multi-skeleton file is reported, not reduced
 
@@ -1403,9 +1497,10 @@ Artifact content SHALL be a deterministic function of the inputs alone, the deci
 among them. The capability SHALL NOT embed a run timestamp, hostname, run identifier, or any
 value varying between runs over unchanged inputs.
 
-Rendering SHALL be pinned rather than left to the host. Collections SHALL be emitted ordered
-by collection slug, scan rows by plant code then age then device then source path, and
-mapping keys in the documented field order. Every artifact SHALL use `LF` line endings, a
+Rendering SHALL be pinned rather than left to the host. Aggregate entries SHALL be emitted ordered
+by their walk-root-relative path, which every enumerated file has, rather than by collection
+slug, which only promoted files have; per-scan tables SHALL be ordered by plant code then age
+then device then source path, and mapping keys SHALL follow the documented field order. Every artifact SHALL use `LF` line endings, a
 fixed rendering of numbers and absent values, and **every emitted path rendered with forward
 slashes whatever the host** — the artifacts are largely paths, and the platform's native
 rendering would otherwise differ between operating systems. Because the artifacts are
