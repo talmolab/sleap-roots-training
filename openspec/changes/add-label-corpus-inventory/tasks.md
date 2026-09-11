@@ -247,13 +247,23 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       failure; plant count is distinct Bloom plant identity, not the filename code.
 - [ ] 4.8 **(RED)** Test that the scan≥plant guard applies to **cylinder only** — a cylinder
       inversion withholds that collection's Bloom-derived counts as `count_inconsistent`
-      while its file-derived fields still emit, and a **plate** collection whose plant count
-      exceeds its scan count is not a defect and is not withheld.
+      while its file-derived fields still emit — and that a **plate** collection emits **no
+      plant count at all**, neither a zero nor a filename-derived substitute, since it reads
+      no scan metadata.
 - [ ] 4.9 **(RED)** Test that the age window is emitted as an **observed** range labelled as
-      such, carrying the observed age set, the upstream field, and a per-mode epoch constant
-      marked `convention`; that a gapped age set is reported `age_set_non_contiguous`, since
-      `LabelCard`'s window is contiguous and cannot express one; and that a plate window is
-      `share_only`, names its local source, and is not presented as reconciled.
+      such, carrying the observed age set and the upstream field; that the epoch is keyed on
+      the **epoch token in the collection's name** and marked `convention`, with `DAG`, `DAP`
+      and `DO` all occurring in the corpus and `DAP` on a cylinder collection, so a per-mode
+      constant would contradict a collection's own name; that a name with no token reports the
+      epoch unstated; and that a gapped age set is `age_set_non_contiguous`, since
+      `LabelCard`'s window is contiguous and cannot express one.
+- [ ] 4.9a **(RED)** Test the plate age sources: `video_ages.csv` beside the labels file,
+      joined on the **basename** of the recorded video path (its paths are share paths, the
+      labels file records another machine's), marked `share_only`; a basename matching two
+      rows with different ages reported as a disagreement, not resolved; the collection name
+      as the fallback, marked `name_derived` and supplying a range only; and the file's
+      absence reported rather than treated as an error, since it covers roughly three of the
+      plate collections.
 - [ ] 4.10 **(GREEN)** Implement `inventory/reconcile.py`.
 
 ## 5. Discovery, promotion, and the skeleton diff

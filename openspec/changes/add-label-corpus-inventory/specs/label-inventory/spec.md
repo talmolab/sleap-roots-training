@@ -631,10 +631,12 @@ embedded source, which may be a list and may have been deliberately cleared. A *
 package records a list of curated per-view filenames carrying the plant code and the age but
 no date and no device; such a package ships a sample manifest beside its labels file, and the
 scan identifier SHALL be read from that manifest rather than parsed from the filename. A
-**plate** path records a plate identifier and a capture timestamp and carries **no plant
-code, no age and no device**; a plate scan therefore yields no key and SHALL be reported
-unresolved with the reason `no_identifying_code`, which is a property of the upstream schema
-and not a defect in the file.
+**plate** path records a capture timestamp, an age token in the filename or an ancestor
+directory, and a plate identifier in some shapes but not all; it carries **no plant code and
+no device**. A plate scan therefore yields no key for scan metadata and SHALL be reported
+unresolved with the reason `no_identifying_code`, which names the missing plant code and is a
+property of the capture workflow rather than a defect in the file. The age token is not a key
+and does not change that, but it is a real fact the shape supplies and SHALL be read.
 
 A shape yielding no date SHALL NOT thereby render its scans unresolved: the comparison SHALL
 use the facts a shape can supply. Two of the corpus's collections are embedded packages and
@@ -668,10 +670,11 @@ host without the share attached cannot resolve them and does not need to.
 - **THEN** the scan identifier is read from the sample manifest beside the labels file
 - **AND** the absence of a date in the filename does not by itself make the scan unresolved
 
-#### Scenario: A plate path yields no key and is unresolved
+#### Scenario: A plate path yields an age but no key
 
 - **WHEN** a plate collection's video path is parsed
-- **THEN** its scans are unresolved with the reason `no_identifying_code` and no lookup is
+- **THEN** the age token in its filename or an ancestor directory is read
+- **AND** its scans are unresolved with the reason `no_identifying_code` and no lookup is
   attempted
 
 #### Scenario: Labels files open without resolving video backends
@@ -765,9 +768,17 @@ otherwise corrupt the request silently.
 
 ### Requirement: Species Is Sourced From Bloom, And A Mixed Collection Is A Defect
 
-The species reported for a collection SHALL be taken from Bloom's records and SHALL NEVER be
-emitted from the collection name, the containing folder name, or the labels filename. Those
-names are what this capability exists to check. Comparison SHALL be on the species
+The species reported for a **cylinder** collection SHALL be taken from Bloom's records and
+SHALL NEVER be emitted as `verified` from the collection name, the containing folder name, or
+the labels filename. Those names are what this capability exists to check.
+
+A **plate** collection has no reconcilable scan metadata, so its species has no Bloom source.
+It SHALL be emitted from the collection's name carrying the confidence `name_derived`, never
+`verified` and never `share_only` — `share_only` denotes a fact read from the share *file*,
+and a directory name is not that. Emitting nothing would leave roughly eight collections with
+no species at all, which is the one fact this capability exists to establish; emitting a
+name-derived value under an honest label is the lesser evil, and the label is what keeps a
+consumer from mistaking it for evidence. Comparison SHALL be on the species
 identifier from Bloom's controlled species table, not on the free-text common name, and the
 emitted evidence SHALL carry the identifier, the common name, the genus and the species.
 
@@ -798,6 +809,11 @@ carrying a Bloom row, agreed or not, so that a thin join cannot hide a pooling.
 
 The reported species MAY fall outside the repo's model-side species vocabulary. That is
 expected output, not an error, and widening the vocabulary is not this capability's concern.
+
+#### Scenario: A plate collection's species is name-derived and labelled
+
+- **WHEN** a plate collection's species is emitted
+- **THEN** it carries the confidence `name_derived`, and neither `verified` nor `share_only`
 
 #### Scenario: Species comes from Bloom when the name disagrees
 
@@ -834,7 +850,9 @@ The capability SHALL report scan count and plant count as separate values, and S
 which capture mode's record structure each count rests on. Scan count is the count of
 distinct scans in the labels file and is file-derived, so it survives a scan-metadata
 failure. Plant count is the count of distinct Bloom plant records and SHALL NOT be derived
-from the code recorded in a filename, which identifies a plant but is human-assigned.
+from the code recorded in a filename, which identifies a plant but is human-assigned. A
+**plate** collection reads no scan metadata, so it has no plant count and SHALL emit none
+rather than a zero or a filename-derived substitute.
 
 One scan is one video; the rotational views of a scan are frames within it, not separate
 scans. A plant is imaged at more than one age, and on one day by more than one device, so
@@ -879,10 +897,11 @@ scan.
 - **THEN** the Bloom-derived counts are withheld and the inversion reported as
   `count_inconsistent`, while its file-derived fields are still emitted
 
-#### Scenario: A plate collection with more plants than scans is not a defect
+#### Scenario: A plate collection emits no plant count
 
-- **WHEN** a plate collection's plant count exceeds its scan count
-- **THEN** no inconsistency is reported and no aggregate is withheld
+- **WHEN** a plate collection is inventoried
+- **THEN** no plant count is emitted, and neither a zero nor a filename-derived substitute is
+  reported in its place
 
 ### Requirement: Counts Distinguish Labels, Predictions And Confirmed Absences
 
@@ -963,14 +982,33 @@ The capability SHALL emit the age window as the **observed** range across a coll
 agreed scans, labelled as observed, and SHALL record both the upstream field the ages came
 from and the epoch that field is measured in.
 
-The epoch SHALL be emitted as a repo-owned constant per capture mode, carried at the
-confidence `convention` and never `verified`, because no upstream record states it. For
-cylinder the ages come from the scan view's age column, which Bloom's own interface labels
-days after germination. For plate there is **no upstream age at all** — the plate schema
-carries a capture date and a transplant date and nothing else time-like — so a plate
-collection's ages are share-derived, from the collection name or a curated local age file,
-marked `share_only`, and its window SHALL NOT be presented as reconciled. Days after
-transplant is a third epoch and SHALL NOT be reported as either of the other two.
+The epoch SHALL be emitted at the confidence `convention` and never `verified`, because no
+upstream record states it, and it SHALL be keyed on **the epoch token observed in the
+collection's name** rather than on the capture mode. The corpus mixes them within a mode:
+`DAG` (days after germination), `DAP` (days after planting) and `DO` (days old) all occur, and
+`DAP` occurs on a cylinder collection as well as on plate ones, so a per-mode constant would
+stamp an epoch a collection's own name contradicts. A name carrying no epoch token SHALL
+report the epoch as unstated rather than defaulting to its mode's. For cylinder the ages
+themselves come from the scan view's age column, which Bloom's own interface labels days
+after germination.
+
+A **plate** collection's ages are share-derived and SHALL be marked `share_only` where they
+come from a curated age file and `name_derived` where they come from the collection's name;
+its window SHALL NOT be presented as reconciled. The curated file is `video_ages.csv` beside
+the labels file, carrying `video_filename` and `days_old`; it SHALL be joined on the
+**basename** of the recorded video path, because its paths are share paths while the labels
+file records another machine's, and a basename resolving to two rows with different ages
+SHALL be reported as a disagreement rather than resolved by picking one. Where the file
+covers a video it takes precedence over the name; where no such file exists the name supplies
+the range only, not per-scan ages. It exists for roughly three of the corpus's plate
+collections, so its absence is the common case and SHALL be reported, not treated as an
+error.
+
+Bloom's plate schema is **not** the reason plate ages are share-derived: `plates_exp` carries
+`plant_age`, `planting_date` and a filename-keyed `scan_filename`. The reason is that Bloom is
+not the source for our plate labels (eberrigan, 2026-09-10). An age computed from a capture
+date and a transplant date would in any case be days after transplant, a fourth epoch, and
+SHALL NOT be reported as any of the others.
 
 The contract library's `LabelCard` age window is inclusive and **contiguous**, and a
 non-contiguous observed set is not expressible as one. A collection whose observed ages have
@@ -996,9 +1034,31 @@ distinction will later be read as an approved one.
 
 #### Scenario: A plate age window is share-derived, not reconciled
 
-- **WHEN** a plate collection's age window is emitted
-- **THEN** it is marked `share_only`, names its local source, and is not presented as
-  reconciled
+- **WHEN** a plate collection's age window is emitted from a curated age file
+- **THEN** it is marked `share_only`, names that file, and is not presented as reconciled
+
+#### Scenario: A plate age taken from the name is labelled as such
+
+- **WHEN** no curated age file covers a plate collection
+- **THEN** its age range is taken from the collection name and marked `name_derived`, and the
+  absence of the file is reported
+
+#### Scenario: A curated age file is joined on the basename
+
+- **WHEN** a curated age file's paths differ from the recorded video paths in every segment
+  but the last
+- **THEN** the join is on the basename, and a basename matching two rows with different ages
+  is reported as a disagreement
+
+#### Scenario: The epoch follows the name's token, not the capture mode
+
+- **WHEN** a cylinder collection's name carries `DAP` and another carries `DAG`
+- **THEN** each reports the epoch its own name states, marked `convention`
+
+#### Scenario: A name with no epoch token reports the epoch unstated
+
+- **WHEN** a collection's name carries no epoch token
+- **THEN** the epoch is reported unstated rather than defaulted from the capture mode
 
 ### Requirement: Only Read Operations Are Issued
 
@@ -1353,8 +1413,8 @@ suspect one:
 - **per-scan reconciliation status** — `agreed`, `disagreed`, `unresolved`, `adjudicated`.
 - **unresolved reason** — `no_identifying_code`, `no_recoverable_path`, `no_bloom_record`,
   `unparseable_date`, `nothing_comparable`.
-- **per-field confidence** — `verified`, `share_only`, `file_only`, `convention`,
-  `adjudicated`, `awaiting_adjudication`, `withheld`.
+- **per-field confidence** — `verified`, `share_only`, `file_only`, `name_derived`,
+  `convention`, `adjudicated`, `awaiting_adjudication`, `withheld`.
 - **file classification** — `promoted`, `superseded_version`, `unclassified`, `scratch`,
   `out_of_scope`.
 - **collection outcome**, which is two fields because the values are not mutually exclusive:

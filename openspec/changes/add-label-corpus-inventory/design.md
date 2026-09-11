@@ -301,7 +301,22 @@ the `sleap-roots-contracts==0.1.0a8` pin.
   records the decision content's digest, since the share is unreachable from a hosted runner
   and CI therefore cannot regenerate the artifacts to check they match the committed
   judgments.
-- **D16. Plate collections are inventoried from the file only.** Bloom cannot reconcile a
+- **D16. Plate collections are inventoried from the file only — because Bloom is not the
+  source for our plate labels, not because its schema lacks the columns** (eberrigan,
+  2026-09-10 and 2026-09-11). An earlier draft of this decision grounded it on a schema claim
+  that was **wrong**: it said the plate schema carries no age at all. That is true of
+  `gravi_scans_extended` and false of `plates_exp`, which carries `plant_age`,
+  `planting_date`, `genotype` and a filename-keyed `scan_filename`; `gravi_scans` is also
+  keyed `UNIQUE (experiment_id, plate_id, capture_date)`, which is what a plate path records.
+  Both were considered. The decision stands on the program fact instead, and the earlier
+  draft's "a better-scoped follow-up once Bloom carries a plate age" is struck, since it
+  already does.
+
+  What follows from reading plate from the file alone: its species is name-derived and
+  labelled `name_derived` rather than emitted as evidence or suppressed entirely; its ages
+  come from a curated `video_ages.csv` where one exists (roughly three of the plate
+  collections) and from the collection name otherwise; and it has **no plant count**, since
+  that quantity only exists in scan metadata. Bloom cannot reconcile a
   plate collection, and the schema is the reason rather than a scoping preference.
   `gravi_scans_extended` carries no plant identity and **no age column at all** — only a
   capture date and a transplant date — so a Bloom-derived plate age would be days after
