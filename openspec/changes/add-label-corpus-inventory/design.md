@@ -260,13 +260,31 @@ the `sleap-roots-contracts==0.1.0a8` pin.
   exists to distrust. So the aggregate stops claiming to carry "the card fields". It carries
   what is evidenced, `#49` builds cards from it, and name-derived selectors are used **only**
   to select a skeleton row to compare against — never emitted as provenance.
-- **D15. One decision file, read and never written.** Both judgments this capability needs —
-  which files are collections (D8) and which disagreements are accepted (D4) — live in one
-  committed `inventory/decisions.yaml` with a section for each. The capability **reads** it
-  and never writes it, because a re-run is a full re-run with no resume: a judgment written
-  by the run would be erased by the next one. It is consequently an *input* to determinism —
-  two runs over unchanged inputs including unchanged verdicts produce identical artifacts —
-  and it is committed alongside the artifacts so the reasoning is reviewable in the diff.
+- **D15. Committed decisions, read and never written, with a stated shape.** Both judgments
+  this capability needs — which files are collections (D8) and which disagreements are
+  accepted (D4) — live in committed YAML the capability **reads** and never writes, because a
+  re-run is a full re-run with no resume: a judgment written by the run would be erased by the
+  next one. It is consequently an *input* to determinism, and it is committed alongside the
+  artifacts so the reasoning is reviewable in the diff.
+
+  `--decisions` takes a **file or a directory** (eberrigan, 2026-09-11). One file per
+  collection is the working shape: adjudication spans several PRs by design, this repository
+  squash-merges, and line-based merges collide on adjacent appends — a hand-resolved conflict
+  in the record of *why* a collection was promoted is the one place a silently dropped line
+  does damage nothing downstream can detect. A duplicate identifier across merged files is a
+  loud failure rather than a last-one-wins merge.
+
+  A file is identified by its **walk-root-relative path**. A basename is ambiguous — 88
+  versioned basenames occur in more than one directory, the worked example's own file three
+  times — and an absolute path would publish the user segment D12 exists to strip, into the
+  same commit as artifacts that redact it, while breaking the only workflow a person has:
+  copying an identifier out of the aggregate, whose paths are redacted.
+
+  The reasoning is recorded **as data, not as comments**, because squash-merge makes `git
+  blame` resolve every judgment to the pull request rather than to the judgment. The aggregate
+  records the decision content's digest, since the share is unreachable from a hosted runner
+  and CI therefore cannot regenerate the artifacts to check they match the committed
+  judgments.
 - **D16. Plate collections are inventoried from the file only.** Bloom cannot reconcile a
   plate collection, and the schema is the reason rather than a scoping preference.
   `gravi_scans_extended` carries no plant identity and **no age column at all** — only a

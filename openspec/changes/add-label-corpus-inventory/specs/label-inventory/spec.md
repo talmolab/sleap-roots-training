@@ -63,6 +63,13 @@ from — so a run emits as many per-scan tables as it has promoted collections, 
 run that promotes nothing; one **aggregate** named `aggregate.yaml`; and one **skeleton
 diff** named `skeleton-diff.md`.
 
+The **collection slug** SHALL be derived from the promoted file's walk-root-relative path
+such that two distinct promoted files cannot yield the same slug, and a slug collision SHALL
+be a reported failure exiting `4`. Emission replaces an existing destination by requirement,
+so a basename-derived slug would let one promoted collection silently overwrite another's
+per-scan table and exit `0` — and the worked example's own file exists in three directories
+at one version.
+
 The aggregate SHALL carry one **aggregate entry** per enumerated labels file, and derived
 files SHALL be reported as a count per directory rather than individually. An artifact
 carrying an entry for each of eighteen thousand files could not be reviewed in a pull
@@ -101,6 +108,11 @@ reserved for the CLI framework's usage errors.
 
 - **WHEN** the capability runs to completion
 - **THEN** the decision file's bytes are unchanged
+
+#### Scenario: A slug collision fails rather than overwrites
+
+- **WHEN** two promoted files would yield the same collection slug
+- **THEN** the run reports the collision naming both files and exits `4`
 
 #### Scenario: Exit codes distinguish the failure kinds
 
@@ -154,6 +166,12 @@ structure alone. Classification from a filename is a structural rule, and a stru
 may not take an irreversible read-or-not decision: the share's nine most recent plate labels
 files are unversioned deliberate merges under a `combined_roots/` directory, and they are the
 only trace of two experiments. `scratch` SHALL come only from the decision file.
+
+Where a promoted file has since been superseded by a higher version, **promotion SHALL
+win**: the file is classified `promoted` and read, and its aggregate entry SHALL additionally
+name the higher version its promotion does not cover. A judgment recorded in a file the run
+never writes stays in force until a person changes it, and naming the newer version makes a
+stale promotion visible in the diff rather than silently authoritative.
 
 Only a **promoted** file SHALL be read, digest-verified, reconciled against scan metadata, or
 entered in the skeleton diff. Every other enumerated file SHALL still receive an aggregate
@@ -214,10 +232,113 @@ unclassified and reported as awaiting a decision, never promoted by default.
 - **WHEN** the same basename and version occurs in three directories
 - **THEN** each is reported as a distinct file naming the other two
 
+#### Scenario: A promoted file superseded since promotion is still read
+
+- **WHEN** a promoted file has been superseded by a higher version in its directory
+- **THEN** it is classified `promoted` and read, and its entry names the higher version
+
 #### Scenario: Several promoted files in one directory are all inventoried
 
 - **WHEN** one directory holds promoted files of three different species
 - **THEN** all three are inventoried as separate collections
+
+### Requirement: The Decision File Has A Stated Shape And Is Read, Never Written
+
+The decision file SHALL be YAML with a documented and locked shape, and `--decisions` SHALL
+accept either a file or a directory. Where a directory is supplied every `*.yaml` beneath it
+SHALL be read and merged in path order, so that judgments about different collections can be
+recorded in separate files. The repository squash-merges, and concurrent adjudication is the
+expected workflow; a hand-resolved merge conflict in the record of why a collection was
+promoted is the one place a silently dropped line does damage nothing downstream can detect.
+
+It SHALL carry a `walk_root`, a `promotions` section and an `adjudications` section. A
+promotion entry SHALL carry a `classification` drawn from the file-classification vocabulary
+and a `rationale`. A verdict SHALL carry the scan key, the `field`, the `accept` value, the
+pair of values observed when the verdict was made, and a `rationale`. The `rationale` and the
+identity of the deciding person SHALL be recorded **as data rather than as comments**,
+because this repository squash-merges and `git blame` therefore resolves every judgment to
+the pull request that carried it rather than to the judgment. Neither SHALL be copied into an
+emitted artifact, so determinism is unaffected.
+
+A file SHALL be identified by its **path relative to the walk root, rendered with forward
+slashes**. The alternatives fail on this share: a basename is ambiguous — 88 versioned
+basenames occur in more than one directory, including the worked example's own file, which
+exists three times — and an absolute path would publish the user segment that the redaction
+rule exists to strip, into the same commit as artifacts that redact it, while also breaking
+the one workflow a person has: reading an identifier out of the aggregate, whose paths are
+redacted, and pasting it into the decision file. A walk-root-relative path carries no host or
+user segment, so it needs no redaction and round-trips unchanged.
+
+`walk_root` SHALL be compared against the supplied walk root and a mismatch SHALL exit `3`
+naming both, so that a relocated share is a loud failure rather than a silent
+mass-unclassification.
+
+Every promotion and every verdict SHALL resolve — a promotion to an enumerated labels file, a
+verdict to a disagreed scan of a promoted collection. An entry resolving to nothing SHALL be
+reported as `decision_unmatched`, naming the entry verbatim, and the run SHALL exit `4`. A
+mistyped path is the most likely first-use failure, and silently ignoring the entry would let
+it read as a judgment that was made. An identifier appearing twice, in one file or across
+merged files, SHALL likewise be a reported failure exiting `4` rather than a last-one-wins
+merge, since duplicate-key handling is loader-defined and identical committed bytes would
+otherwise produce different artifacts.
+
+An absent decision file SHALL be treated as an empty one and reported as such, so a first run
+enumerates and classifies with no bootstrap step. A decision file that exists and does not
+parse SHALL exit `3` naming the parse error, never be treated as empty — an empty file
+promotes nothing, so silently reading a corrupted one as empty would report the entire corpus
+as awaiting a decision.
+
+The aggregate SHALL record the digest of the decision content the run read. The committed
+artifacts cannot be regenerated in continuous integration, because the share is not reachable
+from a hosted runner, so the digest is what lets a reviewer tell from the diff alone whether
+the artifacts were produced under the committed judgments.
+
+#### Scenario: A directory of per-collection files is merged
+
+- **WHEN** `--decisions` is given a directory holding one file per collection
+- **THEN** every `*.yaml` beneath it is read and merged in path order
+
+#### Scenario: An identifier in two files is a reported failure
+
+- **WHEN** the same identifier appears in two merged files
+- **THEN** the run reports both files and exits `4`, and neither entry silently wins
+
+#### Scenario: A file is identified relative to the walk root
+
+- **WHEN** a promotion names a file
+- **THEN** the identifier is the path relative to the walk root with forward slashes, and it
+  matches the identifier the aggregate reports for that file
+
+#### Scenario: A relocated walk root is a loud failure
+
+- **WHEN** the decision file's `walk_root` differs from the supplied walk root
+- **THEN** the run exits `3` naming both, rather than classifying the corpus as unclassified
+
+#### Scenario: A decision entry matching nothing is reported
+
+- **WHEN** a promotion names a path no enumerated file matches
+- **THEN** it is reported as `decision_unmatched`, naming the entry, and the run exits `4`
+
+#### Scenario: An absent decision file is an empty one
+
+- **WHEN** no decision file exists at the supplied path
+- **THEN** it is treated as empty, reported as absent, and the run completes
+
+#### Scenario: An unparseable decision file is not treated as empty
+
+- **WHEN** the decision file exists and does not parse
+- **THEN** the run exits `3` naming the parse error
+
+#### Scenario: The run promotes nothing on a first pass
+
+- **WHEN** the decision file promotes nothing
+- **THEN** the aggregate holds an entry for every enumerated labels file, no per-scan table is
+  emitted, the skeleton diff is emitted empty, and the run exits `0`
+
+#### Scenario: The aggregate records which judgments it was built from
+
+- **WHEN** the artifacts are emitted
+- **THEN** the aggregate records the digest of the decision content the run read
 
 ### Requirement: Disagreements Are Surfaced For A Person To Adjudicate
 
@@ -1109,6 +1230,13 @@ collection SHALL add its entries without altering those of collections whose inp
 changed. There SHALL be no resume; a re-run is a full re-run, which is why no judgment may
 live in a file the run writes.
 
+The output directory's contents SHALL be reconciled to the promoted set: a per-scan table
+present from a previous emission whose collection is no longer promoted SHALL be removed, and
+the decision content SHALL be exempt from that reconciliation because it is an input. Without
+this a de-promoted collection leaves a stale table behind, and "regenerate and diff" — the
+whole reason the output path is pinned — shows a clean diff over data the run no longer
+produces.
+
 #### Scenario: Unchanged inputs produce identical artifacts
 
 - **WHEN** the capability is run twice with no input change
@@ -1141,6 +1269,12 @@ live in a file the run writes.
 - **WHEN** emission raises partway through
 - **THEN** the previous artifact is unchanged and the staging file is removed
 
+#### Scenario: A de-promoted collection's table is removed
+
+- **WHEN** a collection promoted in a previous run is no longer promoted
+- **THEN** its per-scan table is removed from the output directory and the decision content
+  is left untouched
+
 ### Requirement: The Emitted Schema And Its Vocabularies Are Documented And Locked
 
 The documentation SHALL carry the emitted schema of all three artifacts and **every** closed
@@ -1161,7 +1295,8 @@ suspect one:
 - **collection outcome**, which is two fields because the values are not mutually exclusive:
   an exclusive **resolution** outcome — `inventoried`, `unregistered`, `digest_mismatch`,
   `unverifiable_reference`, `path_unmappable`, `path_not_a_file`, `unreadable`,
-  `not_promoted`, `skipped_no_labels_file` — and a non-exclusive **defect** set —
+  `not_promoted`, `skipped_no_labels_file`, `decision_unmatched` — and a non-exclusive
+  **defect** set —
   `mixed_species`, `count_inconsistent`, `multiple_skeletons`, `no_skeleton`,
   `no_agreed_scan`, `duplicate_resolved_path`, `age_set_non_contiguous`,
   `root_type_out_of_vocabulary`.

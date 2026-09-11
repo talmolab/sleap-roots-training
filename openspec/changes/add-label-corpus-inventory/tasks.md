@@ -272,7 +272,18 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       `unclassified` and not read; a promoted file is read and reconciled; a file marked out
       of scope is reported and not inventoried; and every enumerated file receives an
       aggregate entry recording its classification, path and family. Include a directory
-      holding promoted files of three different species, all inventoried.
+      holding promoted files of three different species, all inventoried; and a promoted file
+      since superseded by a higher version, which stays `promoted`, is read, and has its entry
+      name the newer version.
+- [ ] 5.4a **(RED)** Test the **decision file's shape and mechanics**: `--decisions` accepts a
+      file or a directory, and a directory's `*.yaml` files are merged in path order; a file
+      is identified by its walk-root-relative path with forward slashes and that identifier
+      matches what the aggregate reports; a `walk_root` mismatch exits `3` naming both; an
+      entry matching nothing is `decision_unmatched` at exit `4`; a duplicate identifier
+      within or across files exits `4` rather than last-one-wins; an absent file is treated as
+      empty and reported; an unparseable file exits `3`; and the run leaves the decision
+      content byte-unchanged. Assert `rationale` and the deciding person are read as **data**
+      and appear in no emitted artifact.
 - [ ] 5.5 **(RED)** Test the diff's five outcomes and that nothing is written back.
 - [ ] 5.6 **(RED)** Test the selectors: species, root type, mode and age are derived from the
       collection's name and the file's observed ages, used for selection only, and appear in
@@ -304,6 +315,11 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
 - [ ] 6.5 **(RED)** Test that a collection with no agreed scan is emitted as an entry
       recording that, not as a verified zero, and that a withheld field never removes an
       entry.
+- [ ] 6.5a **(RED)** Test that a de-promoted collection's per-scan table is removed from the
+      output directory on the next run, while the decision content is left untouched — a stale
+      table makes "regenerate and diff" show a clean diff over data no longer produced. Assert
+      the aggregate records the digest of the decision content the run read, since CI cannot
+      regenerate the artifacts to check them.
 - [ ] 6.6 **(RED)** Test determinism and idempotence: no timestamp, hostname or run
       identifier; the spec's declared sort order; `LF` line endings; **every emitted path
       rendered with forward slashes whatever the host**; two runs identical; a new promoted
@@ -329,8 +345,10 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
 - [ ] 7.1 **(RED)** Test `inventory labels` end to end against injected clients, passing a
       `tmp_path` walk root and applying `isolate_wandb_env`. The option surface is
       `--walk-root` (required), `--out` (default `inventory/`), `--decisions` (default
-      `inventory/decisions.yaml`) and `--bloom-profile`, with the entity read from
-      `WANDB_ENTITY` as `seed-registry` does.
+      `inventory/decisions.yaml`) and `--bloom-profile` — `--decisions` accepting a file or a
+      directory — with the entity read from `WANDB_ENTITY` as `seed-registry` does. Include a
+      first run that promotes nothing: an aggregate with an entry per enumerated file, no
+      per-scan table, an empty skeleton diff, exit `0`.
 - [ ] 7.2 **(RED)** Test the exit codes: `0` on completion, `3` when the registry or share is
       absent (naming it, emitting nothing), `4` when the run completed with a failing
       collection; and that absent Bloom emits the per-scan tables, the diff, and file-derived
@@ -348,7 +366,8 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
 - [ ] 8.2 `docs/labeling-packages.md`: a "Reading the corpus inventory" section carrying
       **all three** artifact schemas — the per-scan CSV's columns grouped by source, the
       aggregate's shape, and the skeleton diff's shape and format — plus the decision file's
-      shape, migrated out of the background design doc.
+      shape, which exists in no document today and must be written from the requirement rather
+      than migrated: the background design doc contains no decision-file shape at all.
 - [ ] 8.3 In the same section, define **all five** closed vocabularies, each as its own
       Markdown table under a stable `#### <Vocabulary name>` heading, first column the literal
       member value, second column whether rows carrying it contribute to
