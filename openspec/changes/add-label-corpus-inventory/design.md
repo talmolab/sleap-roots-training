@@ -48,7 +48,7 @@ the `sleap-roots-contracts==0.1.0a8` pin.
   `SLEAP_wheat`, and Bloom records the species from experiment metadata. Agreement there is
   real corroboration. For **age and date** they are not: the download tooling *wrote*
   `Day{age}_{date}` from the very columns we later read back, so agreement is a **staleness
-  check** — did the record change after download, through a re-key or a correction. Since
+  check** — was the record corrected after download. Since
   age and date are the only per-scan facts compared, the reconciliation tally's assurance
   value is weaker than the first draft of this decision claimed. And it applies to cylinder
   only: plate has no reconcilable scan metadata at all (D16). The spec says which check is
@@ -60,13 +60,28 @@ the `sleap-roots-contracts==0.1.0a8` pin.
      excluded counts. A total computed across verified and unverified scans looks
      authoritative and is not.
   2. An **unresolved** scan never withholds anything. It carries no comparison — a legacy
-     scan predating ingestion, a re-keyed plant, an unparseable path, a plate path with no
-     key — and legacy coverage gaps are expected (D5). A rule that withheld on any
+     scan predating ingestion, an unparseable path, a plate path with no key — and legacy
+     coverage gaps are expected (D5). A rule that withheld on any
      unresolved scan would emit almost nothing.
-  3. A **disagreed** scan means the two sources actively conflict, which is an anomaly a
-     person should see before a number resting on it is published. It withholds **only the
-     fields the conflicting field feeds**, marked `awaiting_adjudication`, and enters an
-     adjudication queue.
+  3. A **disagreed** scan means the two sources actively conflict. Since the download tooling
+     wrote the directory name *from* the metadata, the only way they diverge is a correction
+     made afterwards — so a disagreement is a prompt to look, not evidence that either side is
+     untrustworthy. It withholds **only the fields the conflicting field feeds**, marked
+     `awaiting_adjudication`, and enters an adjudication queue.
+
+  A verdict takes **two forms — accept or exclude** (eberrigan, 2026-09-11). Exclude is the
+  escape hatch that stops one scan a person distrusts on both sides from blocking a
+  collection's card indefinitely. An earlier draft proposed a third, *escalate*, meaning "the
+  upstream record needs fixing"; with re-keying struck (D5) that form has no case left to
+  describe, because a disagreement means the record was already corrected.
+
+  An accepted value is a person's choice, not two derivations agreeing, so the scan is
+  classified `adjudicated` rather than `agreed` and the field carries the confidence
+  `adjudicated` rather than `verified`. Marking a human pick `verified` would publish it under
+  the label this spec reserves for corroboration, into a public repo and onward into `#49`'s
+  cards. A verdict also records the pair of values observed when it was made: a verdict whose
+  pair no longer matches is **not applied** and the scan re-enters the queue as stale, because
+  a verdict silently applied to a conflict nobody saw emits a value neither source carries.
 
   This **supersedes** the background doc's "Human gate on exceptions", which stopped the
   whole run before emitting any aggregate. A global halt would let one poorly-covered
@@ -75,9 +90,10 @@ the `sleap-roots-contracts==0.1.0a8` pin.
   with an example reporting all 170 scans while 12 were unresolved. The gate survives, scoped
   to the field rather than the run.
 - **D5. Unresolved is a state, not an error, and it has five reasons.** Legacy scans may
-  predate Bloom ingestion or have been re-keyed; an unparseable path, a cleared embedded
-  source, an unparseable date and a plate path with no key are each a distinct way to have
-  no comparison. The earlier draft of this decision folded an unparseable path into "a third
+  predate Bloom ingestion; an unparseable path, a cleared embedded source, an unparseable
+  date and a plate path with no key are each a distinct way to have no comparison. Re-keying
+  is **not** among them: an earlier draft named it in three places, the term was never defined
+  anywhere in this repo or in Bloom's, and it does not happen (eberrigan, 2026-09-11). The earlier draft of this decision folded an unparseable path into "a third
   way to have no Bloom record", which conflated two reasons the spec then had to
   distinguish. The five are enumerated normatively so the closed vocabulary can be locked.
 - **D6. Provenance from the original version; images-embedded from the repair.** Six

@@ -218,8 +218,20 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       contributing and excluded counts; and a collection with agreed **and unresolved** scans
       withholds nothing. This is the mixed case D4 turns on and the previous draft tested only
       at the all-unresolved extreme.
-- [ ] 4.4 **(RED)** Test that a verdict in the decision file clears the withholding for that
-      scan and that field alone, and that the decision file's bytes are unchanged by the run.
+- [ ] 4.4 **(RED)** Test the verdict's two forms and its guards: **accept** clears the
+      withholding for that scan and field alone; **exclude** removes the scan from that field's
+      contributing scans, records it excluded with its reason, and likewise unblocks the field.
+      Assert an adjudicated scan is classified `adjudicated` and **never** `agreed`, that a
+      field built from one carries the confidence `adjudicated` and never `verified`, and that
+      it stays in the queue carrying both observed values and the verdict.
+- [ ] 4.4a **(RED)** Test **stale-verdict detection**: a verdict whose recorded pair of
+      observed values no longer matches the pair the run observes is **not applied** — the
+      field stays `awaiting_adjudication` and the scan re-enters the queue naming both pairs —
+      and a verdict whose disagreement has vanished is reported as no longer needed. Without
+      this the run emits a value neither source carries, marked as if it were corroborated.
+- [ ] 4.4b **(RED)** Test that a verdict keyed on plant code, device and **path-derived age**
+      applies to every promoted collection containing that scan, and that each aggregate entry
+      names the verdicts it consumed.
 - [ ] 4.5 **(RED)** Test that species comes from Bloom when the name says otherwise, that
       comparison is on the **species identifier** rather than the common name, and that two
       identifiers sharing a genus and species are one taxon and not mixed — `medicago` and

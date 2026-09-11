@@ -22,9 +22,9 @@ Its central rule is that a fact is asserted only when two derivations agree — 
 honest qualification. For **species** the two derivations are genuinely independent: a
 human typed the folder name, and Bloom records the species from experiment metadata. For
 **age and scan date** they are not: the download tooling wrote the directory name *from*
-those same columns, so agreement is a **staleness check** — did the record change after
-download, through a re-key or a correction — rather than corroboration. Both checks are
-worth running; only the first is evidence of correctness.
+those same columns, so agreement is a **staleness check** — was the record corrected after
+download — rather than corroboration. Both checks are worth running; only the first is
+evidence of correctness.
 
 Two scope facts shape every requirement below. First, **the unit is the labels file, not
 the folder**: directories on the share hold several distinct labeling efforts side by side,
@@ -347,18 +347,47 @@ and SHALL withhold only those fields derived from the facts in conflict until a 
 that scan appears in the decision file.
 
 An unresolved scan and a disagreed scan are different events. An unresolved scan carries no
-comparison — a legacy scan predating ingestion, a re-keyed plant, an unparseable path — and
-SHALL never block a field; it simply does not contribute. A disagreed scan means the recorded
-path and the scan metadata actively conflict, which is an anomaly a person should see before
-a number resting on it is published.
+comparison — a legacy scan predating ingestion, an unparseable path, a plate path with no
+key — and SHALL never block a field; it simply does not contribute. A disagreed scan means
+the recorded path and the scan metadata actively conflict. Because the download tooling wrote
+the directory name *from* the metadata, the only way the two diverge is that the metadata was
+corrected afterwards — so a disagreement is a signal that a person should look before a
+number resting on it is published, not evidence that either side is untrustworthy.
 
 Each disagreed scan SHALL record which field the conflict was in, so that the emitter
 withholds the fields that field feeds and no others. A field withheld this way SHALL carry
 the confidence `awaiting_adjudication` and the count of scans awaiting a verdict.
 
-A verdict recorded in the decision file SHALL name the scan, the field and the value to
-accept, and the capability SHALL then treat that scan as agreed for that field alone. The
-decision file is an input to determinism: two runs over unchanged inputs **including
+A verdict SHALL take one of two forms: **accept** one source's value for that field, or
+**exclude** the scan from that field, which removes it from that field's contributing scans
+and records it as excluded with its reason. Exclude exists so that a scan a person distrusts
+on both sides cannot block a collection's card indefinitely; there is no third form, because
+a disagreement means the metadata was already corrected and "the upstream record needs
+fixing" has no case to describe.
+
+A verdict SHALL key the scan on the plant code, the device and **the path-derived age**,
+naming that field explicitly, because the recorded path is the side a later correction cannot
+invalidate. A verdict is a judgment about a scan and SHALL apply to every promoted collection
+containing it; each aggregate entry SHALL name the verdicts it consumed, so a collection
+unblocked by an adjudication made against another collection says so.
+
+A verdict SHALL record the pair of values observed when it was made, and the capability SHALL
+compare that pair against the pair observed in the run. A verdict whose recorded pair matches
+SHALL be applied. A verdict whose recorded pair does **not** match SHALL NOT be applied: the
+field SHALL remain withheld with the confidence `awaiting_adjudication`, and the scan SHALL
+re-enter the queue reporting the verdict as stale, naming the pair adjudicated and the pair
+now observed. A verdict whose underlying disagreement has vanished SHALL be reported as no
+longer needed. A verdict silently applied to a conflict a person never saw would emit a value
+neither source carries, and the artifact would carry no sign of it.
+
+An accepted value is a person's choice, not two derivations agreeing. A scan whose conflict a
+verdict resolves SHALL be classified `adjudicated`, never `agreed`, and SHALL remain in the
+queue carrying both observed values and the verdict that resolved it. A field computed from
+any adjudicated scan SHALL carry the confidence `adjudicated` and the count of adjudicated
+scans contributing — never `verified`, which this specification reserves for two derivations
+agreeing and is precisely what did not happen here.
+
+The decision content is an input to determinism: two runs over unchanged inputs **including
 unchanged verdicts** produce identical artifacts.
 
 #### Scenario: A disagreement withholds only what it touches
@@ -381,6 +410,41 @@ unchanged verdicts** produce identical artifacts.
 
 - **WHEN** the decision file records a verdict for every disagreed scan of a collection
 - **THEN** the previously withheld fields are emitted and carry the contributing scan count
+
+#### Scenario: An adjudicated value is never reported as verified
+
+- **WHEN** a field is computed from a scan a verdict resolved
+- **THEN** the scan is classified `adjudicated`, the field carries the confidence
+  `adjudicated` with the count of adjudicated scans, and neither is reported `verified`
+
+#### Scenario: An adjudicated scan stays in the queue
+
+- **WHEN** a verdict resolves a disagreement
+- **THEN** the scan remains in the adjudication queue carrying both observed values and the
+  verdict that resolved it
+
+#### Scenario: A verdict may exclude a scan instead of accepting a value
+
+- **WHEN** a verdict excludes a scan from a field
+- **THEN** the scan does not contribute to that field, is recorded as excluded with its
+  reason, and the field is no longer withheld on its account
+
+#### Scenario: A stale verdict is not applied
+
+- **WHEN** a verdict's recorded pair of observed values differs from the pair observed in the
+  run
+- **THEN** the verdict is not applied, the field stays withheld as `awaiting_adjudication`,
+  and the scan re-enters the queue naming the pair adjudicated and the pair now observed
+
+#### Scenario: A verdict whose disagreement has gone is reported
+
+- **WHEN** a scan a verdict names is no longer disagreed
+- **THEN** the verdict is reported as no longer needed
+
+#### Scenario: A verdict applies to every collection holding that scan
+
+- **WHEN** two promoted collections contain a scan one verdict resolves
+- **THEN** both use it, and each aggregate entry names the verdicts it consumed
 
 ### Requirement: Source Resolution Is Digest-Verified Where A Registry Artifact Exists
 
@@ -638,7 +702,8 @@ carries, as in a labels file holding no video or no labeled frame).
 
 A disagreement SHALL be recorded with both values and the field it occurred in, and SHALL NOT
 be resolved by preferring one source. An unresolved scan SHALL NOT be an error; legacy scans
-may predate ingestion or have been re-keyed.
+may predate ingestion. A **disagreement** means the scan metadata was corrected after the
+directory name was written from it, which is the only way the two sides diverge.
 
 The comparison SHALL normalise both sides before comparing, and the normalisation SHALL be
 specified rather than left to the implementer: an age rendered in a directory name is the
@@ -1285,11 +1350,11 @@ Five vocabularies are closed and all five are load-bearing. A reader who cannot 
 an unregistered collection from an excluded one cannot tell an unverifiable collection from a
 suspect one:
 
-- **per-scan reconciliation status** — `agreed`, `disagreed`, `unresolved`.
+- **per-scan reconciliation status** — `agreed`, `disagreed`, `unresolved`, `adjudicated`.
 - **unresolved reason** — `no_identifying_code`, `no_recoverable_path`, `no_bloom_record`,
   `unparseable_date`, `nothing_comparable`.
 - **per-field confidence** — `verified`, `share_only`, `file_only`, `convention`,
-  `awaiting_adjudication`, `withheld`.
+  `adjudicated`, `awaiting_adjudication`, `withheld`.
 - **file classification** — `promoted`, `superseded_version`, `unclassified`, `scratch`,
   `out_of_scope`.
 - **collection outcome**, which is two fields because the values are not mutually exclusive:
