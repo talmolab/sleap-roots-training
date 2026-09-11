@@ -49,7 +49,11 @@ and date it is a staleness check rather than corroboration, and the spec says wh
 
 **Two judgments belong to a person, not to the tool.** Which labels files are collections,
 and which source-to-source disagreements are accepted, are recorded in a committed
-`decisions.yaml` that the run **reads and never writes** (D15). A directory here routinely
+`decisions.yaml` that the run **reads and never writes** (D15). The scale is measured, not
+estimated: the walk root holds **18,099** labels files, of which 13,164 are inference
+outputs. Excluding derived files by shape leaves ~1,450, of which **~470 carry a version
+suffix** and are the real promotion candidates — against an expected ~25-30 finished
+collections. A directory here routinely
 holds a finished superset, the per-day inputs merged into it, files of another species, and
 scratch — tiers no structural rule can separate (D8). And a disagreement between the path and
 Bloom is a finding to review, not a value to pick: it withholds only the fields it touches,

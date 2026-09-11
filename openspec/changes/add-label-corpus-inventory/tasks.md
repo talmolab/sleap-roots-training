@@ -251,14 +251,23 @@ outside it too, which task 0.4 fixes because groups 6, 8 and 9 depend on all thr
       the real parent directories hold none at their own top level; that a directory with no
       labels file is reported skipped with a reason; and that discovery does not ascend above
       the root.
-- [ ] 5.2 **(RED)** Test that splits are not enumerated as labels files and the reported
-      frame count is the labels file's own, with a fixture whose split count differs.
-- [ ] 5.3 **(RED)** Test **version families**: grouping by basename minus the version suffix,
-      the highest version as the family's current file, earlier versions reported
-      `superseded_version` without being read or digested, and a file with no version suffix
-      reported `scratch` without being read. Use a fixture shaped like
-      `SLEAP_sorghum/primary_6nodes` — several families, a `.slp`/`.pkg.slp` pair at
-      different versions, and untidy names.
+- [ ] 5.2 **(RED)** Test that derived files are excluded **by shape, not by directory**: a
+      `*.predictions.slp` outside any `train_test_split` / `models` / `predictions` directory
+      is still excluded, a split's frame count is never reported as the corpus's, and a
+      directory of derived files is reported as a count rather than one entry per file.
+      Thirteen thousand of the share's eighteen thousand labels files are inference outputs,
+      so a directory-shaped rule does not bound the aggregate.
+- [ ] 5.3 **(RED)** Test **version families** against the grammar the spec states: the key is
+      (containing directory, basename minus `.v<digits>`, extension); `.slp` and `.pkg.slp`
+      are separate families; free text before or after the version is not part of it; the
+      highest version is current and earlier ones are `superseded_version` without being read
+      or digested; two files at one version are a **version collision** with no current file;
+      the same basename and version in different directories are distinct files each naming
+      the others; and an unversioned file is `unclassified`, **not** `scratch`. Use a fixture
+      shaped like `SLEAP_sorghum/primary_6nodes` plus a second directory reusing a basename —
+      `labels.vNNN.slp` really occurs 57 times in 23 directories, and the worked example's
+      own file exists three times at one version, so both cases are load-bearing rather than
+      hypothetical.
 - [ ] 5.4 **(RED)** Test **promotion**: an enumerated file absent from the decision file is
       `unclassified` and not read; a promoted file is read and reconciled; a file marked out
       of scope is reported and not inventoried; and every enumerated file receives an

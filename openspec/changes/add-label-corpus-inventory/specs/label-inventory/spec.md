@@ -54,13 +54,19 @@ separation is what makes it safe to run against production data.
 ### Requirement: The Command Emits Three Named Artifacts And One Decision Input
 
 The capability SHALL expose an `inventory labels` command that, given a walk root, an output
-directory, a decision file and a scan-metadata profile, emits exactly three artifacts into
+directory, a decision file and a scan-metadata profile, emits three kinds of artifact into
 the output directory and reads one decision file it never writes.
 
-The artifacts are: a **per-scan table** named `<collection-slug>.csv` for each promoted
+The kinds are: a **per-scan table** named `<collection-slug>.csv` for each promoted
 collection, one row per scan, whose columns are grouped by the source each field is derived
-from; one **aggregate** named `aggregate.yaml` carrying one **aggregate entry** per
-enumerated labels file; and one **skeleton diff** named `skeleton-diff.md`. There is no
+from — so a run emits as many per-scan tables as it has promoted collections, and none on a
+run that promotes nothing; one **aggregate** named `aggregate.yaml`; and one **skeleton
+diff** named `skeleton-diff.md`.
+
+The aggregate SHALL carry one **aggregate entry** per enumerated labels file, and derived
+files SHALL be reported as a count per directory rather than individually. An artifact
+carrying an entry for each of eighteen thousand files could not be reviewed in a pull
+request, which is the stated reason for committing it at all. There is no
 fourth artifact: a file's classification, a collection's outcome, its skip reason, its
 per-field confidence and its adjudication state are all recorded in its aggregate entry, and
 "the report" elsewhere in this specification means the aggregate.
@@ -115,11 +121,39 @@ structure, so a structural rule cannot separate them, and a rule that selected o
 directory would drop whole species from the inventory. Enumeration is therefore structural
 and complete, and promotion is a judgment recorded in a committed file.
 
-Files SHALL be grouped into **version families** by basename with the version suffix
-removed. Within a family the highest version is the family's current file; earlier versions
-SHALL be recorded as superseded, naming the file, and SHALL NOT be read or digest-verified.
-A file carrying no version suffix SHALL be classified as scratch and reported without being
-read.
+Files SHALL be grouped into **version families** keyed on three things together: the
+containing directory, the basename with the version suffix removed, and the extension. The
+version suffix SHALL be the grammar `.v<digits>` immediately preceding the extension, and the
+extension SHALL be `.slp` or `.pkg.slp`. Free text may precede or follow the version
+component — both `…8nodes.uncropped.v008.slp` and `…labels.v003_updated_filenames.slp` occur
+in this corpus, one of them in a family alongside three other shapes — and SHALL NOT be
+treated as part of the version.
+
+Each part of that key earns its place against this corpus. Keying on the basename alone
+merges files across directories: `labels.vNNN.slp` occurs 57 times in 23 directories spanning
+five species and both capture modes, so a basename-keyed family would name the highest
+version found anywhere as the current file and refuse to read the other fifty-six. A `.slp`
+and a `.pkg.slp` are different shapes — one references images, one embeds them — and are
+never versions of one another; the corpus holds five same-version pairs of exactly that form,
+and the embedded packages are the only collections whose skeleton rows are already
+independently verified.
+
+Within a family the highest version is the family's current file; earlier versions SHALL be
+recorded as superseded, naming the file, and SHALL NOT be read or digest-verified. Two files
+in one family carrying the same version SHALL be reported as a version collision and neither
+SHALL be treated as the family's current file, because superseding a file suppresses it from
+the inventory and no arbitrary choice may do that.
+
+Where two or more enumerated files share a basename and a version in different directories,
+each SHALL be reported as a distinct file naming the others, so a person promoting one knows
+the alternatives exist. The registered wheat superset exists in three directories at one
+version, so this is the ordinary case rather than an edge case.
+
+A file carrying no version suffix SHALL be classified `unclassified`, never `scratch` by
+structure alone. Classification from a filename is a structural rule, and a structural rule
+may not take an irreversible read-or-not decision: the share's nine most recent plate labels
+files are unversioned deliberate merges under a `combined_roots/` directory, and they are the
+only trace of two experiments. `scratch` SHALL come only from the decision file.
 
 Only a **promoted** file SHALL be read, digest-verified, reconciled against scan metadata, or
 entered in the skeleton diff. Every other enumerated file SHALL still receive an aggregate
@@ -146,10 +180,39 @@ unclassified and reported as awaiting a decision, never promoted by default.
 - **THEN** the highest is the family's current file and the other two are reported as
   superseded, naming each file, and neither is opened
 
-#### Scenario: A file with no version suffix is scratch
+#### Scenario: A file with no version suffix awaits a decision
 
 - **WHEN** an enumerated labels file carries no version suffix
-- **THEN** it is classified scratch and reported without being read
+- **THEN** it is classified `unclassified` and reported as awaiting a decision, not `scratch`
+
+#### Scenario: Families do not merge across directories
+
+- **WHEN** two directories each hold a file of the same basename at different versions
+- **THEN** each directory's highest version is its own family's current file and neither
+  supersedes the other
+
+#### Scenario: A packaged file is not a version of its plain sibling
+
+- **WHEN** a directory holds `<name>.v003.slp` and `<name>.v003.pkg.slp`
+- **THEN** they are separate families, both current, and neither is reported as superseding
+  the other
+
+#### Scenario: Free text around the version is not part of it
+
+- **WHEN** a family holds `<name>.v003.slp`, `<name>.v003_updated_filenames.slp` and
+  `<name>.v004.slp`
+- **THEN** the version parsed for each is 3, 3 and 4, and the first two are reported as a
+  version collision
+
+#### Scenario: A version collision leaves no current file
+
+- **WHEN** two files in one family carry the same version
+- **THEN** the collision is reported and neither is treated as the family's current file
+
+#### Scenario: Copies in different directories each name the others
+
+- **WHEN** the same basename and version occurs in three directories
+- **THEN** each is reported as a distinct file naming the other two
 
 #### Scenario: Several promoted files in one directory are all inventoried
 
@@ -867,9 +930,20 @@ Labels files SHALL be discovered by walking the supplied root rather than from a
 list, and every directory beneath that root SHALL be walked. A maintained list would encode
 only what is already remembered, which defeats an inventory.
 
-Derived training artifacts SHALL NOT be enumerated as labels files — a split describes a
-training run, not a corpus, and counting one would report a subset's frame count as the
-corpus's. A directory holding no labels file SHALL be reported as skipped, with the reason.
+Derived training and inference artifacts SHALL NOT be enumerated as labels files, and the
+exclusion SHALL be stated by **shape rather than by containing directory**: a file whose name
+marks it as a split, a ground-truth or prediction export, or an inference output is derived
+wherever it sits. A split describes a training run, not a corpus, and counting one would
+report a subset's frame count as the corpus's.
+
+The directory-shaped reading is not sufficient against this share. The walk root holds
+**18,099** labels files, of which **13,164** are inference outputs named `*.predictions.slp`,
+and thousands of those sit outside any `train_test_split`, `models` or `predictions`
+directory. Excluding by shape leaves roughly 1,450 files, of which about **470** carry a
+version suffix and are the real promotion candidates — a task a person can work through,
+which the unfiltered enumeration is not.
+
+A directory holding no labels file SHALL be reported as skipped, with the reason.
 
 The root walked SHALL be a supplied parameter. In production it is the project owner's
 directory; other users' directories are out of scope and SHALL NOT be walked, and discovery
@@ -892,8 +966,19 @@ rather than admitted silently, because the structural filter cannot exclude it.
 
 #### Scenario: A split is not a labels file
 
-- **WHEN** a directory contains a labels file and derived split files beneath it
+- **WHEN** a directory contains a promoted labels file and derived split files beneath it
 - **THEN** only the labels file is enumerated, and the reported frame count is its own
+
+#### Scenario: An inference output is derived wherever it sits
+
+- **WHEN** a file named `*.predictions.slp` sits in a directory named none of
+  `train_test_split`, `models` or `predictions`
+- **THEN** it is excluded as derived, on its name rather than on its location
+
+#### Scenario: Derived files are counted, not enumerated individually
+
+- **WHEN** a directory holds four thousand derived files
+- **THEN** the aggregate records a count for that directory and no entry per file
 
 #### Scenario: Discovery runs against a supplied root and does not ascend
 

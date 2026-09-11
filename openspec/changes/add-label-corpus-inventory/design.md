@@ -124,11 +124,23 @@ the `sleap-roots-contracts==0.1.0a8` pin.
 
   A finished superset, a per-day input merged into it, and a practice file are not
   distinguishable by name or structure, so the classification is a judgment recorded in a
-  committed decision file (D15). Version families group by basename minus the version
-  suffix; the highest version is the family's current file and earlier versions are reported
-  superseded without being read. This replaces the earlier draft's sibling-selection rule
-  entirely — no such rule is needed, which removes one of the values that draft deferred to
-  implementation.
+  committed decision file (D15). Version families are keyed on **(containing directory,
+  basename minus `.v<digits>`, extension)**, not on the basename alone: `labels.vNNN.slp`
+  occurs 57 times in 23 directories spanning five species and both capture modes, so a
+  basename-keyed family would name one rice file the current version of all of them and
+  refuse to read the other fifty-six. A `.slp` and a `.pkg.slp` are separate families, since
+  one references images and the other embeds them. This replaces the earlier draft's
+  sibling-selection rule entirely — no such rule is needed, which removes one of the values
+  that draft deferred to implementation.
+
+  Two corollaries the corpus forces. An unversioned file is `unclassified`, never `scratch`
+  by structure alone: the nine most recent plate labels files are unversioned deliberate
+  merges and are the only trace of two experiments, and a structural rule may not take an
+  irreversible read-or-not decision — that is the judgment D15 reserves for a person. And
+  derived files are excluded **by shape rather than by directory**, because 13,164 of the
+  share's 18,099 labels files are `*.predictions.slp` inference outputs and thousands sit
+  outside any `predictions` directory; excluding by shape leaves ~1,450 files and ~470
+  versioned promotion candidates, which is a reviewable task where 18,099 is not.
 
   Split directories are excluded because a split describes a training run, and reporting its
   frame count as the corpus's would be wrong in the direction that looks plausible. The walk
