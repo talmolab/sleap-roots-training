@@ -222,8 +222,9 @@ The audit is a data-producing script, so tests target the deterministic parts:
   `unclassified` status exists so judgement calls surface rather than being guessed.
 - **Scope creep into fixes.** This effort reports. Every correction it implies
   (`skeletons.yaml` `mode` key, new species rows, #3, tip models) is a separate change.
-- **Bloom coverage.** Legacy scans may predate Bloom ingestion or have been re-keyed;
-  those become `unresolved` rather than errors.
+- **Bloom coverage.** Legacy scans may predate Bloom ingestion; those become `unresolved`
+  rather than errors. (Re-keying is *not* a failure mode here — eberrigan, 2026-09-11. An
+  earlier draft of this bullet named it and the term was never defined.)
 
 ## Decisions (resolved 2026-09-02, eberrigan)
 
