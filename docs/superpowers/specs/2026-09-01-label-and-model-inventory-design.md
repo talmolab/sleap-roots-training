@@ -1,9 +1,24 @@
 # Label and model inventory — design
 
-**Status:** draft for review
+**Status:** draft for review. **The label half is superseded — see the note below.**
 **Date:** 2026-09-01
 **Author:** eberrigan (with Claude Code)
 **Related:** talmolab/sleap-roots-training#49, #3, #11; `skeletons.yaml`; `model_selection.yaml`
+
+> **Superseded, 2026-09-15 — the label inventory does not reconcile against Bloom.**
+> Everything below about joining scans to Bloom, reconciling two derivations of a field,
+> adjudicating disagreements, and per-field confidence describes a design that was
+> **rescoped away**. Bloom's coverage of this corpus was never measured — that the join
+> key is selectable is not evidence that rows come back — and the dependency costs
+> production credentials carrying write authority for a result the headline finding
+> (`skeletons.yaml` has no `mode` key) does not need. Bloom is also not the source for
+> plate labels (eberrigan, 2026-09-10). The label inventory reports what the labels files
+> themselves say, labels name-derived species as name-derived, and **prints what it cannot
+> decide rather than carrying a mechanism to record the answer**. Reconciliation may come
+> back as its own change once someone runs one query and confirms rows return.
+>
+> **The model half of this document is unaffected and still live.** So is the *Why* section
+> below, which is the motivating analysis for both.
 
 ## Why
 
