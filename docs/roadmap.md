@@ -1,7 +1,7 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
-**Last revised:** 2026-09-10 (see the dated revision log at the bottom for what changed and why).
+**Last revised:** 2026-09-15 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
@@ -232,13 +232,15 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   `labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp` with a character-matching age window — it may
   be the wheat half of that set, or the whole thing, in which case a single-species card would be
   wrong. So the work splits:
-  1. **`add-label-corpus-inventory`** (this repo, proposed) — a re-runnable
-     `sleap-roots-training inventory labels` that resolves each collection to a digest-verified
-     local file, derives per-scan facts independently from the labels file **and** from Bloom
-     (joined on the QR code in each video path, via `bloomctl`), reconciles the two, and emits
-     **evidence, not cards**: a per-scan CSV per collection, an aggregate YAML with per-field
-     confidence, and a skeleton-table diff. It also establishes the corpus size — the registry's 8
-     collections sit inside an expected ~25–30.
+  1. **`add-label-inventory`** (this repo, proposed) — a re-runnable
+     `sleap-roots-training inventory labels` that enumerates the labels files on the share,
+     derives their facts **from the files themselves**, digest-verifies the ones a registry
+     artifact covers, and emits **evidence, not cards**: one table, one report, and a
+     skeleton-table diff. It also establishes the corpus size — the registry's 8 collections sit
+     inside an expected ~25–30. **Bloom reconciliation is deliberately not part of it**
+     (rescoped 2026-09-15): Bloom's coverage of this corpus was never measured, and the headline
+     finding — that `skeletons.yaml` has no `mode` key — needs no external service. Species
+     derived from a name is reported as name-derived and is not treated as evidence.
   2. **#11 / #49** — consumes that evidence and builds the cards, supplying `registry_id`,
      `version`, `mode` and `root_type` (which have no source in scan metadata) from its own decision
      record. It keeps its durable output: the committed YAML mapping, confidence levels, and
@@ -909,3 +911,21 @@ reviewing `sleap-roots-contracts#36` surfaced the same `extra="ignore"` behaviou
   own use. Recorded on #49; `sleap-roots-contracts#34` stays the home for a real alias concept.
 - **MINOR:** `wheat-cylinder-crown` re-confirmed on the new footing — it was ratified on the
   nickname surviving on the card, and now stands on the accepted loss instead. §7 is unblocked.
+
+**Roadmap revision (2026-09-15)** — the label inventory rescoped and renamed, after the previous
+proposal took seven review rounds without landing.
+- **IMPORTANT (scope cut):** **the inventory does not reconcile against Bloom.** Bloom's coverage
+  of this corpus was never measured — that `cyl_scans_extended` is *selectable by* `plant_qr_code`
+  is not evidence that rows come back for these 125 wheat codes, and nobody ran the query. The
+  dependency also costs `bloomctl` plus ~25 packages and production credentials carrying **write**
+  authority, for a result the headline finding does not need: `skeletons.yaml` has no `mode` key,
+  and node counts are read from the files. Reconciliation becomes its own change **after** someone
+  runs one query and confirms rows return. Tier 2's block above is updated; the 2026-09-10 entry
+  stands as the record of what was decided then.
+- **MINOR (renamed):** the change is `add-label-inventory`, not `add-label-corpus-inventory`. The
+  earlier proposal is abandoned unimplemented; nothing was ever built on it.
+- **MINOR (consequences):** species from Bloom, plant counts, and per-field confidence go with the
+  cut — the inventory reports name-derived species *as* name-derived and says plainly it is not
+  evidence, and emits one table and one report rather than a per-scan CSV and a confidence YAML.
+  #11/#49 still supplies `registry_id`, `version`, `mode` and `root_type`, and still owns card
+  eligibility including flagging a multi-species file for splitting.
