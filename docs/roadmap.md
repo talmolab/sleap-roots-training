@@ -1,7 +1,7 @@
 # Generalist SLEAP Root Models — Program Roadmap
 
 **Status:** Approved 2026-06-24 (2 adversarial rounds + focused review) · **Date:** 2026-06-24
-**Last revised:** 2026-08-07 (see the dated revision log at the bottom for what changed and why).
+**Last revised:** 2026-09-15 (see the dated revision log at the bottom for what changed and why).
 **Spec:** the design spec lives in the lab vault + the Notion project (not in this repo).
 **Method:** roadmap-driven, tier by tier. Each tier = one just-in-time OpenSpec PR (in this repo)
 or, for cross-repo tiers, a coordinated PR set. Oracle-graded. Issues/PRs are filed
@@ -186,12 +186,17 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   model — 8 after the #39 re-seed, 13 before it (the registry has ~100 collections total; most are
   non-production sweep/run artifacts).
 - **Labels need a contract of their own.** The `sleap-roots-labels` registry currently stores
-  provenance as boolean-key metadata and `data_path`s pointing at deleted temp directories, so a
-  label set cannot be traced to its experiment — and `cyl` (labels) vs `cylinder` (models) means a
-  model cannot be joined to the labels it trained on. A `LabelCard` mirroring `ModelCard`, plus a
-  row-level sample manifest (the ad hoc labeling-package build process already computes this
-  provenance in a personal script, not yet ported into a shared repo — see #26), is a prerequisite
-  for the lineage oracle.
+  provenance as boolean-key metadata, so a label set cannot be traced to its experiment — and `cyl`
+  (labels) vs `cylinder` (models) means a model cannot be joined to the labels it trained on. A
+  `LabelCard` mirroring `ModelCard`, plus a row-level sample manifest (the ad hoc labeling-package
+  build process already computes this provenance in a personal script, not yet ported into a shared
+  repo — see #26), is a prerequisite for the lineage oracle.
+  **Correction (2026-09-10):** an earlier version of this entry said the recorded `data_path`s point
+  at deleted temp directories and are therefore unusable. That reads the **repair version** of each
+  collection, which re-embeds images and overwrites the path; the **original version** records the
+  real source path, and all eight resolve on the share and size-match their registry copy. The
+  provenance is recoverable — it was being read from the wrong artifact version. The
+  `cyl`/`cylinder` join gap is unaffected and still real.
 - **Shared/generalist models are represented once (#39, resolved).** `ModelCard` carries
   `selectors: tuple[Selector, ...]`, each selector bundling its own
   `species`/`mode`/`age_min`/`age_max`, with `root_type` scalar because it is intrinsic to the
@@ -216,10 +221,51 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   accepted tradeoff in favor of clean per-species versioning/lineage and future per-dataset
   data-engineering work (per-dataset splits, per-dataset contribution to a generalist model).
 - **Tracking:** Tier-2 EPIC; #10 (LabelCard contract — shipped, `sleap-roots-contracts#24`), #11
-  (backfill existing collections onto `LabelCard`, now unblocked — carries an explicit requirement
-  to verify each collection is actually single-species before backfilling, not just trust its
-  name), #39 (registry-duplication decision, models only). *(Good home for a cross-track
-  engineering PR.)*
+  (backfill existing collections onto `LabelCard`), #39 (registry-duplication decision, models
+  only). *(Good home for a cross-track engineering PR.)*
+- **Backfill is evidence-first, in two changes (resequenced 2026-09-01).** #11 originally proposed
+  reconstructing provenance inside the backfill PR, from the collections' free-text `description`
+  fields plus the share. That is circular: every species in #49's table is parsed from the
+  collection *name*, and a `.slp` carries no species field, so the verification would confirm the
+  names using the names. The specific doubt is `wheat_5-14DAG_seminal_6nodes_labels`, whose two
+  name tokens both appear verbatim in the pooled training set
+  `labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp` with a character-matching age window — it may
+  be the wheat half of that set, or the whole thing, in which case a single-species card would be
+  wrong. So the work splits:
+  1. **`add-label-inventory`** (this repo, proposed) — a re-runnable
+     `sleap-roots-training inventory labels` that enumerates the labels files on the share,
+     derives their facts **from the files themselves**, digest-verifies the ones a registry
+     artifact covers, and emits **evidence, not cards**: one table, one report, and a
+     skeleton-table diff. It also establishes the corpus size — the registry's 8 collections sit
+     inside an expected ~25–30. **Bloom reconciliation is deliberately not part of it**
+     (rescoped 2026-09-15): Bloom's coverage of this corpus was never measured, and the headline
+     finding — that `skeletons.yaml` has no `mode` key — needs no external service. Species
+     derived from a name is reported as name-derived and is not treated as evidence.
+  2. **#11 / #49** — consumes that evidence and builds the cards, supplying `registry_id`,
+     `version`, `mode` and `root_type` (which have no source in scan metadata) from its own decision
+     record. It keeps its durable output: the committed YAML mapping, confidence levels, and
+     automated checks.
+
+  Deferred until the inventory lands, because they only matter if these collections are preserved
+  as-is: de-aliasing `production` from the old collections, the "W&B collections cannot be renamed
+  or deleted" premise (the pinned `wandb` 0.28.0 client exposes `delete()` and a `name` setter;
+  whether the *server* refuses this for `wandb-registry-*` collections is uncited), and most of the
+  migration rollback ceremony. Renaming, rebuilding, or discarding collections are all still on the
+  table.
+- **The original collection names are not recorded on the cards (decided 2026-09-10).** `LabelCard`
+  is `frozen=True, extra="ignore"`, so a name passed to it is accepted and silently discarded — and
+  the tolerance cannot simply be tightened, because both card docstrings name the consumers a future
+  `extra="forbid"` would break (this backfill on one side, predict's registry lister on the other).
+  Rather than add a contract field for it, **the loss is accepted**: the nickname does not survive
+  into the registry. The original names still live in #49's committed YAML mapping, which the
+  migration needs anyway — it is what the cards are built from, what proves the old artifacts are
+  not orphaned, and what the rollback record keys on. `sleap-roots-contracts#34` remains the
+  low-priority home for a real alias mechanism if one is ever wanted.
+- **Wheat's collection is `wheat-cylinder-crown` (decided 2026-09-01, confirmed 2026-09-10).** The
+  team's `seminal` nickname does not become a `RootType` member; the root type is `crown`, and that
+  propagates into the normalized collection name rather than making wheat the one collection of
+  eight whose name doesn't derive from its own card. Originally ratified on the nickname surviving
+  on the card; with that mitigation withdrawn above, it now stands on the accepted loss instead.
 
 ### Tier 2.2 — Per-model training-backend parity (sleap-nn vs. legacy TF, full production fleet)
 - **Deliverable:** for every **physically distinct** production model (dedup on `weights_checksum`,
@@ -232,9 +278,11 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   schedule/step-count had to match too, or a faithful config falsely appears to collapse. If a
   production model's exact original dataset cannot be **confidently identified** (real risk — see
   #11's own finding that 6 of the 8 existing label collections have gaps in *provenance metadata*,
-  not necessarily lost frames — the images themselves are recoverable from the W&B artifact, but
-  broken `data_path`s and undocumented fields make it hard to confirm a given collection is the
-  exact one a legacy model trained on), flag and exclude that model from this tier's gate rather
+  not necessarily lost frames — the images themselves are recoverable from the W&B artifact, and
+  **as of 2026-09-10 the source paths are too**, read off the original rather than the repair
+  artifact version, but undocumented fields and unverified species still make it hard to confirm a
+  given collection is the exact one a legacy model trained on; Tier 2's label-corpus inventory is
+  what settles this per collection), flag and exclude that model from this tier's gate rather
   than approximating it; a fabricated "close enough" split must never quietly stand in for the real
   one. **A model excluded this way is held, not exempted** — it does not proceed into Tier 3 until
   its dataset is actually recovered/confirmed, so the fleet-wide "gate cleared" claim is never
@@ -280,9 +328,9 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   tracked, versioned data) and #39 (train once per distinct `weights_checksum`; before #39 that was
   explicitly *not* once per card, or this would retrain the same physical model up to 4× — after it,
   one card is one physical model and the two coincide). **Sequenced, not parallel:** kickoff waits
-  for #11 (backfill) and #39 (dedup decision) to close — retraining "the actual pipeline" against
-  the real dataset registry is the point of this tier, so it can't start against registry loose
-  ends.
+  for #11 (backfill — now itself behind the label-corpus inventory, see Tier 2) and #39 (dedup
+  decision) to close — retraining "the actual pipeline" against the real dataset registry is the
+  point of this tier, so it can't start against registry loose ends.
 - **Tracking:** Tier-2.2 EPIC (filed at kickoff, JIT); links #21 / #36 (the Tier-1 methodology this
   generalizes), #39 (dedup blocker), `sleap-roots-pipeline#15` + `sleap-roots-predict#33` (the
   inference-side precedent + reusable ground-truth/tolerance-decision methodology).
@@ -820,3 +868,64 @@ Anirudh's redundancy-math review before starting the proposal.
 - Anirudh is separately checking whether a no-contract-change alternative (wandb linking one
   artifact into multiple registry collections) is viable; optional under the selector-list design,
   not blocking it.
+
+**Roadmap revision (2026-09-10)** — the label backfill resequenced to evidence-first, prompted by
+reviewing #49 and finding its species column was derived from the collection names it was meant to
+verify.
+- **BLOCKING (circular verification):** **#11/#49's provenance archaeology moved out of the backfill
+  PR.** Species was parsed from each collection's name, with no independent source anywhere in the
+  change, so the verification would have confirmed the names using the names — and
+  `wheat_5-14DAG_seminal_6nodes_labels` may be the wheat half of a pooled wheat+rice set rather than
+  a single-species collection. Split into `add-label-corpus-inventory` (derives facts independently
+  from the labels file and Bloom, emits **evidence, not cards**) feeding #11/#49 (builds the cards,
+  keeps the committed YAML mapping and automated checks). Tier 2's Tracking block now records the
+  two-change shape.
+- **IMPORTANT (factual correction):** **the recorded `data_path`s are not dead.** Tier 2 said they
+  point at deleted temp directories, and Tier 2.2 built its dataset-identification risk partly on
+  that. Both read the **repair version**, which re-embeds images and overwrites the path; the
+  **original version** holds the real source path, and all eight resolve on the share and size-match
+  their registry copy. Corrected in both places. The remaining Tier 2.2 risk is unverified species
+  and undocumented fields, not lost paths.
+- **IMPORTANT (decision recorded):** **wheat's normalized collection is `wheat-cylinder-crown`.**
+  The `seminal` nickname stays a nickname; `crown` is the `RootType`, and it propagates into the
+  collection name rather than making wheat the sole exception to the `{species}-{mode}-{root_type}`
+  convention. Flagged with it: the lost-nickname mitigation (record the original name on the card)
+  does not currently work — `LabelCard` is `frozen=True, extra="ignore"` and drops the value — so
+  the rename should not execute until the nickname has somewhere real to live.
+- **MINOR (deferrals recorded):** the de-aliasing question, the "collections cannot be renamed or
+  deleted" premise (contradicted by the pinned `wandb` 0.28.0 client; server-side registry policy
+  uncited), and most of the migration rollback ceremony are held until the inventory says which
+  collections survive.
+- **MINOR (housekeeping):** #11 was closed on 2026-08-31 by #50's merge commit, whose message read
+  `closes #11's sibling #51` — GitHub matched the keyword to #11 and ignored the possessive, closing
+  the backfill and leaving #51 open. Both corrected: #11 reopened, #51 closed as completed.
+
+**Roadmap revision (2026-09-10, second)** — the nickname-provenance question settled, after
+reviewing `sleap-roots-contracts#36` surfaced the same `extra="ignore"` behaviour from the docs side.
+- **IMPORTANT (decision taken):** **original collection names are not recorded on the cards.**
+  `LabelCard`'s `extra="ignore"` discards them silently, and the tolerance is load-bearing on the
+  read path — both card docstrings name the consumers `extra="forbid"` would break. The three
+  options (add a contracts field, narrow to wandb metadata, accept the loss) resolved to **accept
+  the loss**: no contracts release, no pin bump, no second D7 trigger, and no consumer currently
+  needs the value programmatically. The committed YAML mapping keeps the names for the migration's
+  own use. Recorded on #49; `sleap-roots-contracts#34` stays the home for a real alias concept.
+- **MINOR:** `wheat-cylinder-crown` re-confirmed on the new footing — it was ratified on the
+  nickname surviving on the card, and now stands on the accepted loss instead. §7 is unblocked.
+
+**Roadmap revision (2026-09-15)** — the label inventory rescoped and renamed, after the previous
+proposal took seven review rounds without landing.
+- **IMPORTANT (scope cut):** **the inventory does not reconcile against Bloom.** Bloom's coverage
+  of this corpus was never measured — that `cyl_scans_extended` is *selectable by* `plant_qr_code`
+  is not evidence that rows come back for these 125 wheat codes, and nobody ran the query. The
+  dependency also costs `bloomctl` plus ~25 packages and production credentials carrying **write**
+  authority, for a result the headline finding does not need: `skeletons.yaml` has no `mode` key,
+  and node counts are read from the files. Reconciliation becomes its own change **after** someone
+  runs one query and confirms rows return. Tier 2's block above is updated; the 2026-09-10 entry
+  stands as the record of what was decided then.
+- **MINOR (renamed):** the change is `add-label-inventory`, not `add-label-corpus-inventory`. The
+  earlier proposal is abandoned unimplemented; nothing was ever built on it.
+- **MINOR (consequences):** species from Bloom, plant counts, and per-field confidence go with the
+  cut — the inventory reports name-derived species *as* name-derived and says plainly it is not
+  evidence, and emits one table and one report rather than a per-scan CSV and a confidence YAML.
+  #11/#49 still supplies `registry_id`, `version`, `mode` and `root_type`, and still owns card
+  eligibility including flagging a multi-species file for splitting.
