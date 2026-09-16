@@ -7,7 +7,9 @@ The filename rule is the operative one. Measured over one share root, `*.predict
 inference output accounts for 13,164 of 18,099 `.slp` files, and thousands of derived files
 sit outside every `models/`, `predictions/` and `train_test_split*/` directory — so a
 directory-only rule admits them. An unversioned filename SHALL NOT be treated as derived:
-the newest labeling on the measured share is unversioned.
+the newest labeling on the measured share is unversioned. The walk SHALL NOT follow symlinks,
+and an unreadable directory SHALL be counted and reported — a silent undercount would
+falsify the tool's own evidence of its coverage.
 
 #### Scenario: A prediction file outside every derived directory is excluded
 - **WHEN** enumeration reaches a `*.predictions.slp` file whose path has no `models/`, `predictions/` or `train_test_split*/` segment
@@ -22,55 +24,53 @@ the newest labeling on the measured share is unversioned.
 - **WHEN** enumeration reaches a labels file carrying neither a `.vNNN` suffix nor a derived shape
 - **THEN** the file is enumerated as a candidate
 
-#### Scenario: Exclusion counts are reported
+#### Scenario: Files seen, files excluded and unreadable directories all reconcile
 - **WHEN** the walk completes
-- **THEN** the report states how many files were seen and how many each exclusion rule removed
+- **THEN** the report states how many files were seen, how many each exclusion rule removed, and how many directories could not be read
+- **AND** the per-rule counts and the candidate count sum to the files seen
 
 ### Requirement: Version Family Grouping
-The command SHALL group candidates into version families keyed on the containing directory, the basename with its version suffix removed, and the extension.
+The command SHALL group candidates into version families keyed on the containing directory, the basename with only its `.vNNN` token removed and all other text retained, and the full suffix chain.
 
 Four suffix shapes occur: `.vNNN.slp`, `.vNNN.pkg.slp`, `.vNNN_<text>.slp` and
 `.<text>.vNNN.slp`. Keying on the basename alone is wrong — `labels.vNNN.slp` occurs 57
 times across 23 directories spanning five species and both capture modes, and 88 versioned
-basenames collide across directories, so basename keying would let one file supersede
-unrelated ones.
+basenames collide across directories. Retaining the non-version text keeps two labelers'
+files apart rather than letting one supersede the other, and the full suffix chain keeps
+`.slp` distinct from `.pkg.slp`.
 
 #### Scenario: Identical basenames in different directories stay separate
 - **WHEN** two directories each hold a file named `labels.v001.slp`
 - **THEN** they form two families
 - **AND** neither version supersedes the other
 
+#### Scenario: Trailing text after the version keeps families apart
+- **WHEN** one directory holds `labels.v001_ana.slp` and `labels.v001_ben.slp`
+- **THEN** they form two families
+- **AND** neither is presented as the canonical one
+
 #### Scenario: A packaged twin is cross-referenced, not merged
 - **WHEN** one directory holds `labels.v003.slp` and `labels.v003.pkg.slp`
-- **THEN** the extension keeps them in separate families
+- **THEN** the suffix chain keeps them in separate families
 - **AND** the report cross-references them as one labeling effort in two representations
 
-#### Scenario: One basename in three directories yields three families
-- **WHEN** the same versioned basename is found in three directories at the same version and byte size
-- **THEN** three families are reported
-- **AND** none is presented as the canonical one
-
 ### Requirement: Per-File Labeling Facts
-The command SHALL read each candidate and record its skeleton names, node names, node count, frame count, and separate counts of user-labeled and predicted instances.
+The command SHALL read each candidate and record its skeleton names, node names, node count, frame count, separate counts of user-labeled and predicted instances, and the filenames of the videos it references.
 
-`sleap_io` 0.7.1 exposes no `Labels`-level `user_instances` or `predicted_instances`, so
-both counts are summed over `LabeledFrame`. `Labels.skeleton` raises on zero skeletons as
-well as on more than one, with different messages. `is_negative` is set nowhere in the
-corpus, and `labeling/build_package.py` does not set it when it writes deliberately-empty
-frames.
+`sleap_io` 0.7.1 spells the counts `Labels.n_user_instances` and `Labels.n_pred_instances`,
+not `user_instances`/`predicted_instances`. `Labels.skeleton` raises on zero skeletons as
+well as on more than one — both `ValueError`, so the two cases separate on
+`len(Labels.skeletons)`, not on exception type. No confirmed-absence count is required:
+`is_negative` is set nowhere in this corpus and `labeling/build_package.py` does not set it
+for deliberately-empty frames, so any such count would be unreadable rather than zero.
 
 #### Scenario: Facts are recorded per file
 - **WHEN** a candidate is read
-- **THEN** its skeleton names, node names, node count, frame count, user-instance count and predicted-instance count are recorded
+- **THEN** its skeleton names, node names, node count, frame count, user-instance count, predicted-instance count and referenced video filenames are recorded
 
 #### Scenario: Zero and multiple skeletons are distinguished
 - **WHEN** a file carries no skeleton, or more than one
 - **THEN** the two cases are reported distinctly rather than as one failure
-
-#### Scenario: Confirmed absences are unreadable, not zero
-- **WHEN** the report covers confirmed absences
-- **THEN** the count is recorded as unreadable
-- **AND** it is not recorded as zero
 
 #### Scenario: An unreadable file does not abort the scan
 - **WHEN** one candidate cannot be read
@@ -78,28 +78,31 @@ frames.
 - **AND** the remaining candidates are still read
 
 ### Requirement: Registry Digest Verification
-The command SHALL compare each candidate against the per-file digest on the matching `ArtifactManifestEntry`, and SHALL report a candidate with no registry artifact as unregistered rather than as a failure.
+The command SHALL compare each candidate against the digest on the `ArtifactManifestEntry` whose path basename equals the candidate's filename within a `wandb-registry-sleap-roots-labels` artifact, and SHALL report a candidate with no such entry as unregistered rather than as a failure.
 
-`ArtifactManifestEntry.digest` is a base64 MD5 over the whole file for uploads and
-`file://` references, at any size. `Artifact.digest` is computed over the manifest and
-SHALL NOT be used. `Artifact.manifest` fetches metadata over GraphQL without downloading.
-Unregistered files outnumber registered ones.
+Where more than one entry matches, every match is reported and none is crowned.
+`ArtifactManifestEntry.digest` is a base64 MD5 over the whole file for uploads and for
+`file://` references logged with checksumming on. `Artifact.digest` is computed over the
+manifest and SHALL NOT be used. A reference entry's digest is not always a content hash —
+`add_reference` against S3, GCS, Azure or HTTP carries that store's ETag or the URI itself,
+and a `file://` reference logged with `checksum=False` carries an MD5 of the *path* — so the
+discriminator is the reference scheme, not the mere presence of a digest.
 
 #### Scenario: A digest match is reported as verified
 - **WHEN** a candidate's base64 MD5 equals its manifest entry's digest
 - **THEN** the family is reported as digest-verified against that artifact and version
 
 #### Scenario: A digest mismatch is reported as a mismatch
-- **WHEN** the two digests differ
+- **WHEN** the two digests differ and the entry's digest is a content hash
 - **THEN** the family is reported as mismatching, naming both digests
 
 #### Scenario: An unregistered file is not a failure
-- **WHEN** no registry artifact references a candidate
+- **WHEN** no registry artifact holds an entry matching a candidate
 - **THEN** the family is reported as unregistered
 - **AND** the scan's exit status is unaffected
 
-#### Scenario: A reference-store entry is unverifiable
-- **WHEN** a manifest entry was added by `add_reference` against S3, GCS, Azure or HTTP and carries that store's ETag
+#### Scenario: A reference digest that is not a content hash is unverifiable
+- **WHEN** a matching entry carries a reference whose scheme is not `file`, or a `file://` reference logged without checksumming
 - **THEN** the family is reported as unverifiable
 - **AND** it is not reported as mismatching
 
@@ -108,8 +111,8 @@ The command SHALL report where `skeletons.yaml` cannot express the corpus, cover
 
 `lookup_skeleton` (`src/sleap_roots_training/labeling/skeletons.py:327`) takes `species`,
 `root_type` and `age`, and no `mode`. Node counts are read from the files and the mode is
-derived from the collection name, so this report needs no scan metadata and no external
-service.
+name-derived from the family's directory path, so this report needs no scan metadata and no
+external service.
 
 #### Scenario: Two capture modes select one row
 - **WHEN** a 6-node cylinder arabidopsis primary family and an 8-node plate arabidopsis primary family are both present
@@ -124,55 +127,55 @@ service.
 - **WHEN** a file's skeleton is named in the auto-generated `Skeleton-N` form
 - **THEN** the report records that the existing `skeleton.name.partition("_")` check (`tests/test_labeling_skeletons.py:419`) cannot resolve it
 
-#### Scenario: The gap report needs no external service
-- **WHEN** the gap report is produced
-- **THEN** every value in it is derived from the labels files, their paths, and `skeletons.yaml`
-
 ### Requirement: Path Redaction
-The command SHALL redact person-identifying segments from every emitted path, using a case-insensitive marker set and a first-segment rule for drive-rooted and UNC paths.
+The command SHALL emit every candidate path relative to the supplied discovery root with the root rendered as one fixed token, and SHALL emit a referenced video path as its filename alone.
 
-Two recorded video paths defeat a marker-only rule: one carries a `Users/` marker that is
-not the share's, and one carries no marker at all — the name is the first segment after the
-drive letter. Both are colleagues' names and both appear in every emitted row for their
-family. `scripts/pull_tf_reference.py`'s `_REDACTIONS` is the existing floor. `genotype`,
-`accession_id` and `experiment_name` are not person-identifying and are not redacted.
+This is a whitelist, and smaller than the blacklist it replaces. Person-identifying segments
+lie *above* the discovery root, or inside video paths recorded on other machines — two of
+which carry colleagues' names, one with no `users/` marker at all. A marker-plus-first-segment
+blacklist cannot be shown complete: it misses the backslash form Windows SLEAP records,
+relative and `..`-rooted paths, and a person-named UNC share. Video filenames SHALL be split
+on both separators, since recorded strings are Windows-shaped whatever host runs the scan.
+`genotype`, `accession_id` and `experiment_name` are not paths and are emitted unchanged.
 
-#### Scenario: A marked user segment is redacted case-insensitively
-- **WHEN** an emitted path contains a `users/`, `Users/` or `home/` segment in any casing
-- **THEN** the following segment is replaced with a placeholder
+#### Scenario: A candidate path is emitted relative to the root
+- **WHEN** a candidate is found beneath the supplied discovery root
+- **THEN** its emitted path begins with the fixed root token
+- **AND** no segment of the root's own absolute path appears in any emitted artifact
 
-#### Scenario: A drive-rooted first segment is redacted
-- **WHEN** an emitted path is drive-rooted and its first segment after the drive is not a marker
-- **THEN** that first segment is replaced with a placeholder
+#### Scenario: A referenced video path is emitted as a filename
+- **WHEN** a labels file references a video by an absolute path, in either separator form
+- **THEN** only the filename is emitted
+- **AND** no directory segment of that path appears in any emitted artifact
 
-#### Scenario: A UNC first segment is redacted
-- **WHEN** an emitted path is UNC-rooted
-- **THEN** its first segment is replaced with a placeholder
-
-#### Scenario: The two known real paths are covered
-- **WHEN** the two recorded video paths described above are emitted
-- **THEN** neither emitted path retains the colleague's name
+#### Scenario: A candidate outside the root is reported by filename
+- **WHEN** a candidate path cannot be expressed relative to the supplied root
+- **THEN** it is reported by filename alone
+- **AND** the report records that it lay outside the root
 
 ### Requirement: Deterministic Artifacts
 The command SHALL emit one per-family table and one report in a deterministic order, written under `inventory/` so successive runs diff.
 
-The guarantee is a stable sort within a run, ordered by redacted path. Byte identity across
-operating systems is out of scope.
+Rows are ordered by emitted path, which is unique per candidate and therefore a total
+order. The artifacts SHALL carry no run-varying metadata — no wall-clock timestamp, no
+duration, no hostname — or successive runs could not diff. Byte identity across operating
+systems is out of scope.
 
 #### Scenario: Two runs over an unchanged tree agree
 - **WHEN** the command runs twice over one unchanged tree
-- **THEN** both runs emit identical artifacts
+- **THEN** both runs emit byte-identical artifacts
 
-#### Scenario: Rows are ordered by redacted path
+#### Scenario: Rows are ordered by emitted path
 - **WHEN** the table is emitted
-- **THEN** its rows are sorted by redacted path
+- **THEN** its rows are sorted by emitted path
 
-#### Scenario: Artifacts are written under inventory/
-- **WHEN** the command completes
-- **THEN** the table and the report are written under `inventory/`
+#### Scenario: Exit status reflects usability, not findings
+- **WHEN** the scan completes having recorded mismatches, unregistered families and unresolvable groups
+- **THEN** the command exits zero
+- **AND** it exits non-zero only where the supplied root is missing or unreadable
 
 ### Requirement: No Decision Capture
-The command SHALL print what it cannot determine and stop, and SHALL NOT read or write any file recording a human determination.
+The command SHALL report what it cannot determine and make no determination, and SHALL NOT read or write any file recording a human determination.
 
 A directory is not a collection: one measured directory holds 28 labels files spanning a
 sorghum superset, a soybean collection, a generalist, per-labeler inputs and practice
@@ -186,10 +189,10 @@ loop for this to avoid unnecessary complications."*
 - **THEN** the report lists them as candidates
 - **AND** asserts no collection membership for them
 
-#### Scenario: No record of a human determination is consulted
+#### Scenario: Only labels files, the skeleton table and manifests are read
 - **WHEN** the command runs
-- **THEN** it reads no file recording a human determination
-- **AND** writes none
+- **THEN** the only files it writes are the table and the report under `inventory/`
+- **AND** the only files it reads are labels files, `skeletons.yaml` and registry manifests
 
 #### Scenario: A name-derived species is labelled as name-derived
 - **WHEN** a family's species is inferred from its path or filename

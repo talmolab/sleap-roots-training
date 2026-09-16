@@ -6,7 +6,7 @@
 **Supersedes, for this purpose:** `2026-09-01-label-and-model-inventory-design.md` and the
 twelve `add-label-corpus-inventory` commits on `feat/label-corpus-inventory`.
 
-Read **this file only**. Do not read the 271-line background design doc or the old change
+Read **this file only**. Do not read the background design doc or the old change
 directory to "get context" — they are the thing that went wrong, and reading them reliably
 reproduces it. Everything still true is written below.
 
