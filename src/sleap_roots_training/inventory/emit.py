@@ -29,6 +29,11 @@ TABLE_FILENAME = "label-inventory.csv"
 #: The prose report.
 REPORT_FILENAME = "label-inventory.md"
 
+#: How many family names to print per crowded directory. One measured directory holds
+#: 30, and the untruncated line is unreadable — the count is the finding, the full
+#: list is in the table.
+_STEMS_SHOWN = 8
+
 #: Registry status for a family whose digest was not looked up at all.
 NOT_CHECKED = "not-checked"
 
@@ -239,9 +244,22 @@ def _render_report(inventory: Inventory) -> str:
         lines.append("")
 
     if inventory.gap.uncovered_species:
+        uncovered = sorted(inventory.gap.uncovered_species)
+        crops = [n for n in uncovered if n in gap.KNOWN_SPECIES]
+        other = [n for n in uncovered if n not in gap.KNOWN_SPECIES]
         lines += ["### Species with no row", ""]
-        lines += [f"- {name}" for name in sorted(inventory.gap.uncovered_species)]
-        lines.append("")
+        if crops:
+            lines += [f"- {name}" for name in crops]
+            lines.append("")
+        if other:
+            lines += [
+                "Derivation is open by design, so a crop nobody has heard of is not",
+                "hidden — which means directory names that are not crops also land here.",
+                "These are **not** species; they are tokens read off a path:",
+                "",
+                "- " + ", ".join(other),
+                "",
+            ]
 
     if inventory.gap.unparseable_skeletons:
         lines += ["### Skeleton names the existing check cannot resolve", ""]
@@ -259,9 +277,11 @@ def _render_report(inventory: Inventory) -> str:
             "",
         ]
         for entry in inventory.ambiguous_directories:
+            shown = ", ".join(entry.stems[:_STEMS_SHOWN])
+            if entry.family_count > _STEMS_SHOWN:
+                shown += f", and {entry.family_count - _STEMS_SHOWN} more"
             lines.append(
-                f"- `{entry.path}` holds {entry.family_count} families: "
-                + ", ".join(entry.stems)
+                f"- `{entry.path}` holds {entry.family_count} families: {shown}"
             )
     else:
         lines.append(

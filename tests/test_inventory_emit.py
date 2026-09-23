@@ -12,7 +12,7 @@ import csv
 import pytest
 import wandb
 
-from inventory_fixtures import build_share_tree
+from inventory_fixtures import build_share_tree, write_labels
 from sleap_roots_training.inventory import emit
 
 REAL = (
@@ -144,3 +144,42 @@ def test_a_missing_or_unreadable_root_is_refused(tmp_path):
     with pytest.raises(emit.UnusableRoot):
         emit.build(tmp_path / "does-not-exist")
     assert not out.exists()
+
+
+def test_uncovered_tokens_that_are_not_crops_are_separated(tmp_path):
+    """Derivation is open, so directory names that are not crops land in the list too.
+
+    The real share yields `packages`, `shoots` and `cropping` alongside wheat and
+    sorghum. Filtering them out would hide a genuinely new crop, which is the finding
+    this report exists to make — so they are separated and labelled instead.
+    """
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_wheat" / "seminal" / "labels.v001.slp")
+    write_labels(root / "SLEAP_packages" / "primary" / "labels.v001.slp")
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    report = (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+    assert "- wheat" in report
+    assert "not** species" in report
+    assert "packages" in report.split("not** species")[1]
+
+
+def test_a_crowded_directory_is_truncated_with_a_count(share, tmp_path):
+    """One measured directory holds 30 families; the untruncated line is unreadable."""
+    inventory = emit.build(share)
+    crowded = emit.AmbiguousDirectory(
+        path="<ROOT>/experiments/output",
+        family_count=30,
+        stems=tuple(f"family_{i:02d}" for i in range(30)),
+    )
+    inventory.ambiguous_directories = [crowded]
+
+    out = tmp_path / "inventory"
+    emit.write(inventory, out)
+    report = (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+    assert "holds 30 families" in report
+    assert "and 22 more" in report
+    assert "family_29" not in report

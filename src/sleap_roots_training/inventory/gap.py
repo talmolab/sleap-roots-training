@@ -47,8 +47,10 @@ _ROOT_TYPE_TOKENS = {
 #: ``SLEAP_<species>`` is how the share names its top-level per-crop directories.
 _SLEAP_DIR = re.compile(r"^SLEAP[_-](?P<species>[a-z]+)", re.IGNORECASE)
 
-#: Species named directly in a directory or file token, e.g. ``cyl_arabidopsis_primary``.
-_KNOWN_SPECIES = (
+#: Crop names this program already knows about. Used **only** to sort the uncovered
+#: list for a reader — never to filter derivation, because a crop nobody has heard of
+#: is exactly the finding this report exists to surface.
+KNOWN_SPECIES = (
     "arabidopsis",
     "soybean",
     "canola",
@@ -168,7 +170,7 @@ def derive(family: discover.Family) -> Derived:
             species = match.group("species").lower()
             break
     if species is None:
-        species = next((t for t in tokens if t in _KNOWN_SPECIES), None)
+        species = next((t for t in tokens if t in KNOWN_SPECIES), None)
 
     mode = next((_MODE_TOKENS[t] for t in tokens if t in _MODE_TOKENS), None)
     root_type = next(
