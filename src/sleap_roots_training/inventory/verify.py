@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 from urllib.parse import urlparse
 
-from wandb.sdk.lib.hashutil import md5_file_b64, md5_string
+import base64
+import hashlib
 
 #: The candidate's bytes match the digest the registry recorded.
 VERIFIED = "verified"
@@ -43,6 +44,13 @@ UNVERIFIABLE = "unverifiable"
 
 #: The candidate could not be read to digest it.
 UNREADABLE = "unreadable"
+
+#: Artifact type of the label collections. Measured against the live registry: `"model"`
+#: raises `Unable to parse 'ArtifactCollections' response data`, `"dataset"` returns the
+#: 8 collections. The wrong value was copied from the *model* registry publisher, and
+#: the broad catch below turned the resulting failure into "could not read the labels
+#: registry" -- so the whole requirement silently produced `not-checked` forever.
+_LABELS_ARTIFACT_TYPE = "dataset"
 
 
 @dataclass(frozen=True)
@@ -78,15 +86,29 @@ def content_digest(path: Path) -> str:
     Returns:
         The base64-encoded MD5 of the whole file.
     """
-    return md5_file_b64(str(path))
+    digest = (
+        hashlib.md5()
+    )  # noqa: S324 - matching wandb's recorded digest, not security
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return base64.b64encode(digest.digest()).decode("ascii")
 
 
-def _uri_digest(path: Path) -> Optional[str]:
-    """Return the digest a ``file://`` reference logged with ``checksum=False`` carries."""
-    try:
-        return md5_string(Path(path).resolve().as_uri())
-    except (ValueError, OSError):
+def _reference_uri_digest(entry: object) -> Optional[str]:
+    """Return the digest a ``file://`` reference logged with ``checksum=False`` carries.
+
+    Hashed from the entry's **own** recorded reference, not from the local candidate.
+    wandb computes ``md5_string(resolved_uri)`` on the *logging* machine, so hashing the
+    local path only ever matched when the scan ran from the same absolute path the
+    artifact was logged from — never true for a share read from another host, and the
+    resulting false mismatch is exactly what this module exists to prevent.
+    """
+    ref = getattr(entry, "ref", None)
+    if not ref:
         return None
+    digest = hashlib.md5(str(ref).encode("utf-8"))  # noqa: S324 - matching wandb
+    return base64.b64encode(digest.digest()).decode("ascii")
 
 
 def _reference_scheme(entry: object) -> Optional[str]:
@@ -130,56 +152,75 @@ def classify(path: Path, entries: Sequence[object]) -> Verification:
             matches=len(entries),
         )
 
-    uri = _uri_digest(path)
+    unverifiable: Optional[str] = None
     for entry, digest in zip(entries, recorded):
         scheme = _reference_scheme(entry)
         if scheme is not None and scheme != "file":
-            return Verification(
-                status=UNVERIFIABLE,
-                local_digest=local,
-                recorded_digests=recorded,
-                matches=len(entries),
-                detail=(
-                    f"reference to {scheme}: the digest is that store's ETag or the "
-                    "URI, not a content hash"
-                ),
+            unverifiable = unverifiable or (
+                f"reference to {scheme}: the digest is that store's ETag or the URI, "
+                "not a content hash"
             )
-        if uri is not None and digest == uri:
+        elif digest == _reference_uri_digest(entry):
+            unverifiable = unverifiable or (
+                "file:// reference logged with checksum=False: the digest is an MD5 of "
+                "the path, not of the contents"
+            )
+        else:
+            # A genuine content-hash comparison that did not match. This outranks any
+            # unverifiable sibling: reporting a real mismatch as "cannot be checked"
+            # because some *other* matching entry is a cloud reference made MISMATCH
+            # unreachable on the corpus this was written for.
             return Verification(
-                status=UNVERIFIABLE,
+                status=MISMATCH,
                 local_digest=local,
                 recorded_digests=recorded,
                 matches=len(entries),
-                detail=(
-                    "file:// reference logged with checksum=False: the digest is an "
-                    "MD5 of the path, not of the contents"
-                ),
             )
 
     return Verification(
-        status=MISMATCH,
+        status=UNVERIFIABLE,
         local_digest=local,
         recorded_digests=recorded,
         matches=len(entries),
+        detail=unverifiable,
     )
 
 
-def statuses(
+def verdicts(
     paths: Iterable[Path], index: dict[str, Sequence[object]]
-) -> dict[Path, str]:
-    """Classify many candidates against an index of manifest entries.
+) -> dict[Path, Verification]:
+    """Classify many candidates, keeping the whole verdict.
+
+    The spec requires a mismatch to be reported "naming both digests", so the digests
+    have to survive as far as the emitter; projecting to a bare status here is what
+    stopped them reaching an artifact.
 
     Args:
         paths: Candidate paths.
         index: Filename to the manifest entries carrying that filename.
 
     Returns:
-        Each path mapped to its status string, for the emitted table.
+        Each path mapped to its full :class:`Verification`.
     """
     return {
-        Path(path): classify(Path(path), index.get(Path(path).name, ())).status
+        Path(path): classify(Path(path), index.get(Path(path).name, ()))
         for path in paths
     }
+
+
+def statuses(
+    paths: Iterable[Path], index: dict[str, Sequence[object]]
+) -> dict[Path, str]:
+    """Classify many candidates and keep only the status string.
+
+    Args:
+        paths: Candidate paths.
+        index: Filename to the manifest entries carrying that filename.
+
+    Returns:
+        Each path mapped to its status string.
+    """
+    return {path: v.status for path, v in verdicts(paths, index).items()}
 
 
 def fetch_index(project: Optional[str] = None) -> dict[str, list[object]]:
@@ -209,7 +250,7 @@ def fetch_index(project: Optional[str] = None) -> dict[str, list[object]]:
         path = project or f"{cfg.entity}-org/wandb-registry-sleap-roots-labels"
         api = wandb.Api()
         index: dict[str, list[object]] = {}
-        for collection in api.artifact_collections(path, "model"):
+        for collection in api.artifact_collections(path, _LABELS_ARTIFACT_TYPE):
             artifact = api.artifact(f"{path}/{collection.name}:latest")
             for entry_path, manifest_entry in artifact.manifest.entries.items():
                 index.setdefault(Path(entry_path).name, []).append(manifest_entry)

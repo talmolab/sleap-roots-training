@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from sleap_roots_training.inventory import discover, gap, read, redact
+from sleap_roots_training.inventory import discover, gap, read, redact, verify
 from sleap_roots_training.labeling.skeletons import SkeletonRow
 
 #: The per-family table.
@@ -57,6 +57,7 @@ COLUMNS = (
     "member_filenames",
     "twin_of",
     "registry_status",
+    "registry_detail",
     "error",
 )
 
@@ -203,7 +204,8 @@ def build(
                         for twin in [by_key[key]]
                     )
                 ),
-                "registry_status": statuses.get(candidate.path, NOT_CHECKED),
+                "registry_status": _status_of(statuses.get(candidate.path)),
+                "registry_detail": _detail_of(statuses.get(candidate.path)),
                 "error": redact.scrub_message(facts.error) if facts.error else "",
             }
         )
@@ -248,6 +250,27 @@ def exit_code(inventory: Inventory) -> int:
     """
     del inventory
     return 0
+
+
+def _status_of(verdict: object) -> str:
+    """Return a verdict's status, or :data:`NOT_CHECKED` when nothing was looked up."""
+    if verdict is None:
+        return NOT_CHECKED
+    return verdict if isinstance(verdict, str) else verdict.status
+
+
+def _detail_of(verdict: object) -> str:
+    """Return the evidence behind a verdict.
+
+    The spec requires a mismatch to be reported "naming both digests". Keeping only the
+    status string is what stopped either digest reaching an artifact.
+    """
+    if verdict is None or isinstance(verdict, str):
+        return ""
+    if verdict.status == verify.MISMATCH:
+        recorded = " ".join(verdict.recorded_digests)
+        return f"local={verdict.local_digest} recorded={recorded}"
+    return verdict.detail or ""
 
 
 def _spreadsheet_safe(value: str) -> str:

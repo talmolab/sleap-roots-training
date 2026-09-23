@@ -334,3 +334,25 @@ def test_a_partial_scan_refuses_to_overwrite_the_artifacts(tmp_path, monkeypatch
 
     with pytest.raises(emit.PartialScan):
         emit.build(root)
+
+
+def test_a_mismatch_names_both_digests_in_the_table(tmp_path):
+    """Scenario: a mismatch is "reported as mismatching, naming both digests"."""
+    from sleap_roots_training.inventory import verify
+
+    root = tmp_path / "share"
+    path = write_labels(root / "SLEAP_rice" / "primary" / "labels.v001.slp")
+    verdict = verify.Verification(
+        status=verify.MISMATCH,
+        local_digest="LOCAL==",
+        recorded_digests=("RECORDED==",),
+        matches=1,
+    )
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root, verifier=lambda paths: {path: verdict}), out)
+    row = _rows(out)[0]
+
+    assert row["registry_status"] == verify.MISMATCH
+    assert "LOCAL==" in row["registry_detail"]
+    assert "RECORDED==" in row["registry_detail"]

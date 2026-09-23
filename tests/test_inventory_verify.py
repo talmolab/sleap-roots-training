@@ -103,14 +103,14 @@ def test_a_file_reference_logged_without_checksumming_is_unverifiable(candidate)
     ``checksum=False``. That is a well-formed base64 MD5, so an implementation keyed on
     "does this look like a hash" reports a confident mismatch for a file that is fine.
     """
-    path_digest = md5_string(Path(candidate).resolve().as_uri())
-    recorded = entry("labels.v001.slp", path_digest, f"file://{candidate.as_posix()}")
+    uri = Path(candidate).resolve().as_uri()
+    recorded = entry("labels.v001.slp", md5_string(uri), uri)
 
     result = verify.classify(candidate, [recorded])
 
     assert result.status == verify.UNVERIFIABLE
     assert "checksum=False" in (result.detail or "")
-    assert path_digest != verify.content_digest(candidate)
+    assert md5_string(uri) != verify.content_digest(candidate)
 
 
 def test_a_file_reference_with_checksumming_verifies_normally(candidate):
@@ -185,7 +185,7 @@ def test_the_labels_registry_is_queried_for_datasets_not_models(monkeypatch):
             asked.append(type_name)
             return []
 
-    monkeypatch.setattr(verify.wandb, "Api", lambda *a, **k: _Api())
+    monkeypatch.setattr(wandb, "Api", lambda *a, **k: _Api())
     verify.fetch_index(project="entity-org/wandb-registry-sleap-roots-labels")
 
     assert asked == ["dataset"]

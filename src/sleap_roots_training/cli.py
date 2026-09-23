@@ -284,7 +284,7 @@ def inventory_labels_command(
         else:
 
             def statuses(paths):
-                return inventory_verify.statuses(paths, index)
+                return inventory_verify.verdicts(paths, index)
 
     try:
         result = inventory_emit.build(root, verifier=statuses)
