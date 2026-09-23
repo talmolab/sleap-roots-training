@@ -7,6 +7,7 @@ import click
 
 from sleap_roots_training import __version__
 from sleap_roots_training import config as training_config
+from sleap_roots_training.inventory import emit as inventory_emit
 from sleap_roots_training.registry import cards, chooser, config, lineage, publish
 from sleap_roots_training.registry.models import resolve_model_dir
 
@@ -219,6 +220,67 @@ def seed_registry_command(
         click.echo(f"FAILED ({len(report['failed'])}): {report['failed']}")
     if report["failed"] or report["stale"]:
         ctx.exit(1)
+
+
+@main.group(name="inventory")
+def inventory_group() -> None:
+    """Enumerate what labeled data exists, and what is in it.
+
+    Reports rather than decides. Where the tool cannot resolve what it found — which
+    files form a collection, which supersedes which — it lists the candidates and makes
+    no determination, because that is a person's call and there is deliberately nowhere
+    to record the answer.
+    """
+
+
+@inventory_group.command(name="labels")
+@click.argument("root", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("inventory"),
+    show_default=True,
+    help="Where to write the table and the report.",
+)
+@click.pass_context
+def inventory_labels_command(ctx: click.Context, root: Path, output: Path) -> None:
+    """Enumerate the labels files beneath ROOT and report what is in them.
+
+    Walks ROOT, excludes derived files by filename shape as well as by directory, reads
+    each candidate's skeletons, nodes, frames and instance counts out of the file
+    itself, and diffs what it finds against ``skeletons.yaml``. Writes one table and one
+    report, in a deterministic order, so successive runs diff.
+
+    Every emitted path is relative to ROOT, which appears as a fixed token, and a
+    referenced video path is emitted as its filename alone — nothing above ROOT and no
+    directory chain recorded on another machine reaches an artifact.
+
+    Exits zero whatever it finds. Mismatches, unregistered files and unresolvable groups
+    are findings to read, not failures; only an unusable ROOT is an error.
+    """
+    try:
+        result = inventory_emit.build(root)
+    except inventory_emit.UnusableRoot as error:
+        raise click.ClickException(str(error)) from error
+
+    table, report = inventory_emit.write(result, output)
+    scan = result.scan
+    click.echo(
+        f"Saw {scan.files_seen} .slp file(s); {len(result.rows)} famil(ies) after "
+        f"excluding {len(scan.exclusions)} derived."
+    )
+    if scan.unreadable_directories:
+        click.echo(
+            f"WARNING: {scan.unreadable_directories} director(ies) could not be read; "
+            "the coverage counts are incomplete."
+        )
+    if result.ambiguous_directories:
+        click.echo(
+            f"{len(result.ambiguous_directories)} director(ies) hold more than one "
+            "family. Listed in the report; no determination made."
+        )
+    click.echo(f"Wrote {table} and {report}")
+    ctx.exit(inventory_emit.exit_code(result))
 
 
 @main.command(name="validate")
