@@ -8,6 +8,7 @@ them, and the tool has to say what it cannot determine rather than deciding it.
 from __future__ import annotations
 
 import csv
+import json
 
 import pytest
 import wandb
@@ -183,3 +184,153 @@ def test_a_crowded_directory_is_truncated_with_a_count(share, tmp_path):
     assert "holds 30 families" in report
     assert "and 22 more" in report
     assert "family_29" not in report
+
+
+# --------------------------------------------------------------------------------------
+# Regressions from the PR #58 review.
+# --------------------------------------------------------------------------------------
+
+
+def _rows(out):
+    with (out / emit.TABLE_FILENAME).open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+@pytest.mark.parametrize("prefix", ["=", "+", "-", "@", "\t"])
+def test_a_formula_named_skeleton_cannot_execute_in_a_spreadsheet(tmp_path, prefix):
+    """These artifacts are committed and opened in Excel.
+
+    `csv` quotes correctly for parsers, but Excel strips the quotes and evaluates a cell
+    beginning `=`, `+`, `-`, `@` or a tab. The strings come from files written on other
+    machines, so they are attacker-influenced in the only sense that matters here.
+    """
+    root = tmp_path / "share"
+    write_labels(
+        root / "SLEAP_soybean" / "primary" / "labels.v001.slp",
+        skeleton_names=(f'{prefix}HYPERLINK("http://evil","x")',),
+    )
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+
+    for row in _rows(out):
+        for value in row.values():
+            assert not value.startswith(("=", "+", "-", "@", "\t", "\r"))
+
+
+def test_video_filenames_round_trip_when_a_filename_contains_spaces(tmp_path):
+    """Space-joining produced 8,489 fragment tokens in the first committed scan.
+
+    `GSOR 301503 RDP2-3 +F.h5` came out as four tokens, so the machine-readable output
+    of an enumeration tool could not be read back.
+    """
+    root = tmp_path / "share"
+    images = tmp_path / "imgs"
+    write_labels(
+        root / "SLEAP_rice" / "primary" / "labels.v001.slp",
+        n_frames=2,
+        image_dir=images,
+    )
+    for old, new in zip(
+        sorted(images.glob("*.jpg")), ("GSOR 301503 +F.jpg", "b c.jpg")
+    ):
+        old.rename(images / new)
+    # Re-write the project so the recorded paths carry the spaces.
+    write_labels(
+        root / "SLEAP_rice" / "primary" / "labels.v002.slp",
+        n_frames=2,
+        image_dir=tmp_path / "spaced",
+    )
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    for row in _rows(out):
+        assert json.loads(row["video_filenames"]) == sorted(
+            json.loads(row["video_filenames"])
+        )
+
+
+def test_an_error_message_never_carries_an_absolute_path(tmp_path, monkeypatch):
+    """`str(error)` went into the CSV verbatim, bypassing redaction entirely.
+
+    The first scan was clean only because its two failures produced path-free h5py
+    messages; a dropped SMB session mid-scan writes the share path into a committed
+    file. The failure is injected rather than provoked so the test cannot pass by luck.
+    """
+    directory = tmp_path / "share" / "SLEAP_wheat" / "seminal"
+    write_labels(directory / "labels.v001.slp")
+
+    def _boom(*_args, **_kwargs):
+        raise OSError(
+            "[Errno 2] Unable to open file (name = "
+            r"'Z:\users\eberrigan\SLEAP\SLEAP_wheat\labels.v001.slp')"
+        )
+
+    monkeypatch.setattr(emit.read.sio, "load_slp", _boom)
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(tmp_path / "share"), out)
+
+    errors = [r["error"] for r in _rows(out) if r["error"]]
+    assert errors
+    for message in errors:
+        assert "eberrigan" not in message
+        assert "Z:" not in message
+        assert "\\" not in message
+
+
+def test_every_family_member_is_named_in_the_row(tmp_path):
+    """A family emits one row, so the non-latest members must still be reachable."""
+    directory = tmp_path / "share" / "SLEAP_rice" / "primary"
+    for name in ("labels.v001.slp", "labels.v002.slp", "labels.v003.slp"):
+        write_labels(directory / name)
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(tmp_path / "share"), out)
+    row = _rows(out)[0]
+
+    assert row["members"] == "3"
+    assert json.loads(row["member_filenames"]) == [
+        "labels.v001.slp",
+        "labels.v002.slp",
+        "labels.v003.slp",
+    ]
+
+
+def test_a_packaged_twin_is_cross_referenced_in_the_table(tmp_path):
+    """Spec clause: the report cross-references them as one effort in two forms.
+
+    `Family.twins` was computed and read by nothing, so 47 twin pairs on the real corpus
+    were emitted as unrelated rows and anyone summing `frames` double-counted.
+    """
+    directory = tmp_path / "share" / "SLEAP_soybean" / "primary"
+    write_labels(directory / "labels.v003.slp")
+    write_labels(directory / "labels.v003.pkg.slp")
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(tmp_path / "share"), out)
+    rows = {r["path"].rsplit("/", 1)[-1]: r for r in _rows(out)}
+
+    assert rows["labels.v003.slp"]["twin_of"] == "labels.v003.pkg.slp"
+    assert rows["labels.v003.pkg.slp"]["twin_of"] == "labels.v003.slp"
+
+
+def test_a_partial_scan_refuses_to_overwrite_the_artifacts(tmp_path, monkeypatch):
+    """A root that exists but cannot be listed truncated the committed CSV to a header.
+
+    `chmod 0o000` still passes `is_dir()`, so the scan found nothing, wrote a bare
+    header and exited 0 — and the diff read as "1,250 labelings disappeared".
+    """
+    root = tmp_path / "share"
+    root.mkdir()
+
+    real_walk = emit.discover.walk
+
+    def _blind(path):
+        result = real_walk(path)
+        result.unreadable_paths.append(path)
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _blind)
+
+    with pytest.raises(emit.PartialScan):
+        emit.build(root)
