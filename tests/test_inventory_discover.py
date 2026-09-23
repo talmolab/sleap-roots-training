@@ -188,3 +188,151 @@ def test_a_packaged_twin_is_cross_referenced_not_merged(tmp_path):
     assert plain.key != packaged.key
     assert packaged.key in plain.twins
     assert plain.key in packaged.twins
+
+
+# --------------------------------------------------------------------------------------
+# Regressions from the PR #58 review. Each of these failed when written.
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "scan_001_predictions.slp",
+        "arabidopsis-primary_v000_on_sorghum-primary_v000_test_predictions.slp",
+        "day5predictions.slp",
+        "predictions.slp",
+    ],
+)
+def test_prediction_output_is_excluded_whatever_separator_precedes_it(tmp_path, name):
+    """The rule matched a dot; the corpus overwhelmingly uses an underscore.
+
+    603 of 1,250 rows in the first committed scan were derived output, 416 of them
+    carrying zero user instances and non-zero predictions — the tool read the evidence
+    they were derived and emitted them anyway.
+    """
+    root = tmp_path / "share"
+    touch_labels(root / "SLEAP_soybean" / "primary" / name)
+
+    scan = discover.walk(root)
+
+    assert not scan.candidates
+    assert scan.exclusions[root / "SLEAP_soybean" / "primary" / name] == (
+        discover.DERIVED_FILENAME
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["labels_gt.train.slp", "labels_gt.val.slp", "labels_pr.test.slp"]
+)
+def test_ground_truth_and_predicted_splits_are_excluded(tmp_path, name):
+    """`labels_gt.*` / `labels_pr.*` are train/val/test splits, not labeling efforts."""
+    root = tmp_path / "share"
+    touch_labels(root / "experiments" / "artifacts" / "soybean-primary_v001" / name)
+
+    scan = discover.walk(root)
+    assert not scan.candidates
+
+
+def test_files_under_a_sleap_nn_run_directory_are_excluded(tmp_path):
+    """`<timestamp>.<model_type>.n=<N>` is a training run, not a collection."""
+    root = tmp_path / "share"
+    run = root / "SLEAP_Soy" / "lateral" / "221006_172103.multi_instance.n=482"
+    touch_labels(run / "labels.v001.slp")
+
+    scan = discover.walk(root)
+    assert not scan.candidates
+
+
+def test_a_directory_merely_starting_with_train_test_split_is_not_excluded(tmp_path):
+    """`startswith` swallowed `train_test_splitter/`, which is not a split directory."""
+    root = tmp_path / "share"
+    keep = root / "SLEAP_wheat" / "train_test_splitter" / "labels.v003.slp"
+    drop = root / "SLEAP_wheat" / "train_test_split_0.8" / "train.slp"
+    touch_labels(keep)
+    touch_labels(drop)
+
+    scan = discover.walk(root)
+
+    assert keep in {c.path for c in scan.candidates}
+    assert scan.exclusions[drop] == discover.DERIVED_DIR
+
+
+def test_the_two_trailing_text_shapes_are_different_families(tmp_path):
+    """`.vNNN_<text>.slp` and `.<text>.vNNN.slp` are named as distinct by the spec.
+
+    They collapsed to one key, so one file became `latest` and the other appeared
+    nowhere in either artifact — the exact harm the requirement exists to prevent.
+    """
+    directory = tmp_path / "share" / "SLEAP_soybean" / "primary"
+    touch_labels(directory / "labels.v001_ana.slp")
+    touch_labels(directory / "labels_ana.v001.slp")
+
+    families = discover.group(discover.walk(tmp_path / "share").candidates)
+
+    assert len(families) == 2
+    assert all(len(f.members) == 1 for f in families)
+
+
+def test_zero_padding_variants_are_one_family_with_both_members_kept(tmp_path):
+    """`v1`, `v01` and `v001` are the same version — one family, three members.
+
+    Collapsing them is right; losing them is not. Every candidate must stay reachable.
+    """
+    directory = tmp_path / "share" / "SLEAP_rice" / "primary"
+    for name in ("labels.v1.slp", "labels.v01.slp", "labels.v001.slp"):
+        touch_labels(directory / name)
+
+    families = discover.group(discover.walk(tmp_path / "share").candidates)
+
+    assert len(families) == 1
+    assert len(families[0].members) == 3
+
+
+def test_suffix_case_does_not_split_a_family():
+    """`train.v2.SLP` and `train.v2.slp` are one effort, not two.
+
+    Asserted at the parser, not through the filesystem: Windows is case-insensitive, so
+    a two-file fixture would silently be one file and the test would pass vacuously.
+    """
+    lower = discover.parse_version(Path("labels.v002.slp"))
+    upper = discover.parse_version(Path("labels.v002.SLP"))
+
+    assert (lower.stem, lower.version, lower.suffix) == (
+        upper.stem,
+        upper.version,
+        upper.suffix,
+    )
+
+
+def test_every_candidate_belongs_to_exactly_one_family(tmp_path):
+    """Nothing may vanish between enumeration and grouping."""
+    root = build_share_tree(tmp_path / "share")
+    scan = discover.walk(root)
+    families = discover.group(scan.candidates)
+
+    assert sum(len(f.members) for f in families) == len(scan.candidates)
+
+
+def test_an_onerror_with_no_filename_does_not_kill_the_scan(tmp_path):
+    """`OSError.filename` can be None, and `Path(None)` raises.
+
+    This is the one callback whose entire purpose is that an 18,099-file scan must not
+    die on one bad directory.
+    """
+    root = build_share_tree(tmp_path / "share")
+    real_walk = discover.os.walk
+
+    def _walk(top, onerror=None, followlinks=False):
+        onerror(OSError(13, "Permission denied"))
+        return real_walk(top, onerror=onerror, followlinks=followlinks)
+
+    original = discover.os.walk
+    discover.os.walk = _walk
+    try:
+        scan = discover.walk(root)
+    finally:
+        discover.os.walk = original
+
+    assert scan.unreadable_directories == 1
+    assert scan.candidates
