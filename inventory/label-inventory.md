@@ -1,0 +1,1657 @@
+# Label inventory
+
+What labels files exist beneath the scanned root, and what is in them. Every
+path is emitted relative to the root, which appears as `<ROOT>`.
+
+## Coverage
+
+- `.slp` files seen: 18099
+- candidates: 1447
+- excluded, derived filename: 13164
+- excluded, derived directory: 3488
+- directories that could not be read: 0
+- families: 1250
+
+## Skeleton table
+
+### Rows selected by more than one capture mode
+
+- `(arabidopsis, primary, age: None)` is selected by cylinder, plate, whose files carry 6, 8 nodes. One row cannot describe both.
+
+### Species with no row
+
+- covercress
+- medicago
+- pennycress
+- sorghum
+- wheat
+
+Derivation is open by design, so a crop nobody has heard of is not
+hidden — which means directory names that are not crops also land here.
+These are **not** species; they are tokens read off a path:
+
+- circumnutation, cropping, multiple, packages, pest, shoots, soy
+
+### Skeleton names the existing check cannot resolve
+
+- labels_sorghum_5-12DAG_primary_6nodes.v008.pkg.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.slp: Skeleton-1
+- labels_arabidopsis_lateral_4nodes.v010.pkg.slp: Skeleton-0
+- labels_arabidopsis_lateral_4nodes.v010.slp: Skeleton-0
+- labels_ONLYcanola_lateral_3nodes.v000.slp: Skeleton-0
+- labels_canola_lateral_3nodes.v014.pkg.slp: Skeleton-0
+- labels_canola_lateral_3nodes.v014.slp: Skeleton-0
+- labels_ONLYpennycress_lateral_3nodes.v000.slp: Skeleton-0
+- sorghum_lateral_roots_4nodes_labels.v001.pkg.slp: Skeleton-0
+- sorghum_lateral_roots_4nodes_labels.v001.slp: Skeleton-0
+- labels_soy_lateral_4nodes.v007.pkg.slp: Skeleton-0
+- labels_soy_lateral_4nodes.v007.slp: Skeleton-0
+- labels_ONLYarabidopsis_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.pkg.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.slp: Skeleton-1
+- labels_ONLYcanola_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_pennycress_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.pkg.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.slp: Skeleton-1
+- labels_ONLYpennycress_primary_6nodes.v000.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.pkg.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.slp: Skeleton-1
+- labels_soybean_primary_6nodes.v004.pkg.slp: Skeleton-0
+- labels_soybean_primary_6nodes.v004.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.pkg.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.slp: Skeleton-0
+- labels_ONLYarabidopsis_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.pkg.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.slp: Skeleton-1
+- labels_ONLYcanola_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_pennycress_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.pkg.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.slp: Skeleton-1
+- labels_ONLYpennycress_primary_6nodes.v000.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.pkg.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.slp: Skeleton-1
+- labels_soybean_primary_6nodes.v004.pkg.slp: Skeleton-0
+- labels_soybean_primary_6nodes.v004.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.pkg.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.slp: Skeleton-0
+- labels_ONLYarabidopsis_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.pkg.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.slp: Skeleton-1
+- labels_ONLYcanola_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_pennycress_primary_6nodes.v000.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.pkg.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.slp: Skeleton-1
+- labels_ONLYpennycress_primary_6nodes.v000.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.pkg.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.slp: Skeleton-1
+- labels_soybean_primary_6nodes.v004.pkg.slp: Skeleton-0
+- labels_soybean_primary_6nodes.v004.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.pkg.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.slp: Skeleton-0
+- labels_sr_5-14DAG.v004.slp: Skeleton-2
+- labels_rice_10do_6nodes.v018.slp: Skeleton-0
+- labels_sr_5-14DAG.v004.slp: Skeleton-2
+- labels_rice_3do_main_6nodes.v029.slp: Skeleton-1
+- labels_ONLYarabidopsis_primary_6nodes.v001.slp: Skeleton-1
+- labels_plates_arabidopsis_primary_2-7DAP_8nodes.v006.slp: Skeleton-1
+- primary_root_MK22_Day14_labels.v003.slp: Skeleton-5
+- lateral_root_MK22_Day14_3nodes_labels.v003.slp: Skeleton-7
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_test_labels.slp: Skeleton-0
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v001_test_labels.slp: Skeleton-0
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v002_test_labels.slp: Skeleton-0
+- 2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v000_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v000_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_canola_v000_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_canola_v000_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_pennycress_v000_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v000_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v000_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_v000_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v000_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_soybean_v000_test_labels.slp: Skeleton-0
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v000_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_younger_rice_v000_test_labels.slp: Skeleton-0
+- 2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v001_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v001_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_canola_v001_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_canola_v001_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_pennycress_v001_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v001_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v001_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_v001_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v001_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_soybean_v001_test_labels.slp: Skeleton-0
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v001_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_younger_rice_v001_test_labels.slp: Skeleton-0
+- 2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v002_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v002_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_canola_v002_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_canola_v002_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_pennycress_v002_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v002_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v002_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_v002_test_labels.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v002_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_soybean_v002_test_labels.slp: Skeleton-0
+- 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v002_test_predictions.slp: Skeleton-1
+- 2025-04-16_generalizable_model_aug_input_scale_younger_rice_v002_test_labels.slp: Skeleton-0
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.test.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.test.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- arabidopsis-primary-2025-01-19_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- arabidopsis-primary-2025-01-19_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- canola-pennycress-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- canola-pennycress-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- canola-pennycress-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- canola-primary-2025-01-19_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- pennycress-primary-2025-01-19_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- rice-primary-2025-01-19_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-0
+- rice-primary-2025-01-19_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-0
+- rice-primary-2025-01-19_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-0
+- sorghum-primary-2025-01-06_v000_test_labels.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v001_test_labels.slp: Skeleton-1
+- sorghum-primary-2025-01-06_v002_test_labels.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- sorghum-soybean-primary-2025-01-07_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-1
+- sorghum-soybean-primary-2025-01-07_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-1
+- sorghum-soybean-primary-2025-01-07_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-1
+- soybean-primary-2025-01-05_v000_on_sorghum-primary-2025-01-06_v000_test_predictions.slp: Skeleton-0
+- soybean-primary-2025-01-05_v001_on_sorghum-primary-2025-01-06_v001_test_predictions.slp: Skeleton-0
+- soybean-primary-2025-01-05_v002_on_sorghum-primary-2025-01-06_v002_test_predictions.slp: Skeleton-0
+- labels_plates_arabidopsis_primary_2-7DAP_8nodes.v008.slp: Skeleton-1
+- labels_plates_arabidopsis_primary_2-7DAP_8nodes.uncropped.v008.slp: Skeleton-1
+- lateral_labels.v005.slp: Skeleton-1
+- lateral_labels.uncropped.v005.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v014.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.slp: Skeleton-1
+- labels_rice_primary_6nodes.v006.slp: Skeleton-0
+- labels_soybean_primary_6nodes.v004.pkg.slp: Skeleton-0
+- labels_soybean_primary_6nodes.v004.slp: Skeleton-0
+- lateral_labels.uncropped.v005.slp: Skeleton-1
+- labels_plates_arabidopsis_primary_2-7DAP_8nodes.v006.slp: Skeleton-1
+- labels_plates_arabidopsis_primary_2-7DAP_8nodes.uncropped.v010.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- primary_root_MK22_Day10_labels.v001.slp: Skeleton-6
+- primary_root_MK22_Day14_labels.v004.slp: Skeleton-5
+- merged.slp: Skeleton-2
+- merged.01.slp: Skeleton-2
+- labels_7DAP_adventitious.v002.slp: Skeleton-2
+- label_laterals14DAP_.v001.slp: Skeleton-1
+- Canola_LateralRoot.v006.slp: Skeleton-0
+- labels.v002.slp: Skeleton-104
+- labels_canola_pennycress_arabidopsis.v004.slp: Skeleton-104
+- label_laterals14DAP_.v001.slp: Skeleton-1
+- javiers_labels.v002_4 nodes merged.slp: Skeleton-31
+- javiers_labels.v002_4 nodes merged copy.slp: Skeleton-31
+- javiers_labels.v002_4 nodes_11222023.slp: Skeleton-31
+- javiers_lateral_labels_4nodes.v010.slp: Skeleton-31
+- javiers_lateral_labels_4nodes.v005 - Copy.slp: Skeleton-31
+- label_laterals14DAP_.v001.slp: Skeleton-1
+- labels_arabidopsis_lateral_4nodes.v010.pkg.slp: Skeleton-0
+- labels_arabidopsis_lateral_4nodes.v010.slp: Skeleton-0
+- EM_labels.v001.slp: Skeleton-0
+- labels.v003.slp: Skeleton-0
+- labels_7DAP_laterals_KE.slp: Skeleton-0
+- labels_7DAP_laterals_MK.v003.slp: Skeleton-1
+- labels.v001_HC.slp: Skeleton-0
+- labels_arabidopsis_lateral_4nodes.v004.pkg.slp: Skeleton-0
+- labels_arabidopsis_lateral_4nodes.v004.slp: Skeleton-0
+- labels_7DAP_laterals_.v005.slp: Skeleton-2
+- labels_7DAP_laterals_ONLY.v008.slp: Skeleton-2
+- labels_7DAP_laterals_.v005.slp: Skeleton-2
+- labels_7DAP_laterals_ONLY.v007.slp: Skeleton-2
+- labels_arabidopsis_primary.v003.slp: Skeleton-0
+- 13do_pr_labels_hannah_v001.slp: Skeleton-1
+- 2_DO_PR_labels_KE.v001.slp: Skeleton-0
+- AAP_primary_root_labels.v002.slp: Skeleton-0
+- canola_pr_old_6_nodes_labels.v004.slp: Skeleton-1
+- javiers_labels.v001_6 nodes merged.slp: Skeleton-25
+- javiers_labels.v001_6 nodes merged copy.slp: Skeleton-25
+- javiers_labels.v001_6 nodes_11222023.slp: Skeleton-25
+- javiers_labels_6nodes.v002.slp: Skeleton-25
+- javiers_primary_labels_6nodes.v012.slp: Skeleton-25
+- labels.v001.slp: Skeleton-194
+- labels.v001_6 nodes merged.slp: Skeleton-25
+- labels_arabidopsis_primary.v004.pkg.slp: Skeleton-0
+- labels_arabidopsis_primary.v004.slp: Skeleton-0
+- labels_canola_pennycress_arabidopsis.v015.pkg.slp: Skeleton-1
+- labels_canola_pennycress_arabidopsis.v015.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime.slp: Skeleton-1
+- IAAlabels.v003.pkg.slp: Skeleton-1
+- IAAlabels.v005.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.slp: Skeleton-1
+- labels.v004.slp: Skeleton-1
+- labels.v002_labels.slp: Skeleton-1
+- labels.v002_labels_copy.slp: Skeleton-1
+- labels.v005_preds.slp: Skeleton-1
+- 7_20230324-091436_001.primary_7dap.predictions_copy.slp: Skeleton-1
+- IAAlabels.v003.pkg.slp: Skeleton-1
+- IAAlabels.v007.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime - Copy.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime - Copy - Copy.slp: Skeleton-1
+- labels_v008.slp: Skeleton-1
+- labels.v002.slp: Skeleton-1
+- lateral_labels.v004.slp: Skeleton-1
+- lateral_labels.uncropped.v006.slp: Skeleton-1
+- labels.v006.slp: Skeleton-1
+- labels_wheat_2-3DAG.v002.slp: Skeleton-3
+- IAAlabels.v003.pkg.slp: Skeleton-1
+- IAAlabels.v007.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.slp: Skeleton-1
+- labels.v002.slp: Skeleton-1
+- lateral_labels.v004.slp: Skeleton-1
+- day2and3 copy.slp: Skeleton-3
+- labels.v005.slp: Skeleton-1
+- labels_wheat_2-3DAG.v002.slp: Skeleton-3
+- lateral_labels.v003.slp: Skeleton-1
+- primary_labels.v004.slp: Skeleton-1
+- labels.v002.slp: Skeleton-1
+- IAAlabels.v003.pkg.slp: Skeleton-1
+- IAAlabels.v005.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.slp: Skeleton-1
+- labels.v004.slp: Skeleton-1
+- labels.v002_labels.slp: Skeleton-1
+- labels.v002_labels_copy.slp: Skeleton-1
+- labels.v005_preds.slp: Skeleton-1
+- labels.v003.slp: Skeleton-1
+- 4_20230321-091022_004.primary_4dap.predictions copy copy.slp: Skeleton-1
+- day5predictions.slp: Skeleton-1
+- day5processedimages.slp: Skeleton-1
+- labels_gt.train.slp: Skeleton-1
+- labels_gt.val.slp: Skeleton-1
+- labels_pr.train.slp: Skeleton-1
+- labels_pr.val.slp: Skeleton-1
+- IAALabelsv007.slp: Skeleton-1
+- IAALabelsv008.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.pkg.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.slp: Skeleton-1
+- 7_20230324-091436_001.primary_7dap.predictions_copy.slp: Skeleton-1
+- IAAlabels.v003.pkg.slp: Skeleton-1
+- IAAlabels.v007.slp: Skeleton-1
+- IAAlabels.v006_predictions_only.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime - Copy.slp: Skeleton-1
+- labels_gt.train copy_withpredictions_anothertime - Copy - Copy.slp: Skeleton-1
+- labels_v008.slp: Skeleton-1
+- 13do_canola_lateral_labels_angel.v004.slp: Skeleton-1
+- 13do_canola_lateral_labels_hannah.v004.slp: Skeleton-1
+- 13do_lr_labels_hannah_v001.slp: Skeleton-1
+- Canola_LateralRoot.v006.slp: Skeleton-0
+- Canola_LateralRoot (1).v006.slp: Skeleton-0
+- LR_13DO_KE.slp: Skeleton-0
+- hc_lr_labels.v003.slp: Skeleton-1
+- labels_canola_lateral_3nodes.v014.pkg.slp: Skeleton-0
+- labels_canola_lateral_3nodes.v015.slp: Skeleton-0
+- labels_gt.test.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- LR_13DO_KE.slp: Skeleton-0
+- 13do_lr_labels_hannah_v001.slp: Skeleton-1
+- 13do_pr_labels_hannah_v001.slp: Skeleton-1
+- 13do_pr_labels_hannah_v001.slp: Skeleton-1
+- 2_DO_PR_labels_KE.v001.slp: Skeleton-0
+- AAP_primary_root_labels.v001.slp: Skeleton-0
+- Canola_PrimaryRoot.slp: Skeleton-0
+- Canola_PrimaryRoot_V2.slp: Skeleton-3
+- canola_pr_old_6_nodes_labels.v003.slp: Skeleton-1
+- canola_pr_old_6_nodes_labels (1).v003.slp: Skeleton-1
+- canola_pr_old_6_nodes_labels.v002 - Copy.slp: Skeleton-1
+- labels_canola_primary_6nodes.v004.pkg.slp: Skeleton-1
+- labels_canola_primary_6nodes.v005.slp: Skeleton-1
+- LR_13DO_KE.slp: Skeleton-0
+- 13do_lr_labels_hannah_v001.slp: Skeleton-1
+- 13do_pr_labels_hannah_v001.slp: Skeleton-1
+- 2_DO_PR_labels_KE.v001.slp: Skeleton-0
+- exp1-sd1-sd1_plate001_labels_bihourly.slp: Skeleton-1
+- exp1-sd1-sd1_plate002_labels_bihourly.slp: Skeleton-1
+- exp1-sd1-sd1_plate003_labels_bihourly.slp: Skeleton-4
+- exp1-sd1-sd1_plate004_labels_bihourly.slp: Skeleton-6
+- exp2-sd1-tzt_plate002_labels_bihourly.slp: Skeleton-5
+- rice-test_plate001_labels_hourly.slp: Skeleton-1
+- rice-test_plate002_labels_hourly.slp: Skeleton-1
+- rice-test_plate004_labels_hourly.slp: Skeleton-1
+- rice_tip_1node.v000.pkg.slp: Skeleton-1
+- rice_tip_1node.v009.slp: Skeleton-1
+- scanning-room_plate001_labels_hourly.slp: Skeleton-1
+- scanning-room_plate002_labels_hourly.slp: Skeleton-1
+- scanning-room_plate003_labels_hourly.slp: Skeleton-1
+- plate001_labels_hourly.slp: Skeleton-1
+- plate002_labels_hourly.slp: Skeleton-1
+- plate003_labels_hourly.slp: Skeleton-1
+- all_plates_labels.slp: Skeleton-1
+- plate_001.labels.slp: Skeleton-1
+- plate002_labels.v001.slp: Skeleton-1
+- plate_004.labels.slp: Skeleton-1
+- plate_004_test_copy.labels.slp: Skeleton-1
+- plate001_labels_bihourly.slp: Skeleton-1
+- plate002_labels_bihourly.slp: Skeleton-1
+- plate003_labels_bihourly.slp: Skeleton-4
+- plate004_labels_bihourly.slp: Skeleton-6
+- plate002_labels_bihourly.slp: Skeleton-5
+- plate001_labels_hourly.slp: Skeleton-1
+- plate002_labels_hourly.slp: Skeleton-1
+- plate004_labels_hourly.slp: Skeleton-1
+- plate_labels_hourly_combined.slp: Skeleton-1
+- plate001_labels_hourly.slp: Skeleton-1
+- plate002_labels_hourly.slp: Skeleton-1
+- plate003_labels_hourly.slp: Skeleton-1
+- labels_lateral_2025-06-20_T3_day_11.v002.slp: Skeleton-4
+- labels_laterals_covercress_13DO_3nodes.v008.slp: Skeleton-4
+- labels_2025-06-20_T3_day_11.v002.slp: Skeleton-1
+- cropping.v000.slp: Skeleton-0
+- AAP_D12_pr_labels.v001.slp: Skeleton-0
+- AAP_D14_lr_labels.v001.slp: Skeleton-1
+- AAP_D14_pr_labels.v001.slp: Skeleton-0
+- AAP_D8_pr_labels.v001.slp: Skeleton-2
+- EM_D12_lr_labels.v001.slp: Skeleton-1
+- JT_D4_pr_labels.v001.slp: Skeleton-0
+- JT_D8_lr_labels.v001.slp: Skeleton-1
+- KE_D21_lr_labels.v001.slp: Skeleton-0
+- KE_D21_pr_labels.v001.slp: Skeleton-0
+- AAP_D14_lr_labels.v001.slp: Skeleton-1
+- EM_D12_lr_labels.v001.slp: Skeleton-1
+- JT_D8_lr_labels.v003.slp: Skeleton-1
+- KE_D21_lr_labels.v001.slp: Skeleton-0
+- canola_pennycress_medicago_lateral_root_labels.v005.slp: Skeleton-1
+- labels_canola_lateral_3nodes.v015.slp: Skeleton-0
+- medicago_lateral_root_labels.v004.slp: Skeleton-1
+- AAP_D12_pr_labels.v001.slp: Skeleton-0
+- AAP_D14_pr_labels.v001.slp: Skeleton-0
+- AAP_D8_pr_labels.v001.slp: Skeleton-2
+- JT_D4_pr_labels.v002.slp: Skeleton-0
+- KE_D21_pr_labels.v001.slp: Skeleton-0
+- labels_canola_pennycress_arabidopsis.v015.slp: Skeleton-1
+- medicago_primary_root_labels.v006.slp: Skeleton-2
+- MK22_lateral_combined.slp: Skeleton-7, Skeleton-5
+- MK22_primary_combined.slp: Skeleton-5
+- MK22_tertiary_combined.slp: Skeleton-10, Skeleton-5
+- MK24_lateral_combined.slp: Skeleton-7
+- MK24_primary_combined.slp: Skeleton-5
+- MK24_tertiary_combined.slp: Skeleton-10
+- MK31_lateral_combined.slp: Skeleton-7
+- MK31_primary_combined.slp: Skeleton-5
+- MK31_tertiary_combined.slp: Skeleton-10
+- lateral_root_MK22_Day14_labels.v002.slp: Skeleton-7
+- lateral_root_MK22_Day14_labels_deleted_predicted_instances.v006.slp: Skeleton-7
+- lateral_root_MK22_Day14_labels_for_model_building.v004.pkg.slp: Skeleton-7
+- lateral_root_MK22_Day14_labels_for_model_building.v007.slp: Skeleton-7
+- lateral_root_MK22_Day14_labels_for_model_building.v006_updated_paths.slp: Skeleton-7
+- lateral_root_MK22_Day14_labels_for_model_building.v007.slp: Skeleton-7
+- minimal_instance.pkg.slp: Skeleton-0
+- small_robot_minimal.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- pred_test.slp: Skeleton-0
+- pred_train_0.slp: Skeleton-0
+- pred_val_0.slp: Skeleton-0
+- primary_root_MK22_Day10_labels.v001.slp: Skeleton-6
+- primary_root_MK22_Day14_labels.v006.pkg.slp: Skeleton-5
+- primary_root_MK22_Day14_labels.v006.slp: Skeleton-5
+- day13_MK31_primary_merged_v001.slp: Skeleton-5
+- tertiary_root_MK22_Day14_labels.v003.pkg.slp: Skeleton-10
+- tertiary_root_MK22_Day14_labels.v004.slp: Skeleton-10
+- tertiary_root_MK22_Day14_labels.v003_updated_filenames.slp: Skeleton-10
+- minimal_instance.pkg.slp: Skeleton-0
+- small_robot_minimal.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- labels_train_gt_0.slp: Skeleton-0
+- labels_val_gt_0.slp: Skeleton-0
+- pred_test.slp: Skeleton-0
+- pred_train_0.slp: Skeleton-0
+- pred_val_0.slp: Skeleton-0
+- lateral_root_MK22_Day14_test_labels.v003.slp: Skeleton-7
+- canola_pr_old_6_nodes_labels.v003.slp: Skeleton-1
+- labels_arabidopsis_primary.v003.slp: Skeleton-0
+- rice_3do_longest_labels.v004.slp: Skeleton-0
+- soy_labels_pr_678do.v004.slp: Skeleton-0
+- labels_arabidopsis_lateral_4nodes.v004.pkg.slp: Skeleton-0
+- labels_arabidopsis_primary.v004.pkg.slp: Skeleton-0
+- labels_canola_lateral_3nodes.v007.pkg.slp: Skeleton-0
+- labels_canola_primary_6nodes.v004.pkg.slp: Skeleton-1
+- labels_rice_10do_6nodes.v018.pkg.slp: Skeleton-0
+- labels_rice_3dag_primary_6nodes.v005.pkg.slp: Skeleton-0
+- labels_rice_3do_main_6nodes.v029.pkg.slp: Skeleton-1
+- labels_soy_lateral_4nodes.v007.pkg.slp: Skeleton-0
+- labels_soybean_primary_6nodes.v004.pkg.slp: Skeleton-0
+- labels.v010.slp: Skeleton-1
+- labels.v013.slp: Skeleton-1
+- labels_10do_copy.v015.slp: Skeleton-0
+- labels_3_do_2021_22.v027_copy.slp: Skeleton-1
+- labels_3do_10do_merge.v000.slp: Skeleton-0
+- labels.v002.slp: Skeleton-0
+- labels.v016.slp: Skeleton-0
+- labels_10_do.v003.slp: Skeleton-0
+- labels_10do_6nodes.v017.pkg.slp: Skeleton-0
+- labels_10do_6nodes.v017.slp: Skeleton-0
+- labels_rice_10do_6nodes.v018.pkg.slp: Skeleton-0
+- labels_rice_10do_6nodes.v018.slp: Skeleton-0
+- FN2021_20frames.v002.slp: Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0, Skeleton-0
+- labels.v015.slp: Skeleton-0
+- labels_10_do.v003.slp: Skeleton-0
+- labels.v004.slp: Skeleton-0
+- labels_rice_3dag_primary_6nodes.v005.pkg.slp: Skeleton-0
+- labels_rice_3dag_primary_6nodes.v005.slp: Skeleton-0
+- labels_rice_3do_primary_6nodes.v004.pkg.slp: Skeleton-0
+- rice_3do_longest_labels.v004.slp: Skeleton-0
+- labels_3_do.v009.slp: Skeleton-1
+- labels_3_do_2021_22.v028.slp: Skeleton-1
+- labels_rice_3do_main_6nodes.v029.pkg.slp: Skeleton-1
+- labels_rice_3do_main_6nodes.v029.slp: Skeleton-1
+- labels_rice_main_6nodes.v028.pkg.slp: Skeleton-1
+- labels_2nodes.v004.slp: Skeleton-0
+- labels_2nodes_remove_11do.v005.slp: Skeleton-0
+- labels.v007.slp: Skeleton-0
+- labels.v001.slp: Skeleton-0
+- labels.v002.slp: Skeleton-0
+- labels.v000_CV.slp: Skeleton-0
+- labels.v001_JM.slp: Skeleton-1
+- 5DAG_primary_hydroponic_rice_labels.v005.slp: Skeleton-0
+- labels_AAP.v001.slp: Skeleton-0
+- labels_JT.v000.slp: Skeleton-0
+- labels_rice_3dag_primary_6nodes.v005.slp: Skeleton-0
+- 5DAG_main_hydroponic_labels.v008.slp: Skeleton-0
+- labels_3_do_2021_22.v027.slp: Skeleton-1
+- labels_Hoagland_AAP.v001.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.pkg.slp: Skeleton-0
+- labels_rice_primary_6nodes.v006.slp: Skeleton-0
+- updatedsmall.slp: Skeleton-395
+- updatedsmall copy.slp: Skeleton-395
+- labels_gt.train.slp: Skeleton-395
+- labels_gt.val.slp: Skeleton-395
+- labels_pr.train.slp: Skeleton-395
+- labels_pr.val.slp: Skeleton-395
+- updatedsmallremoved.slp: Skeleton-395
+- labels_gt.train.slp: Skeleton-395
+- labels_gt.val.slp: Skeleton-395
+- labels_pr.train.slp: Skeleton-395
+- labels_pr.val.slp: Skeleton-395
+- 10do_lateral_labels_AAP.v001.slp: Skeleton-0
+- 5do_lateral_labels_HC.v001.slp: Skeleton-0
+- labels(fast 6 Lateral).v002.slp: Skeleton-12
+- labels_soy_lateral_4nodes.v007.slp: Skeleton-0
+- labels_soybean_sorghum_lateral_roots_4nodes.v003.slp: Skeleton-0
+- sorghum_lateral_roots_4nodes_labels.v001.pkg.slp: Skeleton-0
+- sorghum_lateral_roots_4nodes_labels.v002.slp: Skeleton-0
+- KatePrimaryDay12 (1).slp: Skeleton-1
+- KatePrimaryDay30Practice.slp: Skeleton-1
+- labels.v001.slp: Skeleton-1
+- labels.v001 (Fast D6 Primary labeled).slp: Skeleton-1
+- labels.v001xt.slp: Skeleton-6
+- labels.v004xt.slp: Skeleton-1
+- labels_D10_KE.v003.slp: Skeleton-5
+- labels_D5_KE.v002.slp: Skeleton-3
+- labels.v002_kate.slp: Skeleton-1
+- labels_sorghum_12DAG.v006.slp: Skeleton-1
+- labels_sorghum_12DAG_xt.v002.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.pkg.slp: Skeleton-1
+- labels_sorghum_5-12DAG_primary_6nodes.v008.slp: Skeleton-1
+- labels_soybean_primary_6nodes.v004.slp: Skeleton-0
+- labels_soybean_sorghum_primary_6nodes.v009.pkg.slp: Skeleton-0
+- labels_soybean_sorghum_primary_6nodes.v009.slp: Skeleton-0
+- sorghum_12DAG_kate.v001.slp: Skeleton-1
+- 10do_seminal_labels_HC.v001.slp: Skeleton-1
+- 5do_seminal_labels_AAP.v001.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- test.pkg.slp: Skeleton-0
+- train.pkg.slp: Skeleton-0
+- val.pkg.slp: Skeleton-0
+- labels.v002.slp: Skeleton-0
+- javiers_lateral_labels.v001.slp: Skeleton-89
+- labels_soy_lateral_4nodes.v007.pkg.slp: Skeleton-0
+- labels_soy_lateral_4nodes.v007.slp: Skeleton-0
+- older_soy_lr_merged.v006.slp: Skeleton-0
+- labels_gt.train.slp: Skeleton-0
+- labels_gt.val.slp: Skeleton-0
+- labels_pr.train.slp: Skeleton-0
+- labels_pr.val.slp: Skeleton-0
+- labels.v001.slp: Skeleton-317
+- labels_lateral_11DAG.v003.slp: Skeleton-7
+- labels_lr_D11_AAP.v001.slp: Skeleton-7
+- labels_lr_D11_AAP2.v002.slp: Skeleton-0
+- labels_lr_D11_EM.v001.slp: Skeleton-0
+- labels_lr_D11_JT.v001.slp: Skeleton-1
+- labels_lr_D11_KE.v001.slp: Skeleton-0
+- labels_pr_D5_KE.v001.slp: Skeleton-0
+- labels_primary_wheat_5DAG_rice_3DAG.v002.slp: Skeleton-0
+- labels_rice_3dag_primary_6nodes.v005.slp: Skeleton-0
+- labels_wheat_primary_5DAG.v003.slp: Skeleton-0
+- labels_rice_10do_6nodes.v019.slp: Skeleton-0
+- labels_rice_3do_main_6nodes.v030.slp: Skeleton-1
+- labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp: Skeleton-2
+- labels_sr_5-14DAG.v004.slp: Skeleton-2
+- labels_sr_D11_AAP.v001.slp: Skeleton-0
+- labels_sr_D14_AAP.v001.slp: Skeleton-2
+- labels_sr_D5_KE.v001.slp: Skeleton-0
+
+## Directories holding more than one family
+
+A directory is not a collection. This tool lists what it found and
+**makes no determination** about which files form a collection, which
+supersedes which, or which should be registered. A person reads this.
+
+- `<ROOT>/20241107_generalizability_exp/primary/sorghum` holds 2 families: labels_sorghum_5-12DAG_primary_6nodes, labels_sorghum_5-12DAG_primary_6nodes
+- `<ROOT>/20250102_generalizability_experiment/lateral/arabidopsis` holds 2 families: labels_arabidopsis_lateral_4nodes, labels_arabidopsis_lateral_4nodes
+- `<ROOT>/20250102_generalizability_experiment/lateral/canola` holds 3 families: labels_ONLYcanola_lateral_3nodes, labels_canola_lateral_3nodes, labels_canola_lateral_3nodes
+- `<ROOT>/20250102_generalizability_experiment/lateral/sorghum` holds 2 families: sorghum_lateral_roots_4nodes_labels, sorghum_lateral_roots_4nodes_labels
+- `<ROOT>/20250102_generalizability_experiment/lateral/soybean` holds 2 families: labels_soy_lateral_4nodes, labels_soy_lateral_4nodes
+- `<ROOT>/20250102_generalizability_experiment/primary/arabidopsis` holds 3 families: labels_ONLYarabidopsis_primary_6nodes, labels_canola_pennycress_arabidopsis, labels_canola_pennycress_arabidopsis
+- `<ROOT>/20250102_generalizability_experiment/primary/canola` holds 4 families: labels_ONLYcanola_primary_6nodes, labels_canola_pennycress_primary_6nodes, labels_canola_primary_6nodes, labels_canola_primary_6nodes
+- `<ROOT>/20250102_generalizability_experiment/primary/sorghum` holds 2 families: labels_sorghum_5-12DAG_primary_6nodes, labels_sorghum_5-12DAG_primary_6nodes
+- `<ROOT>/20250102_generalizability_experiment/primary/soybean` holds 2 families: labels_soybean_primary_6nodes, labels_soybean_primary_6nodes
+- `<ROOT>/20250102_generalizability_experiment/primary/younger_rice` holds 2 families: labels_rice_primary_6nodes, labels_rice_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment/arabidopsis` holds 3 families: labels_ONLYarabidopsis_primary_6nodes, labels_canola_pennycress_arabidopsis, labels_canola_pennycress_arabidopsis
+- `<ROOT>/20250415_primary_root_generalizability_experiment/canola` holds 4 families: labels_ONLYcanola_primary_6nodes, labels_canola_pennycress_primary_6nodes, labels_canola_primary_6nodes, labels_canola_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment/sorghum` holds 2 families: labels_sorghum_5-12DAG_primary_6nodes, labels_sorghum_5-12DAG_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment/soybean` holds 2 families: labels_soybean_primary_6nodes, labels_soybean_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment/younger_rice` holds 2 families: labels_rice_primary_6nodes, labels_rice_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/arabidopsis` holds 3 families: labels_ONLYarabidopsis_primary_6nodes, labels_canola_pennycress_arabidopsis, labels_canola_pennycress_arabidopsis
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/canola` holds 4 families: labels_ONLYcanola_primary_6nodes, labels_canola_pennycress_primary_6nodes, labels_canola_primary_6nodes, labels_canola_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/sorghum` holds 2 families: labels_sorghum_5-12DAG_primary_6nodes, labels_sorghum_5-12DAG_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/soybean` holds 2 families: labels_soybean_primary_6nodes, labels_soybean_primary_6nodes
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/younger_rice` holds 2 families: labels_rice_primary_6nodes, labels_rice_primary_6nodes
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes` holds 9 families: 13do_canola_lateral_labels_angel, 13do_canola_lateral_labels_hannah, 13do_lr_labels_hannah_v001, Canola_LateralRoot, Canola_LateralRoot (1), LR_13DO_KE, hc_lr_labels, labels_canola_lateral_3nodes, and 1 more
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/250121_081922.multi_instance.n=171` holds 3 families: labels_gt.test, labels_gt.train, labels_gt.val
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/h5_files_for_LR_sleap_project/13_do/h5_files_13do/hannah` holds 2 families: 13do_lr_labels_hannah_v001, 13do_pr_labels_hannah_v001
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root` holds 11 families: 13do_pr_labels_hannah_v001, 2_DO_PR_labels_KE, AAP_primary_root_labels, Canola_PrimaryRoot, Canola_PrimaryRoot_V2, canola_pr_old_6_nodes_labels, canola_pr_old_6_nodes_labels, canola_pr_old_6_nodes_labels (1), and 3 more
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/h5_files_for_PR_sleap_project/13_do/hannah` holds 2 families: 13do_lr_labels_hannah_v001, 13do_pr_labels_hannah_v001
+- `<ROOT>/SLEAP_Rice/10_and_3_do_merge` holds 3 families: labels_10do_copy, labels_3_do_2021_22_copy, labels_3do_10do_merge
+- `<ROOT>/SLEAP_Rice/10_do/main_root` holds 6 families: labels, labels_10_do, labels_10do_6nodes, labels_10do_6nodes, labels_rice_10do_6nodes, labels_rice_10do_6nodes
+- `<ROOT>/SLEAP_Rice/10_do/main_root/FN2021` holds 3 families: FN2021_20frames, labels, labels_10_do
+- `<ROOT>/SLEAP_Rice/3_do/3_Days_Old_longest_root` holds 5 families: labels, labels_rice_3dag_primary_6nodes, labels_rice_3dag_primary_6nodes, labels_rice_3do_primary_6nodes, rice_3do_longest_labels
+- `<ROOT>/SLEAP_Rice/3_do/main_root` holds 5 families: labels_3_do, labels_3_do_2021_22, labels_rice_3do_main_6nodes, labels_rice_3do_main_6nodes, labels_rice_main_6nodes
+- `<ROOT>/SLEAP_Rice/5do_lateral_2nodes_hydroponic` holds 2 families: labels_2nodes, labels_2nodes_remove_11do
+- `<ROOT>/SLEAP_Rice/Hydroponic/5DAG_lateral/3_nodes` holds 3 families: labels, labels_CV, labels_JM
+- `<ROOT>/SLEAP_Rice/Hydroponic/5DAG_primary` holds 4 families: 5DAG_primary_hydroponic_rice_labels, labels_AAP, labels_JT, labels_rice_3dag_primary_6nodes
+- `<ROOT>/SLEAP_Rice/Hydroponic/5DAG_seminal_plus_primary` holds 3 families: 5DAG_main_hydroponic_labels, labels_3_do_2021_22, labels_Hoagland_AAP
+- `<ROOT>/SLEAP_Rice/primary_3-5do` holds 2 families: labels_rice_primary_6nodes, labels_rice_primary_6nodes
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/lateral/both-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/lateral/brightness-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/lateral/contrast-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/lateral/none-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/primary/both-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/primary/brightness-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/primary/contrast-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/2026-05-01_aug_retrain/primary/none-seed0` holds 3 families: test, train, val
+- `<ROOT>/SLEAP_Soy/lateral_root_4_nodes` holds 4 families: javiers_lateral_labels, labels_soy_lateral_4nodes, labels_soy_lateral_4nodes, older_soy_lr_merged
+- `<ROOT>/SLEAP_Soy/lateral_root_4_nodes/lateral_root_221006_172103.multi_instance.n=482` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_arabidopsis` holds 2 families: merged, merged.01
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/3_nodes` holds 3 families: Canola_LateralRoot, labels, labels_canola_pennycress_arabidopsis
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/4_nodes/7-14_do` holds 8 families: javiers_labels_4 nodes merged, javiers_labels_4 nodes merged copy, javiers_labels_4 nodes_11222023, javiers_lateral_labels_4nodes, javiers_lateral_labels_4nodes.v005 - Copy, label_laterals14DAP_, labels_arabidopsis_lateral_4nodes, labels_arabidopsis_lateral_4nodes
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/4_nodes/7_do` holds 7 families: EM_labels, labels, labels_7DAP_laterals_KE, labels_7DAP_laterals_MK, labels_HC, labels_arabidopsis_lateral_4nodes, labels_arabidopsis_lateral_4nodes
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/4_nodes/7_do/old_labels_juan_gonzalez` holds 2 families: labels_7DAP_laterals_, labels_7DAP_laterals_ONLY
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/7_do` holds 2 families: labels_7DAP_laterals_, labels_7DAP_laterals_ONLY
+- `<ROOT>/SLEAP_arabidopsis/primary_root/primary_6nodes` holds 15 families: 13do_pr_labels_hannah_v001, 2_DO_PR_labels_KE, AAP_primary_root_labels, canola_pr_old_6_nodes_labels, javiers_labels_6 nodes merged, javiers_labels_6 nodes merged copy, javiers_labels_6 nodes_11222023, javiers_labels_6nodes, and 7 more
+- `<ROOT>/SLEAP_arabidopsis_plates/7_dap/labels` holds 7 families: IAAlabels, IAAlabels, IAAlabels_predictions_only, labels, labels_labels, labels_labels_copy, labels_preds
+- `<ROOT>/SLEAP_arabidopsis_plates/IAA_treated_7DAP/labels` holds 8 families: 7_20230324-091436_001.primary_7dap.predictions_copy, IAAlabels, IAAlabels, IAAlabels_predictions_only, labels_gt.train copy_withpredictions_anothertime, labels_gt.train copy_withpredictions_anothertime - Copy, labels_gt.train copy_withpredictions_anothertime - Copy - Copy, labels_v008
+- `<ROOT>/SLEAP_arabidopsis_plates/PLATE_arabidopsis/PLATE_arabidopsis/lateral_roots/labels` holds 2 families: labels, lateral_labels
+- `<ROOT>/SLEAP_arabidopsis_plates/PLATE_arabidopsis/PLATE_arabidopsis/primary_root/labels` holds 3 families: day2and3 copy, labels, labels_wheat_2-3DAG
+- `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/Arabidopsis_plates/0908-0901_plates` holds 2 families: lateral_labels, primary_labels
+- `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/primary_root_8nodes/7_dap/labels` holds 7 families: IAAlabels, IAAlabels, IAAlabels_predictions_only, labels, labels_labels, labels_labels_copy, labels_preds
+- `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/tif_files/IAA_Day4/230518_183607.multi_instance.n=50` holds 6 families: day5predictions, day5processedimages, labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/tif_files/IAA_Day7` holds 4 families: IAALabelsv007, IAALabelsv008, IAAlabels_predictions_only, IAAlabels_predictions_only
+- `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/tif_files/IAA_treated_7DAP/labels` holds 8 families: 7_20230324-091436_001.primary_7dap.predictions_copy, IAAlabels, IAAlabels, IAAlabels_predictions_only, labels_gt.train copy_withpredictions_anothertime, labels_gt.train copy_withpredictions_anothertime - Copy, labels_gt.train copy_withpredictions_anothertime - Copy - Copy, labels_v008
+- `<ROOT>/SLEAP_arabidopsis_plates/labels/lateral_3nodes` holds 3 families: labels, lateral_labels, lateral_labels.uncropped
+- `<ROOT>/SLEAP_arabidopsis_plates/labels/primary_8nodes` holds 2 families: labels, labels_wheat_2-3DAG
+- `<ROOT>/SLEAP_arabidopsis_plates/old_labels` holds 3 families: IAAlabels, IAAlabels, IAAlabels_predictions_only
+- `<ROOT>/SLEAP_circumnutation/labels` holds 14 families: exp1-sd1-sd1_plate001_labels_bihourly, exp1-sd1-sd1_plate002_labels_bihourly, exp1-sd1-sd1_plate003_labels_bihourly, exp1-sd1-sd1_plate004_labels_bihourly, exp2-sd1-tzt_plate001_labels_bihourly, exp2-sd1-tzt_plate002_labels_bihourly, rice-test_plate001_labels_hourly, rice-test_plate002_labels_hourly, and 6 more
+- `<ROOT>/SLEAP_circumnutation/rice-test/004` holds 2 families: plate_004.labels, plate_004_test_copy.labels
+- `<ROOT>/SLEAP_circumnutation/suyashs_exps_20250819/exp1-sd1-sd1/labels` holds 4 families: plate001_labels_bihourly, plate002_labels_bihourly, plate003_labels_bihourly, plate004_labels_bihourly
+- `<ROOT>/SLEAP_circumnutation/suyashs_exps_20250819/exp2-sd1-tzt/labels` holds 2 families: plate001_labels_bihourly, plate002_labels_bihourly
+- `<ROOT>/SLEAP_circumnutation/suyashs_exps_20250819/rice-test/h5_videos` holds 2 families: all_plate_videos_color, all_plate_videos_greyscale
+- `<ROOT>/SLEAP_circumnutation/suyashs_exps_20250819/rice-test/labels` holds 4 families: plate001_labels_hourly, plate002_labels_hourly, plate004_labels_hourly, plate_labels_hourly_combined
+- `<ROOT>/SLEAP_circumnutation/suyashs_exps_20250819/scanning-room/h5_videos` holds 2 families: plate_videos_color, plate_videos_greyscale
+- `<ROOT>/SLEAP_circumnutation/suyashs_exps_20250819/scanning-room/labels` holds 3 families: plate001_labels_hourly, plate002_labels_hourly, plate003_labels_hourly
+- `<ROOT>/SLEAP_covercress_plates/lateral` holds 2 families: labels_lateral_2025-06-20_T3_day_11, labels_laterals_covercress_13DO_3nodes
+- `<ROOT>/SLEAP_medicago/Downstream_Data_Analysis/Downstream_Data_Analysis` holds 9 families: AAP_D12_pr_labels, AAP_D14_lr_labels, AAP_D14_pr_labels, AAP_D8_pr_labels, EM_D12_lr_labels, JT_D4_pr_labels, JT_D8_lr_labels, KE_D21_lr_labels, and 1 more
+- `<ROOT>/SLEAP_medicago/lateral_root` holds 7 families: AAP_D14_lr_labels, EM_D12_lr_labels, JT_D8_lr_labels, KE_D21_lr_labels, canola_pennycress_medicago_lateral_root_labels, labels_canola_lateral_3nodes, medicago_lateral_root_labels
+- `<ROOT>/SLEAP_medicago/primary_root` holds 7 families: AAP_D12_pr_labels, AAP_D14_pr_labels, AAP_D8_pr_labels, JT_D4_pr_labels, KE_D21_pr_labels, labels_canola_pennycress_arabidopsis, medicago_primary_root_labels
+- `<ROOT>/SLEAP_medicago_plates/combined_roots` holds 9 families: MK22_lateral_combined, MK22_primary_combined, MK22_tertiary_combined, MK24_lateral_combined, MK24_primary_combined, MK24_tertiary_combined, MK31_lateral_combined, MK31_primary_combined, and 1 more
+- `<ROOT>/SLEAP_medicago_plates/lateral` holds 6 families: lateral_root_MK22_Day14_labels, lateral_root_MK22_Day14_labels_deleted_predicted_instances, lateral_root_MK22_Day14_labels_for_model_building, lateral_root_MK22_Day14_labels_for_model_building, lateral_root_MK22_Day14_labels_for_model_building_updated_paths, lateral_root_MK31_Day5_labels
+- `<ROOT>/SLEAP_medicago_plates/lateral/scratch` holds 2 families: lateral_root_MK22_Day14_labels_for_model_building, lateral_root_MK22_Day14_labels_for_model_building_replaced_filenames
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/datasets` holds 2 families: minimal_instance, small_robot_minimal
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/legacy_models/minimal_instance.UNet.bottomup` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/legacy_models/minimal_instance.UNet.centered_instance` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/legacy_models/minimal_instance.UNet.centroid` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/legacy_models/minimal_robot.UNet.single_instance` holds 2 families: labels_gt.train, labels_gt.val
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/minimal_instance_bottomup` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/minimal_instance_centered_instance` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/minimal_instance_centroid` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/minimal_instance_multiclass_bottomup` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/minimal_instance_multiclass_centered_instance` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/minimal_instance_single_instance` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/lateral/sleap-nn/tests/assets/model_ckpts/single_instance_with_metrics` holds 5 families: labels_train_gt_0, labels_val_gt_0, pred_test, pred_train_0, pred_val_0
+- `<ROOT>/SLEAP_medicago_plates/primary` holds 3 families: primary_root_MK22_Day10_labels, primary_root_MK22_Day14_labels, primary_root_MK22_Day14_labels
+- `<ROOT>/SLEAP_medicago_plates/tertiary` holds 3 families: tertiary_root_MK22_Day14_labels, tertiary_root_MK22_Day14_labels, tertiary_root_MK22_Day14_labels_updated_filenames
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/datasets` holds 2 families: minimal_instance, small_robot_minimal
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/legacy_models/minimal_instance.UNet.bottomup` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/legacy_models/minimal_instance.UNet.centered_instance` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/legacy_models/minimal_instance.UNet.centroid` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/legacy_models/minimal_robot.UNet.single_instance` holds 2 families: labels_gt.train, labels_gt.val
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/minimal_instance_bottomup` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/minimal_instance_centered_instance` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/minimal_instance_centroid` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/minimal_instance_multiclass_bottomup` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/minimal_instance_multiclass_centered_instance` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/minimal_instance_single_instance` holds 2 families: labels_train_gt_0, labels_val_gt_0
+- `<ROOT>/SLEAP_medicago_plates/tertiary/sleap-nn/tests/assets/model_ckpts/single_instance_with_metrics` holds 5 families: labels_train_gt_0, labels_val_gt_0, pred_test, pred_train_0, pred_val_0
+- `<ROOT>/SLEAP_multiple_species/primary_roots_6_nodes` holds 4 families: canola_pr_old_6_nodes_labels, labels_arabidopsis_primary, rice_3do_longest_labels, soy_labels_pr_678do
+- `<ROOT>/SLEAP_packages_10-24-23` holds 9 families: labels_arabidopsis_lateral_4nodes, labels_arabidopsis_primary, labels_canola_lateral_3nodes, labels_canola_primary_6nodes, labels_rice_10do_6nodes, labels_rice_3dag_primary_6nodes, labels_rice_3do_main_6nodes, labels_soy_lateral_4nodes, and 1 more
+- `<ROOT>/SLEAP_shoots` holds 2 families: updatedsmall, updatedsmall copy
+- `<ROOT>/SLEAP_shoots/250820_142806.multi_instance.n=266` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_shoots/SLEAP_8262025_backup/250821_211525.multi_instance.n=211` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/SLEAP_sorghum/lateral_4nodes` holds 7 families: 10do_lateral_labels_AAP, 5do_lateral_labels_HC, labels(fast 6 Lateral), labels_soy_lateral_4nodes, labels_soybean_sorghum_lateral_roots_4nodes, sorghum_lateral_roots_4nodes_labels, sorghum_lateral_roots_4nodes_labels
+- `<ROOT>/SLEAP_sorghum/primary_6nodes` holds 17 families: KatePrimaryDay12 (1), KatePrimaryDay30Practice, labels, labels.v001 (Fast D6 Primary labeled), labels.v001xt, labels.v004xt, labels_D10_KE, labels_D5_KE, and 9 more
+- `<ROOT>/SLEAP_sorghum/seminal_root_6nodes` holds 2 families: 10do_seminal_labels_HC, 5do_seminal_labels_AAP
+- `<ROOT>/SLEAP_wheat/lateral` holds 6 families: labels_lateral_11DAG, labels_lr_D11_AAP, labels_lr_D11_AAP2, labels_lr_D11_EM, labels_lr_D11_JT, labels_lr_D11_KE
+- `<ROOT>/SLEAP_wheat/primary` holds 4 families: labels_pr_D5_KE, labels_primary_wheat_5DAG_rice_3DAG, labels_rice_3dag_primary_6nodes, labels_wheat_primary_5DAG
+- `<ROOT>/SLEAP_wheat/seminal` holds 7 families: labels_rice_10do_6nodes, labels_rice_3do_main_6nodes, labels_seminal_wheat_5-14DAG_rice_3-10DAG, labels_sr_5-14DAG, labels_sr_D11_AAP, labels_sr_D14_AAP, labels_sr_D5_KE
+- `<ROOT>/experiments` holds 3 families: output_predictions, test_predictions, test_predictions_00
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_12-05-48` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_12-24-14` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_12-57-54` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_15-52-43` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_17-44-23` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_18-33-46` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_18-44-14` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-14_19-42-04` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-15_09-19-22` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_2025-04-18_09-30-25` holds 2 families: arabidopsis-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_arabidopsis-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_12-05-48` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_12-24-14` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_12-57-54` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_15-52-43` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_17-44-23` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_18-33-46` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_18-44-14` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-14_19-42-04` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-15_09-19-22` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_2025-04-18_09-30-25` holds 2 families: canola-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_canola-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_12-05-48` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_12-24-14` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_12-57-54` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_15-52-43` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_17-44-23` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_18-33-46` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_18-44-14` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-14_19-42-04` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-15_09-19-22` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_2025-04-18_09-30-25` holds 2 families: pennycress-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_pennycress-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_12-05-48` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_12-24-14` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_12-57-54` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_15-52-43` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_17-44-23` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_18-33-46` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_18-44-14` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-14_19-42-04` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-15_09-19-22` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_2025-04-18_09-30-25` holds 2 families: rice-primary-2025-01-19_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_rice-primary-2025-01-19_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_12-05-48` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_12-24-14` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_12-57-54` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_15-52-43` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_17-44-23` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_18-33-46` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_18-44-14` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-14_19-42-04` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-15_09-19-22` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_2025-04-18_09-30-25` holds 2 families: sorghum-primary-2025-01-06_v000_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_12-05-48` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_12-24-14` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_12-57-54` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_15-52-43` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_17-44-23` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_18-33-46` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_18-44-14` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-14_19-42-04` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-15_09-19-22` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_2025-04-18_09-30-25` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000_on_soybean-primary-2025-01-05_v000_test_predictions, soybean-primary-2025-01-05_v000_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_12-05-48` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_12-24-14` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_12-57-54` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_15-52-43` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_17-44-23` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_18-33-46` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_18-44-14` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-14_19-42-04` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-15_09-19-22` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_2025-04-18_09-30-25` holds 2 families: arabidopsis-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_arabidopsis-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_12-05-48` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_12-24-14` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_12-57-54` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_15-52-43` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_17-44-23` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_18-33-46` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_18-44-14` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-14_19-42-04` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-15_09-19-22` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_2025-04-18_09-30-25` holds 2 families: canola-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_canola-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_12-05-48` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_12-24-14` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_12-57-54` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_15-52-43` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_17-44-23` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_18-33-46` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_18-44-14` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-14_19-42-04` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-15_09-19-22` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_2025-04-18_09-30-25` holds 2 families: pennycress-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_pennycress-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_12-05-48` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_12-24-14` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_12-57-54` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_15-52-43` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_17-44-23` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_18-33-46` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_18-44-14` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-14_19-42-04` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-15_09-19-22` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_2025-04-18_09-30-25` holds 2 families: rice-primary-2025-01-19_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_rice-primary-2025-01-19_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_12-05-48` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_12-24-14` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_12-57-54` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_15-52-43` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_17-44-23` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_18-33-46` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_18-44-14` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-14_19-42-04` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-15_09-19-22` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_2025-04-18_09-30-25` holds 2 families: sorghum-primary-2025-01-06_v001_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_12-05-48` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_12-24-14` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_12-57-54` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_15-52-43` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_17-44-23` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_18-33-46` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_18-44-14` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-14_19-42-04` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-15_09-19-22` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_2025-04-18_09-30-25` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001_on_soybean-primary-2025-01-05_v001_test_predictions, soybean-primary-2025-01-05_v001_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_12-05-48` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_12-24-14` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_12-57-54` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_15-52-43` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_17-44-23` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_18-33-46` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_18-44-14` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-14_19-42-04` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-15_09-19-22` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_2025-04-18_09-30-25` holds 2 families: arabidopsis-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_arabidopsis-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_12-05-48` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_12-24-14` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_12-57-54` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_15-52-43` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_17-44-23` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_18-33-46` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_18-44-14` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-14_19-42-04` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-15_09-19-22` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_2025-04-18_09-30-25` holds 2 families: canola-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_canola-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_12-05-48` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_12-24-14` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_12-57-54` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_15-52-43` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_17-44-23` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_18-33-46` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_18-44-14` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-14_19-42-04` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-15_09-19-22` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_2025-04-18_09-30-25` holds 2 families: pennycress-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_pennycress-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_12-05-48` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_12-24-14` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_12-57-54` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_15-52-43` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_17-44-23` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_18-33-46` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_18-44-14` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-14_19-42-04` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-15_09-19-22` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_2025-04-18_09-30-25` holds 2 families: rice-primary-2025-01-19_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_rice-primary-2025-01-19_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_12-05-48` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_12-24-14` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_12-57-54` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_15-52-43` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_17-44-23` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_18-33-46` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_18-44-14` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-14_19-42-04` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-15_09-19-22` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_2025-04-18_09-30-25` holds 2 families: sorghum-primary-2025-01-06_v002_test_labels, sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_12-05-48` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_12-24-14` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_12-57-54` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_15-52-43` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_17-44-23` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_18-33-46` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_18-44-14` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-14_19-42-04` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-15_09-19-22` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-14_generalized_model_eval/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_2025-04-18_09-30-25` holds 2 families: sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002_on_soybean-primary-2025-01-05_v002_test_predictions, soybean-primary-2025-01-05_v002_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v000_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v000_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v000_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_canola_v000_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_canola_v000_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_canola_v000_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v000_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_pennycress_v000_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v000_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v000_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v000_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_sorghum_v000_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v000_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v000_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_soybean_v000_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v000_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v000_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_younger_rice_v000_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v001_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v001_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v001_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_canola_v001_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_canola_v001_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_canola_v001_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v001_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_pennycress_v001_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v001_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v001_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v001_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_sorghum_v001_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v001_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v001_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_soybean_v001_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v001_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v001_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_younger_rice_v001_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v002_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v002_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v002_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_canola_v002_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_canola_v002_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_canola_v002_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v002_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_pennycress_v002_test_labels, 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_pennycress_v002_test_predictions
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v002_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_sorghum_v002_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_sorghum_v002_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v002_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_soybean_v002_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_soybean_v002_test_labels
+- `<ROOT>/experiments/2025-04-16_generalizable_model_aug_input_scale/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v002_2025-04-18_08-53-20` holds 2 families: 2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002_on_2025-04-16_generalizable_model_aug_input_scale_younger_rice_v002_test_predictions, 2025-04-16_generalizable_model_aug_input_scale_younger_rice_v002_test_labels
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_arabidopsis_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_canola_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_canola_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_canola_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_pennycress_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_pennycress_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_pennycress_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_sorghum_soybean_canola_pennycress_rice_arabidopsis_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_sorghum_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_sorghum_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_sorghum_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_soybean_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_soybean_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_soybean_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_younger_rice_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_younger_rice_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/2025-04-16_generalizable_model_aug_input_scale_younger_rice_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/arabidopsis-primary-2025-01-19_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/arabidopsis-primary-2025-01-19_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/arabidopsis-primary-2025-01-19_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/canola-pennycress-arabidopsis-primary-2025-01-20_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/canola-pennycress-arabidopsis-primary-2025-01-20_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/canola-pennycress-arabidopsis-primary-2025-01-20_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/canola-primary-2025-01-19_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/canola-primary-2025-01-19_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/canola-primary-2025-01-19_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/pennycress-primary-2025-01-19_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/pennycress-primary-2025-01-19_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/pennycress-primary-2025-01-19_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/rice-primary-2025-01-19_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/rice-primary-2025-01-19_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/rice-primary-2025-01-19_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-primary-2025-01-06_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-primary-2025-01-06_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-primary-2025-01-06_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-soybean-canola-pennycress-rice-arabidopsis-primary-2025-01-20_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-soybean-primary-2025-01-07_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-soybean-primary-2025-01-07_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/sorghum-soybean-primary-2025-01-07_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/soybean-primary-2025-01-05_v000-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/soybean-primary-2025-01-05_v001-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/artifacts/soybean-primary-2025-01-05_v002-v0` holds 6 families: labels_gt.test, labels_gt.train, labels_gt.val, labels_pr.test, labels_pr.train, labels_pr.val
+- `<ROOT>/experiments/output` holds 30 families: arabidopsis-primary-2025-01-19_v000_on_sorghum-primary-2025-01-06_v000_test_predictions, arabidopsis-primary-2025-01-19_v001_on_sorghum-primary-2025-01-06_v001_test_predictions, arabidopsis-primary-2025-01-19_v002_on_sorghum-primary-2025-01-06_v002_test_predictions, canola-pennycress-arabidopsis-primary-2025-01-20_v000_on_sorghum-primary-2025-01-06_v000_test_predictions, canola-pennycress-arabidopsis-primary-2025-01-20_v001_on_sorghum-primary-2025-01-06_v001_test_predictions, canola-pennycress-arabidopsis-primary-2025-01-20_v002_on_sorghum-primary-2025-01-06_v002_test_predictions, canola-primary-2025-01-19_v000_on_sorghum-primary-2025-01-06_v000_test_predictions, canola-primary-2025-01-19_v001_on_sorghum-primary-2025-01-06_v001_test_predictions, and 22 more
+- `<ROOT>/fixing_arabidopsis_plates` holds 4 families: labels_plates_arabidopsis_primary_2-7DAP_8nodes, labels_plates_arabidopsis_primary_2-7DAP_8nodes.uncropped, lateral_labels, lateral_labels.uncropped
+- `<ROOT>/generalizability_exp_01142023/primary_root/soybean_primary` holds 2 families: labels_soybean_primary_6nodes, labels_soybean_primary_6nodes
+- `<ROOT>/latest_labels_and_images/PLATE_arabidopsis/primary` holds 2 families: labels_plates_arabidopsis_primary_2-7DAP_8nodes, labels_plates_arabidopsis_primary_2-7DAP_8nodes.uncropped
+- `<ROOT>/models_downloader_input/models_downloader_input/20240612_models/canola/lateral/240611_083419.multi_instance.n=631` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/models_downloader_input/models_downloader_input/20240612_models/canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743` holds 4 families: labels_gt.train, labels_gt.val, labels_pr.train, labels_pr.val
+- `<ROOT>/primary` holds 2 families: primary_root_MK22_Day10_labels, primary_root_MK22_Day14_labels
+
+## How to read this
+
+`species`, `mode` and `root_type` are **name-derived**: read off the path, not
+out of the file. They are *not evidence* of what a file contains. Node counts,
+frame counts and instance counts are read from the files themselves and are.
+
+Referenced video paths are emitted as filenames alone, and any candidate that
+could not be expressed relative to the root is reported by filename only.
