@@ -1,10 +1,27 @@
 # Label inventory — scope and constraints for a fresh start
 
-**Status:** scaffolding. Delete once the proposal it produces is approved.
+**Status:** superseded by the `add-label-inventory` change, which it produced. Kept, not
+deleted — see the note below.
 **Date:** 2026-09-15
 **Author:** eberrigan (with Claude Code)
 **Supersedes, for this purpose:** `2026-09-01-label-and-model-inventory-design.md` and the
 twelve `add-label-corpus-inventory` commits on `feat/label-corpus-inventory`.
+
+> **This was scaffolding, and it did its job.** The proposal it constrained is
+> `openspec/changes/add-label-inventory/`, and that spec — not this file — is what the
+> implementation answers to. It is kept anyway because it holds three things the spec
+> deliberately does not: the nine blocks of empirically established facts, marked where a
+> command was actually run; the record of *why* each cut was made, so the cuts are not
+> rebuilt; and the governing principle that produced the shape of the whole change.
+>
+> **Two of its facts were later corrected by running them**, and are wrong as written
+> below. Fact 9 says `sleap_io` 0.7.1 has no `Labels`-level instance accessors: true of
+> `user_instances`/`predicted_instances`, false in the sense meant — `n_user_instances`
+> and `n_pred_instances` exist, and upstream's own fallback is the frame sum it advised
+> hand-rolling. And Fact 4's marker-set redaction rule **leaks**: the markers are
+> slash-terminated while Windows SLEAP records video paths with backslashes, so both
+> attested paths pass through untouched. The change replaced that rule with a whitelist.
+> Read the spec for what the tool does; read this for why it is shaped that way.
 
 Read **this file only**. Do not read the background design doc or the old change
 directory to "get context" — they are the thing that went wrong, and reading them reliably

@@ -121,6 +121,34 @@ through the server-side registry, and the canary is the compatibility evidence.
   the shared primary-root card spans 2–13 for canola and 2–14 for the others, and advertises
   neither globally.
 
+## Taking inventory of the label corpus
+
+Nobody had ever enumerated what labeled data exists. The registry holds 8 collections against an
+expected 25–30, and `skeletons.yaml` cannot express the corpus it claims to describe.
+
+```bash
+# Walk a share root, read each labels file, and write a table and a report under inventory/.
+uv run sleap-roots-training inventory labels "Z:/users/<you>/SLEAP"
+
+# Skip the registry digest check (no credential needed).
+uv run sleap-roots-training inventory labels "Z:/users/<you>/SLEAP" --no-registry
+```
+
+The headline finding is the **`skeletons.yaml` keying gap**: `lookup_skeleton` is keyed
+`(species, root_type, age)` with no `mode`, so a 6-node cylinder arabidopsis primary family and an
+8-node plate one select the same row. Node counts are read from the files, so that finding needs no
+external service.
+
+Two things to know before reading the output. `species`, `mode` and `root_type` are **name-derived**
+— read off the path, not out of the file — and the report says so; they are not evidence. And where
+the tool cannot tell which files form a collection, it lists them and **makes no determination**.
+A directory is not a collection: one on the measured share holds 28 labels files spanning a
+superset, a second species' collection, a generalist, per-labeler inputs and practice files.
+Deciding is a person's job, and there is deliberately nowhere to record the answer.
+
+Every emitted path is relative to the supplied root, which appears as `<ROOT>`, and a referenced
+video path is emitted as its filename alone — nothing above the root reaches an artifact.
+
 ## Development
 
 This repo follows the Talmo lab conventions (uv, ruff/black/pytest, OpenSpec, GitHub

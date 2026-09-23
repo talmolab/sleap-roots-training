@@ -55,7 +55,9 @@ def test_a_digest_match_is_reported_as_verified(candidate):
 
 def test_a_digest_mismatch_names_both_digests(candidate):
     """Scenario: A digest mismatch is reported as a mismatch."""
-    result = verify.classify(candidate, [entry("labels.v001.slp", "AAAAAAAAAAAAAAAA==")])
+    result = verify.classify(
+        candidate, [entry("labels.v001.slp", "AAAAAAAAAAAAAAAA==")]
+    )
 
     assert result.status == verify.MISMATCH
     assert result.recorded_digests == ("AAAAAAAAAAAAAAAA==",)
@@ -85,7 +87,9 @@ def test_a_reference_to_another_store_is_unverifiable_not_mismatching(candidate,
     Those handlers record the store's ETag, or the URI itself when checksumming is off.
     Neither is a hash of these bytes, so comparing them would manufacture a mismatch.
     """
-    result = verify.classify(candidate, [entry("labels.v001.slp", "etag-not-a-md5", ref)])
+    result = verify.classify(
+        candidate, [entry("labels.v001.slp", "etag-not-a-md5", ref)]
+    )
 
     assert result.status == verify.UNVERIFIABLE
     assert result.status != verify.MISMATCH

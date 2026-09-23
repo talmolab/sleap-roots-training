@@ -115,7 +115,11 @@ def read_facts(path: Path) -> FileFacts:
     """
     path = Path(path)
     try:
-        labels = sio.load_slp(str(path))
+        # `open_videos=False`: nothing here needs pixels, and opening backends would
+        # try to reach image paths recorded on other machines — slow at best, and a
+        # failure that has nothing to do with the file being readable. It does not
+        # avoid the list-filename `TypeError`; only the broad catch below does.
+        labels = sio.load_slp(str(path), open_videos=False)
         skeletons = list(labels.skeletons)
         if not skeletons:
             state = NO_SKELETON
