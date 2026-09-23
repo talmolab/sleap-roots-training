@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Sequence
+from pathlib import Path
+from typing import Callable, Iterable, Optional, Sequence
 
 from sleap_roots_training.inventory import discover, read
 from sleap_roots_training.labeling.skeletons import SkeletonRow, load_skeleton_table
@@ -217,13 +218,18 @@ def _is_unparseable(name: str) -> bool:
 
 
 def build_report(
-    observations: Iterable[Observed], table: Optional[Sequence[SkeletonRow]] = None
+    observations: Iterable[Observed],
+    table: Optional[Sequence[SkeletonRow]] = None,
+    emit_path: Optional[Callable[[Path], str]] = None,
 ) -> GapReport:
     """Build the keying-gap report from what the scan observed.
 
     Args:
         observations: Families paired with their read facts.
         table: The skeleton table to check against; defaults to the packaged one.
+        emit_path: Renders a candidate path into its emitted form. Defaults to the
+            filename, so a report built without it still cannot carry a directory
+            chain — this is the one renderer that previously bypassed redaction.
 
     Returns:
         The report. Empty lists mean the table describes everything seen, which on the
@@ -231,6 +237,7 @@ def build_report(
     """
     rows = load_skeleton_table() if table is None else table
     observations = list(observations)
+    render = emit_path or (lambda path: Path(path).name)
     report = GapReport()
 
     selected: dict[tuple[str, str], list[tuple[str, int, str]]] = {}
@@ -244,7 +251,9 @@ def build_report(
         names = observed.facts.skeleton_names
         if names and any(_is_unparseable(name) for name in names):
             report.unparseable_skeletons.append(
-                UnparseableSkeleton(path=str(observed.facts.path), skeleton_names=names)
+                UnparseableSkeleton(
+                    path=render(observed.facts.path), skeleton_names=names
+                )
             )
 
         node_count = observed.facts.node_count
@@ -269,7 +278,7 @@ def build_report(
         report.families_analysed += 1
         key = (derived.species, derived.root_type)
         selected.setdefault(key, []).append(
-            (derived.mode, node_count, str(observed.facts.path))
+            (derived.mode, node_count, render(observed.facts.path))
         )
 
     for (species, root_type), entries in sorted(selected.items()):

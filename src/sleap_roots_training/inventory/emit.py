@@ -55,6 +55,8 @@ COLUMNS = (
     "video_filenames",
     "members",
     "member_filenames",
+    "member_node_counts",
+    "members_disagree",
     "twin_of",
     "registry_status",
     "registry_detail",
@@ -64,7 +66,12 @@ COLUMNS = (
 #: Columns holding lists, written as JSON so a value containing a space, a comma or a
 #: quote survives the round trip. Space-joining produced 8,489 fragment tokens in the
 #: first real scan.
-_JSON_COLUMNS = ("skeleton_names", "video_filenames", "member_filenames")
+_JSON_COLUMNS = (
+    "skeleton_names",
+    "video_filenames",
+    "member_filenames",
+    "member_node_counts",
+)
 
 
 class UnusableRoot(Exception):
@@ -166,7 +173,13 @@ def build(
     rows: list[dict] = []
     for family in families:
         candidate = family.latest
-        facts = read.read_facts(candidate.path)
+        # Every member is read, not just the newest. Requirement 3 says "read each
+        # candidate", and reading only `latest` left 197 of 1,447 candidates unopened
+        # and made a family whose members disagree on node count undetectable.
+        per_member = {
+            member.path: read.read_facts(member.path) for member in family.members
+        }
+        facts = per_member[candidate.path]
         observations.append(gap.Observed(family=family, facts=facts))
         derived = gap.derive(family)
         emitted = redact.emit_path(candidate.path, root)
@@ -196,6 +209,12 @@ def build(
                 "members": len(family.members),
                 "member_filenames": json.dumps(
                     [member.path.name for member in family.members]
+                ),
+                "member_node_counts": json.dumps(
+                    [per_member[m.path].node_count for m in family.members]
+                ),
+                "members_disagree": _disagreement(
+                    [per_member[m.path] for m in family.members]
                 ),
                 "twin_of": " ".join(
                     sorted(
@@ -230,7 +249,11 @@ def build(
         root=root,
         scan=scan,
         rows=rows,
-        gap=gap.build_report(observations, table=table),
+        gap=gap.build_report(
+            observations,
+            table=table,
+            emit_path=lambda path: redact.emit_path(path, root).text,
+        ),
         ambiguous_directories=ambiguous,
     )
 
@@ -250,6 +273,23 @@ def exit_code(inventory: Inventory) -> int:
     """
     del inventory
     return 0
+
+
+def _disagreement(members: list[read.FileFacts]) -> str:
+    """Name what the members of one family do not agree on.
+
+    A family emits a single row taken from its newest member, so a disagreement inside
+    the family would otherwise be invisible — and mixed node counts are exactly the
+    thing the skeleton-table analysis is about.
+    """
+    disagreements = []
+    counts = {m.node_count for m in members if m.node_count is not None}
+    if len(counts) > 1:
+        disagreements.append("node_count")
+    skeletons = {m.skeleton_names for m in members if m.skeleton_names}
+    if len(skeletons) > 1:
+        disagreements.append("skeleton_names")
+    return " ".join(disagreements)
 
 
 def _status_of(verdict: object) -> str:
@@ -325,7 +365,10 @@ def _render_report(inventory: Inventory) -> str:
             counts = ", ".join(str(c) for c in collision.node_counts)
             lines.append(
                 f"- `({collision.species}, {collision.root_type}, "
-                f"age: {collision.row_age})` is selected by {modes}, whose files carry "
+                # `null`, not Python's `None`: the spec and skeletons.yaml both write
+                # the age-agnostic row that way.
+                f"age: {collision.row_age if collision.row_age else 'null'})` is "
+                f"selected by {modes}, whose files carry "
                 f"{counts} nodes. One row cannot describe both."
             )
         lines.append("")
@@ -350,9 +393,18 @@ def _render_report(inventory: Inventory) -> str:
 
     if inventory.gap.unparseable_skeletons:
         lines += ["### Skeleton names the existing check cannot resolve", ""]
+        # Grouped by the names they carry, and keyed on the emitted path. Rendering one
+        # bullet per file gave 1,235 lines over 364 distinct basenames, with
+        # `labels_gt.train.slp` repeated 63 times identically and nothing to tell the
+        # instances apart.
+        grouped: dict[tuple[str, ...], list[str]] = {}
         for entry in inventory.gap.unparseable_skeletons:
-            names = ", ".join(entry.skeleton_names)
-            lines.append(f"- {Path(entry.path).name}: {names}")
+            grouped.setdefault(entry.skeleton_names, []).append(entry.path)
+        for names, paths in sorted(grouped.items()):
+            listed = ", ".join(f"`{p}`" for p in sorted(paths)[:_STEMS_SHOWN])
+            if len(paths) > _STEMS_SHOWN:
+                listed += f", and {len(paths) - _STEMS_SHOWN} more"
+            lines.append(f"- {', '.join(names)} — {len(paths)} file(s): {listed}")
         lines.append("")
 
     lines += ["## Directories holding more than one family", ""]
