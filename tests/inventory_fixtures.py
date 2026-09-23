@@ -89,11 +89,15 @@ def write_labels(
         skeleton.name = name
         skeletons.append(skeleton)
 
-    points = np.array([[float(i + 1), float(i + 2)] for i in range(len(node_names))])
+    points = np.array(
+        [[float(i + 1), float(i + 2)] for i in range(len(node_names))]
+    ).reshape(len(node_names), 2)
     frames = []
     for idx in range(n_frames):
         instances: list[object] = []
-        if skeletons:
+        # A skeleton with no nodes carries no instances: `Instance.from_numpy` cannot
+        # build one, and the state being tested is the empty skeleton itself.
+        if skeletons and node_names:
             instances += [
                 sio.Instance.from_numpy(points, skeleton=skeletons[0])
                 for _ in range(n_user)

@@ -65,8 +65,15 @@ class FileFacts:
 
     @property
     def node_count(self) -> Optional[int]:
-        """Nodes on the first skeleton, or ``None`` when there is no skeleton."""
-        return len(self.node_names) if self.node_names else None
+        """Nodes on the first skeleton, or ``None`` when there is no skeleton to count.
+
+        Zero is a real answer and must not read as "unknown": a skeleton carrying no
+        nodes is a finding, and returning ``None`` made it falsy and dropped it from the
+        gap analysis exactly like an unreadable file.
+        """
+        if self.skeleton_state in (NO_SKELETON, UNREADABLE):
+            return None
+        return len(self.node_names)
 
 
 def _referenced_paths(labels: "sio.Labels") -> tuple[str, ...]:

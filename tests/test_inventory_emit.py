@@ -356,3 +356,23 @@ def test_a_mismatch_names_both_digests_in_the_table(tmp_path):
     assert row["registry_status"] == verify.MISMATCH
     assert "LOCAL==" in row["registry_detail"]
     assert "RECORDED==" in row["registry_detail"]
+
+
+def test_the_report_publishes_its_own_denominator(tmp_path):
+    """The first committed report gave a finding over 3.8% of the corpus and said so
+    nowhere."""
+    root = tmp_path / "share"
+    write_labels(
+        root / "cyl_arabidopsis_primary_6nodes" / "labels.v001.slp",
+        skeleton_names=("arabidopsis_primary",),
+    )
+    write_labels(
+        root / "unknowable" / "labels.v001.slp", skeleton_names=("Skeleton-1",)
+    )
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    report = (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+    assert "Analysed 1 of 2 families" in report
+    assert "not analysed:" in report

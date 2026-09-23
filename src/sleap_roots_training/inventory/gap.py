@@ -50,6 +50,10 @@ _SLEAP_DIR = re.compile(r"^SLEAP[_-](?P<species>[a-z]+)", re.IGNORECASE)
 #: Crop names this program already knows about. Used **only** to sort the uncovered
 #: list for a reader — never to filter derivation, because a crop nobody has heard of
 #: is exactly the finding this report exists to surface.
+#: Directory spellings that are a crop under another name. `SLEAP_Soy/` yields `soy`,
+#: which the report then published as "not a species" while listing `soybean` separately.
+_SPECIES_ALIASES = {"soy": "soybean", "arabadopsis": "arabidopsis"}
+
 KNOWN_SPECIES = (
     "arabidopsis",
     "soybean",
@@ -144,11 +148,20 @@ class GapReport:
     mode_collisions: list[ModeCollision] = field(default_factory=list)
     uncovered_species: set[str] = field(default_factory=set)
     unparseable_skeletons: list[UnparseableSkeleton] = field(default_factory=list)
+    families_considered: int = 0
+    families_analysed: int = 0
+    families_skipped_reasons: dict[str, int] = field(default_factory=dict)
 
 
 def _tokens(family: discover.Family) -> list[str]:
-    """Return the lowercase path tokens a family's identity can be read from."""
-    text = "/".join([*family.directory.parts[-3:], family.stem])
+    """Return the lowercase path tokens a family's identity can be read from.
+
+    The **whole** path, not a window on it. Reading only the last three directories for
+    mode while species read everything meant a `plates` token further up was invisible:
+    on the measured corpus that hid four plate families outright and undercounted the
+    8-node ones as 11 rather than 15.
+    """
+    text = "/".join([*family.directory.parts, family.stem])
     return [t for t in re.split(r"[^A-Za-z0-9]+", text.lower()) if t]
 
 
@@ -171,6 +184,7 @@ def derive(family: discover.Family) -> Derived:
             break
     if species is None:
         species = next((t for t in tokens if t in KNOWN_SPECIES), None)
+    species = _SPECIES_ALIASES.get(species, species)
 
     mode = next((_MODE_TOKENS[t] for t in tokens if t in _MODE_TOKENS), None)
     root_type = next(
@@ -234,11 +248,29 @@ def build_report(
             )
 
         node_count = observed.facts.node_count
-        if derived.species and derived.root_type and derived.mode and node_count:
-            key = (derived.species, derived.root_type)
-            selected.setdefault(key, []).append(
-                (derived.mode, node_count, str(observed.facts.path))
+        missing = [
+            name
+            for name, value in (
+                ("no-species", derived.species),
+                ("no-root-type", derived.root_type),
+                ("no-mode", derived.mode),
+                ("no-node-count", None if node_count is None else True),
             )
+            if not value
+        ]
+        if missing:
+            # Recorded, not silently dropped. Without a denominator a reader cannot tell
+            # the collision finding rested on 47 of 1,250 families.
+            for name in missing:
+                report.families_skipped_reasons[name] = (
+                    report.families_skipped_reasons.get(name, 0) + 1
+                )
+            continue
+        report.families_analysed += 1
+        key = (derived.species, derived.root_type)
+        selected.setdefault(key, []).append(
+            (derived.mode, node_count, str(observed.facts.path))
+        )
 
     for (species, root_type), entries in sorted(selected.items()):
         modes = {mode for mode, _count, _path in entries}
@@ -261,5 +293,6 @@ def build_report(
             )
         )
 
+    report.families_considered = len(observations)
     report.uncovered_species = uncovered(derived_species, table=rows)
     return report

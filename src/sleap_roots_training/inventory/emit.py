@@ -299,7 +299,24 @@ def _render_report(inventory: Inventory) -> str:
         "",
         "## Skeleton table",
         "",
+        f"Analysed {inventory.gap.families_analysed} of "
+        f"{inventory.gap.families_considered} families. A family is analysed only where",
+        "species, root type, mode and a node count are all derivable; the rest are",
+        "counted below, not silently dropped.",
+        "",
     ]
+
+    if inventory.gap.families_skipped_reasons:
+        lines += [
+            "- not analysed: "
+            + ", ".join(
+                f"{count} {reason}"
+                for reason, count in sorted(
+                    inventory.gap.families_skipped_reasons.items()
+                )
+            ),
+            "",
+        ]
 
     if inventory.gap.mode_collisions:
         lines += ["### Rows selected by more than one capture mode", ""]
