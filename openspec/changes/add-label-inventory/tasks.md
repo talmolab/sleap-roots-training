@@ -120,7 +120,7 @@
       README pointer beside the existing `seed-registry` section — every feature merge in this
       repo has done both. #48 also appends under `### Added`, so expect a trivial conflict
       whichever lands second.
-- [ ] 9.2 Run the first real scan. **Before committing, grep the artifacts for both known
+- [x] 9.2 Run the first real scan. **Before committing, grep the artifacts for both known
       colleague names and for any surviving absolute path** — a leak survives `git revert`,
       which removes the blob from the tree and not from history. Commit the artifacts as their
       own commit, and push it together with 9.1 so the PR's final head is CI-verified
