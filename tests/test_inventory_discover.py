@@ -118,14 +118,20 @@ def test_the_walk_does_not_follow_symlinks(tmp_path):
 @pytest.mark.parametrize(
     "name,stem,version,suffix",
     [
-        ("labels.v001.slp", "labels", 1, ".slp"),
-        ("labels.v002.pkg.slp", "labels", 2, ".pkg.slp"),
-        ("labels.v001_ana.slp", "labels_ana", 1, ".slp"),
-        ("labels.combined.v003.slp", "labels.combined", 3, ".slp"),
+        ("labels.v001.slp", "labels.v#", 1, ".slp"),
+        ("labels.v002.pkg.slp", "labels.v#", 2, ".pkg.slp"),
+        ("labels.v001_ana.slp", "labels.v#_ana", 1, ".slp"),
+        ("labels_ana.v001.slp", "labels_ana.v#", 1, ".slp"),
+        ("labels.combined.v003.slp", "labels.combined.v#", 3, ".slp"),
     ],
 )
 def test_all_four_version_suffix_shapes_parse(name, stem, version, suffix):
-    """All four shapes occur on the share, two of them inside one five-file family."""
+    """All four shapes occur on the share, two of them inside one five-file family.
+
+    The stem keeps the version token's *position* as `v#` rather than deleting it, so
+    `labels.v001_ana.slp` and `labels_ana.v001.slp` stay distinct while `v1`/`v01`/`v001`
+    collapse.
+    """
     parsed = discover.parse_version(Path(name))
     assert (parsed.stem, parsed.version, parsed.suffix) == (stem, version, suffix)
 
@@ -147,7 +153,7 @@ def test_identical_basenames_in_different_directories_stay_separate(tmp_path):
     root = build_share_tree(tmp_path / "share")
     families = discover.group(discover.walk(root).candidates)
 
-    holding = [f for f in families if f.stem == "labels" and f.suffix == ".slp"]
+    holding = [f for f in families if f.stem == "labels.v#" and f.suffix == ".slp"]
     directories = {f.directory.relative_to(root).as_posix() for f in holding}
     assert directories == {
         "SLEAP_soybean/primary_6nodes",
@@ -164,7 +170,7 @@ def test_trailing_text_after_the_version_keeps_families_apart(tmp_path):
 
     directory = root / "SLEAP_soybean/primary_6nodes"
     per_labeler = [f for f in families if f.directory == directory and "_" in f.stem]
-    assert sorted(f.stem for f in per_labeler) == ["labels_ana", "labels_ben"]
+    assert sorted(f.stem for f in per_labeler) == ["labels.v#_ana", "labels.v#_ben"]
     assert all(len(f.members) == 1 for f in per_labeler)
 
 
@@ -182,7 +188,7 @@ def test_a_packaged_twin_is_cross_referenced_not_merged(tmp_path):
     plain = next(
         f
         for f in families
-        if f.directory == directory and f.suffix == ".slp" and f.stem == "labels"
+        if f.directory == directory and f.suffix == ".slp" and f.stem == "labels.v#"
     )
     packaged = next(f for f in families if f.suffix == ".pkg.slp")
     assert plain.key != packaged.key

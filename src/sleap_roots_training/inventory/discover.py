@@ -26,13 +26,24 @@ DERIVED_FILENAME = "derived-filename"
 #: Exclusion rule: the file sits under a directory that only holds derived data.
 DERIVED_DIR = "derived-directory"
 
-#: Suffix that marks inference output, wherever the file happens to live.
-_PREDICTIONS_SUFFIX = ".predictions.slp"
+#: Filename shapes that mark inference output, wherever the file happens to live.
+#: The corpus writes `_predictions.slp` far more often than `.predictions.slp` — 603 of
+#: 1,250 families in the first real scan were derived output admitted by a dot-only rule.
+#: `labels_gt.*` / `labels_pr.*` are ground-truth and predicted train/val/test splits.
+_PREDICTIONS_RE = re.compile(r"predictions\.slp$|^labels_(gt|pr)\.", re.IGNORECASE)
 
 #: Directory names whose contents are derived. ``train_test_split`` is a prefix match —
 #: real directories carry a ratio, e.g. ``train_test_split_0.8``.
 _DERIVED_DIRS = ("models", "predictions")
-_DERIVED_DIR_PREFIXES = ("train_test_split",)
+
+#: Directory shapes whose contents are derived. `train_test_split` must be followed by a
+#: delimiter or nothing: a bare `startswith` also swallowed `train_test_splitter/`, which
+#: is somebody's notes directory, not a split.
+_DERIVED_DIR_RES = (
+    re.compile(r"^train_test_split($|[._-])", re.IGNORECASE),
+    # A sleap-nn run directory, e.g. `221006_172103.multi_instance.n=482`.
+    re.compile(r"\.n=\d+$", re.IGNORECASE),
+)
 
 #: A version token: ``v001``, optionally carrying trailing text as in ``v001_ana``.
 _VERSION = re.compile(r"^v(\d+)(?P<trailing>_.*)?$", re.IGNORECASE)
@@ -155,26 +166,36 @@ def parse_version(path: Path) -> ParsedName:
     suffix_parts = [parts.pop()]
     if parts and parts[-1].lower() == "pkg":
         suffix_parts.insert(0, parts.pop())
-    suffix = "." + ".".join(suffix_parts)
+    # Lowercased: the suffix is a key, and `train.v2.SLP` is the same effort as
+    # `train.v2.slp`.
+    suffix = ("." + ".".join(suffix_parts)).lower()
 
     for index in range(len(parts) - 1, -1, -1):
         match = _VERSION.match(parts[index])
         if match is None:
             continue
         trailing = match.group("trailing") or ""
-        stem = ".".join(parts[:index]) + trailing
-        return ParsedName(stem=stem, version=int(match.group(1)), suffix=suffix)
+        # The version NUMBER is replaced in place rather than removed, so the key keeps
+        # where the token sat. `labels.v001_ana.slp` and `labels_ana.v001.slp` are named
+        # by the spec as distinct shapes; stripping the token made them one key and one
+        # of the two files then appeared in no artifact at all. Padding still collapses:
+        # `v1`, `v01` and `v001` all render `v#`.
+        pattern = [*parts[:index], f"v#{trailing}"]
+        return ParsedName(
+            stem=".".join(pattern), version=int(match.group(1)), suffix=suffix
+        )
 
     return ParsedName(stem=".".join(parts), version=None, suffix=suffix)
 
 
 def _exclusion_rule(path: Path, root: Path) -> Optional[str]:
     """Return the rule excluding ``path``, or ``None`` if it is a candidate."""
-    if path.name.lower().endswith(_PREDICTIONS_SUFFIX):
+    if _PREDICTIONS_RE.search(path.name):
         return DERIVED_FILENAME
     for part in path.relative_to(root).parts[:-1]:
-        lowered = part.lower()
-        if lowered in _DERIVED_DIRS or lowered.startswith(_DERIVED_DIR_PREFIXES):
+        if part.lower() in _DERIVED_DIRS:
+            return DERIVED_DIR
+        if any(pattern.search(part) for pattern in _DERIVED_DIR_RES):
             return DERIVED_DIR
     return None
 
@@ -197,7 +218,10 @@ def walk(root: Path) -> ScanResult:
     result = ScanResult(root=root)
 
     def _record_error(error: OSError) -> None:
-        result.unreadable_paths.append(Path(error.filename))
+        # `OSError.filename` is None for several error shapes and `Path(None)` raises,
+        # which would propagate out of `os.walk` and kill the scan from inside the one
+        # callback whose purpose is to keep it alive.
+        result.unreadable_paths.append(Path(error.filename or "<unknown>"))
 
     for directory, _subdirs, filenames in os.walk(
         root, onerror=_record_error, followlinks=False
