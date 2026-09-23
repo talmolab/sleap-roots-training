@@ -18,7 +18,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from sleap_roots_training.inventory import discover, gap, read, redact
 from sleap_roots_training.labeling.skeletons import SkeletonRow
@@ -95,6 +95,7 @@ def build(
     *,
     table: Optional[Sequence[SkeletonRow]] = None,
     statuses: Optional[dict[Path, str]] = None,
+    verifier: Optional[Callable[[Sequence[Path]], dict[Path, str]]] = None,
 ) -> Inventory:
     """Scan ``root`` and assemble the inventory.
 
@@ -104,6 +105,9 @@ def build(
         statuses: Registry status per candidate path. Absent entries are recorded as
             :data:`NOT_CHECKED` rather than as unregistered — not looking is not the
             same finding as looking and finding nothing.
+        verifier: Called once with every candidate path, returning their statuses.
+            Takes precedence over ``statuses``. Passing it here rather than walking
+            twice keeps one pass over a share holding 18,099 `.slp` files.
 
     Returns:
         The assembled inventory.
@@ -115,9 +119,11 @@ def build(
     if not root.is_dir():
         raise UnusableRoot(f"not a readable directory: {root}")
 
-    statuses = statuses or {}
+    statuses = dict(statuses or {})
     scan = discover.walk(root)
     families = discover.group(scan.candidates)
+    if verifier is not None:
+        statuses = verifier([family.latest.path for family in families])
 
     observations: list[gap.Observed] = []
     rows: list[dict] = []

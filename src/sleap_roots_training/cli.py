@@ -8,6 +8,7 @@ import click
 from sleap_roots_training import __version__
 from sleap_roots_training import config as training_config
 from sleap_roots_training.inventory import emit as inventory_emit
+from sleap_roots_training.inventory import verify as inventory_verify
 from sleap_roots_training.registry import cards, chooser, config, lineage, publish
 from sleap_roots_training.registry.models import resolve_model_dir
 
@@ -242,8 +243,19 @@ def inventory_group() -> None:
     show_default=True,
     help="Where to write the table and the report.",
 )
+@click.option(
+    "--registry/--no-registry",
+    default=True,
+    show_default=True,
+    help=(
+        "Verify each candidate's digest against the labels registry. Reads manifest "
+        "metadata only; no artifact files are downloaded."
+    ),
+)
 @click.pass_context
-def inventory_labels_command(ctx: click.Context, root: Path, output: Path) -> None:
+def inventory_labels_command(
+    ctx: click.Context, root: Path, output: Path, registry: bool
+) -> None:
     """Enumerate the labels files beneath ROOT and report what is in them.
 
     Walks ROOT, excludes derived files by filename shape as well as by directory, reads
@@ -258,8 +270,24 @@ def inventory_labels_command(ctx: click.Context, root: Path, output: Path) -> No
     Exits zero whatever it finds. Mismatches, unregistered files and unresolvable groups
     are findings to read, not failures; only an unusable ROOT is an error.
     """
+    statuses = None
+    if registry:
+        try:
+            index = inventory_verify.fetch_index()
+        except RuntimeError as error:
+            # Not fatal, and not silently ignored either. An unreachable registry means
+            # the digest column reads `not-checked`, which is a different finding from
+            # `unregistered` — not looking is not the same as looking and finding
+            # nothing — and the scan's own evidence is unaffected.
+            click.echo(f"WARNING: {error}")
+            click.echo("Continuing; the registry column will read 'not-checked'.")
+        else:
+
+            def statuses(paths):
+                return inventory_verify.statuses(paths, index)
+
     try:
-        result = inventory_emit.build(root)
+        result = inventory_emit.build(root, verifier=statuses)
     except inventory_emit.UnusableRoot as error:
         raise click.ClickException(str(error)) from error
 
