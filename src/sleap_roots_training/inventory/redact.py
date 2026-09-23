@@ -130,3 +130,24 @@ def emit_fields(row: _Mapping) -> _Mapping:
         The same mapping, unchanged.
     """
     return row
+
+
+def scrub_message(text: str) -> str:
+    """Reduce every path-shaped token in free text to its filename.
+
+    Exception messages are not ours to predict: ``h5py`` and the OS both interpolate
+    absolute paths, and those go into a committed artifact. Rather than matching known
+    path shapes — the blacklist mistake this module exists to avoid — every
+    whitespace-separated token containing a separator is replaced by its own basename,
+    which is the same rule the rest of the module applies to paths.
+
+    Args:
+        text: Arbitrary message text.
+
+    Returns:
+        The text with path-shaped tokens reduced to filenames.
+    """
+    out = []
+    for token in (text or "").split():
+        out.append(basename(token) if any(s in token for s in _SEPARATORS) else token)
+    return " ".join(out)

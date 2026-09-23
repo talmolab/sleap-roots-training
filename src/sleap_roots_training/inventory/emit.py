@@ -16,6 +16,7 @@ module deliberately offers nowhere to record that decision.
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional, Sequence
@@ -52,13 +53,36 @@ COLUMNS = (
     "skeleton_state",
     "skeleton_names",
     "video_filenames",
+    "members",
+    "member_filenames",
+    "twin_of",
     "registry_status",
     "error",
 )
 
+#: Columns holding lists, written as JSON so a value containing a space, a comma or a
+#: quote survives the round trip. Space-joining produced 8,489 fragment tokens in the
+#: first real scan.
+_JSON_COLUMNS = ("skeleton_names", "video_filenames", "member_filenames")
+
 
 class UnusableRoot(Exception):
     """The supplied discovery root does not exist or cannot be read."""
+
+
+class PartialScan(Exception):
+    """The scan could not see the whole tree, so its output would be a false diff.
+
+    A root that exists but cannot be listed still passes ``is_dir()``. Writing what such
+    a scan found would overwrite the committed artifacts with a near-empty file, and the
+    diff would read as the corpus having disappeared.
+    """
+
+
+#: Prefixes a spreadsheet treats as the start of a formula. The values in these columns
+#: come from files written on other machines, and the artifacts are committed and opened
+#: in Excel, so a leading `=` is remote code as far as a reader is concerned.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", chr(9), chr(13))
 
 
 @dataclass(frozen=True)
@@ -126,7 +150,14 @@ def build(
 
     statuses = dict(statuses or {})
     scan = discover.walk(root)
+    if scan.unreadable_paths and not scan.candidates:
+        raise PartialScan(
+            f"{len(scan.unreadable_paths)} director(ies) could not be read and no "
+            "candidates were found; refusing to write a scan that would read as the "
+            "corpus having disappeared"
+        )
     families = discover.group(scan.candidates)
+    by_key = {family.key: family for family in families}
     if verifier is not None:
         statuses = verifier([family.latest.path for family in families])
 
@@ -157,12 +188,23 @@ def build(
                     else facts.predicted_instances
                 ),
                 "skeleton_state": facts.skeleton_state,
-                "skeleton_names": " ".join(facts.skeleton_names),
-                "video_filenames": " ".join(
+                "skeleton_names": json.dumps(list(facts.skeleton_names)),
+                "video_filenames": json.dumps(
                     sorted({redact.emit_video_path(v) for v in facts.video_filenames})
                 ),
+                "members": len(family.members),
+                "member_filenames": json.dumps(
+                    [member.path.name for member in family.members]
+                ),
+                "twin_of": " ".join(
+                    sorted(
+                        twin.latest.path.name
+                        for key in family.twins
+                        for twin in [by_key[key]]
+                    )
+                ),
                 "registry_status": statuses.get(candidate.path, NOT_CHECKED),
-                "error": facts.error or "",
+                "error": redact.scrub_message(facts.error) if facts.error else "",
             }
         )
 
@@ -206,6 +248,11 @@ def exit_code(inventory: Inventory) -> int:
     """
     del inventory
     return 0
+
+
+def _spreadsheet_safe(value: str) -> str:
+    """Neutralize a value a spreadsheet would evaluate as a formula."""
+    return "'" + value if value.startswith(_FORMULA_PREFIXES) else value
 
 
 def _render_report(inventory: Inventory) -> str:
