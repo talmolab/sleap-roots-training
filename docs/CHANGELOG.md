@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`sleap-roots-training inventory labels <root>`** — a re-runnable enumeration of what labeled
+  data actually exists. Nobody had ever run one: the registry holds 8 collections against an
+  expected 25-30, and `skeletons.yaml` cannot express the corpus it claims to describe. The command
+  walks a share root, excludes derived files **by filename shape as well as by directory**
+  (`*.predictions.slp` is 13,164 of the 18,099 `.slp` files on the measured share, and thousands of
+  derived files sit outside every `models/`, `predictions/` and `train_test_split*/` directory),
+  groups the rest into version families keyed on `(directory, basename minus the .vNNN token, full
+  suffix chain)`, and reads each one's skeletons, nodes, frames and instance counts out of the file
+  itself.
+
+  Its headline output is the **`skeletons.yaml` keying gap**: `lookup_skeleton` is keyed
+  `(species, root_type, age)` with no `mode`, so a 6-node cylinder arabidopsis primary family and an
+  8-node plate one select the same row. That finding needs no external service. Digest verification
+  against the labels registry is on by default and degrades to `not-checked` with a warning when no
+  credential resolves; pass `--no-registry` to skip it.
+
+  Two table/report artifacts are written under `inventory/`, in a deterministic order and with no
+  wall-clock metadata, so successive runs diff. Every emitted path is relative to the supplied root,
+  which appears as a fixed token, and a referenced video path is emitted as its filename alone —
+  nothing above the root and no directory chain recorded on another machine reaches an artifact.
+
+  Where the tool cannot determine something — which files in a directory form a collection, which
+  supersedes which — it **lists the candidates and makes no determination**. There is deliberately
+  nowhere to record the answer: a person reads the output and decides.
+
 ### Changed
 - Pinned `sleap-roots-contracts` to `0.1.0a8` and **reshaped the registry so one card describes one
   physical model** (#39). A card now carries a scalar `root_type` plus a `selectors` list — one
