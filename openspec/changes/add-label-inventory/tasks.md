@@ -125,12 +125,12 @@
       which removes the blob from the tree and not from history. Commit the artifacts as their
       own commit, and push it together with 9.1 so the PR's final head is CI-verified
       (`inventory/**` is outside the paths filter and does not trigger CI on its own).
-- [ ] 9.3 Run CI's own gate, not a looser local one:
+- [x] 9.3 Run CI's own gate, not a looser local one:
       `uv run black --check src/sleap_roots_training tests && uv run ruff check
       src/sleap_roots_training tests && uv run pytest -m "not integration"
       --cov=src/sleap_roots_training --cov-fail-under=95`. Headroom is ~129 uncovered lines
       repo-wide, so every implementation commit must carry its own tests.
-- [ ] 9.4 Validate strict on **both** pinned CLIs — 1.5.0 and 1.11.0 — and paste both
+- [x] 9.4 Validate strict on **both** pinned CLIs — 1.5.0 and 1.11.0 — and paste both
       `--version` outputs into the PR body, since no workflow enforces this. 1.5.0 rejects a
       `SHALL` that wraps past a requirement's first body line; later versions accept it
       silently.
