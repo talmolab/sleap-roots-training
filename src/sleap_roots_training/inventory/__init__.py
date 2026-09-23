@@ -10,6 +10,6 @@ promotion, decision, adjudication or verdict concept, and reads no record of a h
 judgement.
 """
 
-from sleap_roots_training.inventory import discover, gap, read, redact
+from sleap_roots_training.inventory import discover, emit, gap, read, redact
 
-__all__ = ["discover", "gap", "read", "redact"]
+__all__ = ["discover", "emit", "gap", "read", "redact"]
