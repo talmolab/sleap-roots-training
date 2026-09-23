@@ -163,3 +163,77 @@ def test_statuses_maps_many_candidates(tmp_path):
 
     assert result[first] == verify.VERIFIED
     assert result[second] == verify.UNREGISTERED
+
+
+# --------------------------------------------------------------------------------------
+# Regressions from the PR #58 review.
+# --------------------------------------------------------------------------------------
+
+
+def test_the_labels_registry_is_queried_for_datasets_not_models(monkeypatch):
+    """Measured live: `"model"` raises, `"dataset"` returns the 8 label collections.
+
+    The type string was copied from the *model* registry publisher. With it, every scan
+    failed inside `fetch_index`, the broad catch turned that into "could not read the
+    labels registry", the CLI downgraded it to a warning, and all 1,250 rows of the
+    first committed scan read `not-checked` — a laundered failure presented as a finding.
+    """
+    asked = []
+
+    class _Api:
+        def artifact_collections(self, path, type_name):
+            asked.append(type_name)
+            return []
+
+    monkeypatch.setattr(verify.wandb, "Api", lambda *a, **k: _Api())
+    verify.fetch_index(project="entity-org/wandb-registry-sleap-roots-labels")
+
+    assert asked == ["dataset"]
+
+
+def test_a_genuine_mismatch_is_not_masked_by_another_entry_being_a_reference(candidate):
+    """`classify` returned on the first entry tripping a rule, whichever entry it was.
+
+    So a real content mismatch was reported `unverifiable` whenever any *other* matching
+    entry happened to be a cloud reference — making MISMATCH unreachable in exactly the
+    corpus it was written for.
+    """
+    upload = entry("labels.v001.slp", "AAAAAAAAAAAAAAAA==")
+    reference = entry("labels.v001.slp", "etag", "s3://bucket/labels.v001.slp")
+
+    for entries in ([upload, reference], [reference, upload]):
+        assert verify.classify(candidate, entries).status == verify.MISMATCH
+
+
+def test_a_file_reference_logged_on_another_machine_is_unverifiable(candidate):
+    """The case the module exists for, and the one it got wrong.
+
+    `_uri_digest` hashed the URI of the *local* candidate, but wandb stored the URI of
+    the path on the *logging* machine. For any artifact logged anywhere else — the normal
+    case for a share — that produced the confident false mismatch the docstring promises
+    to prevent. The previous test built the ref from the local path, so it could only pass.
+    """
+    foreign = "file:///V:/shares/someone/labels.v001.slp"
+    recorded = entry("labels.v001.slp", md5_string(foreign), foreign)
+
+    result = verify.classify(candidate, [recorded])
+
+    assert result.status == verify.UNVERIFIABLE
+    assert result.status != verify.MISMATCH
+
+
+def test_statuses_carries_the_digests_the_spec_says_to_name(tmp_path):
+    """Scenario: a mismatch is reported "naming both digests".
+
+    `statuses` projected `Verification` down to `.status`, so neither digest reached an
+    artifact and the clause was satisfied only inside `classify`.
+    """
+    path = tmp_path / "labels.v001.slp"
+    path.write_bytes(b"real bytes")
+    index = {"labels.v001.slp": [entry("labels.v001.slp", "AAAAAAAAAAAAAAAA==")]}
+
+    verdicts = verify.verdicts([path], index)
+
+    assert verdicts[path].status == verify.MISMATCH
+    assert verdicts[path].local_digest == verify.content_digest(path)
+    assert verdicts[path].recorded_digests == ("AAAAAAAAAAAAAAAA==",)
