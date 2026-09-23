@@ -1,4 +1,4 @@
-"""Decide what a path is allowed to look like once it leaves the scan.
+r"""Decide what a path is allowed to look like once it leaves the scan.
 
 This is a whitelist. A candidate path is emitted relative to the supplied discovery
 root, with the root itself rendered as one fixed token; a referenced video path is

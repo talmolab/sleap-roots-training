@@ -1,4 +1,4 @@
-"""Path emission, by whitelist.
+r"""Path emission, by whitelist.
 
 Covers ``Requirement: Path Redaction``. Nothing above the supplied discovery root is
 emitted, and a referenced video path is emitted as its filename alone. That is a
