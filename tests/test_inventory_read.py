@@ -120,3 +120,24 @@ def test_a_broad_failure_is_caught_not_propagated(tmp_path, monkeypatch):
 
     assert facts.error is not None
     assert "not list" in facts.error
+
+
+def test_the_file_is_loaded_lazily(tmp_path, monkeypatch):
+    """The docstring claimed a lazy fast path that the code never asked for.
+
+    `load_slp(..., lazy=False)` is the default, so both instance accessors took the
+    frame-summing fallback. Measured on real files, `lazy=True` is 2.2x on a sample and
+    7.6x on the worst case, with identical results across 80 files.
+    """
+    seen = {}
+    real = read.sio.load_slp
+
+    def _spy(path, **kwargs):
+        seen.update(kwargs)
+        return real(path, **kwargs)
+
+    monkeypatch.setattr(read.sio, "load_slp", _spy)
+    read.read_facts(write_labels(tmp_path / "labels.v001.slp"))
+
+    assert seen["lazy"] is True
+    assert seen["open_videos"] is False

@@ -376,3 +376,73 @@ def test_the_report_publishes_its_own_denominator(tmp_path):
 
     assert "Analysed 1 of 2 families" in report
     assert "not analysed:" in report
+
+
+def test_every_candidate_is_read_not_just_the_latest(tmp_path):
+    """Requirement 3 says "read **each** candidate"; 197 were never opened.
+
+    A family emits one row, but a member that disagrees with the latest has to surface —
+    otherwise mixed node counts inside a family are structurally undetectable.
+    """
+    directory = tmp_path / "share" / "SLEAP_soybean" / "primary_6nodes"
+    write_labels(directory / "labels.v001.slp", node_names=("r1", "r2", "r3"))
+    write_labels(directory / "labels.v002.slp", node_names=("r1", "r2"))
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(tmp_path / "share"), out)
+    row = _rows(out)[0]
+
+    assert row["members"] == "2"
+    assert row["member_node_counts"] == json.dumps([3, 2])
+    assert row["members_disagree"] == "node_count"
+
+
+def test_the_mode_collision_section_is_rendered(tmp_path):
+    """The headline finding's report block was at 0% coverage.
+
+    Scenario 15 says "the **report** records"; nothing ever executed the code that
+    records it.
+    """
+    root = tmp_path / "share"
+    write_labels(
+        root / "cyl_arabidopsis_primary_6nodes" / "labels.v001.slp",
+        skeleton_names=("arabidopsis_primary",),
+        node_names=tuple(f"r{i}" for i in range(1, 7)),
+    )
+    write_labels(
+        root / "plate_arabidopsis_primary_8nodes" / "labels.v001.slp",
+        skeleton_names=("arabidopsis_primary",),
+        node_names=tuple(f"r{i}" for i in range(1, 9)),
+    )
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    report = (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+    assert "Rows selected by more than one capture mode" in report
+    assert "cylinder, plate" in report
+    assert "6, 8" in report
+    assert "age: null" in report
+
+
+def test_the_unparseable_section_is_deduplicated_and_path_qualified(tmp_path):
+    """1,235 bullets over 364 basenames, `labels_gt.train.slp` 63 times identically.
+
+    Rendered from an unredacted absolute path via `Path(...).name`, which also means the
+    one renderer that bypasses redaction entirely.
+    """
+    root = tmp_path / "share"
+    for crop in ("SLEAP_sorghum", "SLEAP_rice"):
+        write_labels(
+            root / crop / "primary" / "labels.v001.slp",
+            skeleton_names=("Skeleton-1",),
+        )
+
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    report = (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+    section = report.split("### Skeleton names the existing check cannot resolve")[1]
+    assert section.count("labels.v001.slp") == 2
+    assert "<ROOT>/SLEAP_sorghum/primary/labels.v001.slp" in section
+    assert str(tmp_path) not in report
