@@ -704,3 +704,23 @@ def test_the_reported_model_is_the_one_the_builder_actually_reads(tmp_path):
     assert "model_a" in chosen.name
     assert "model_z" not in chosen.name
     assert reported == ("model_a",)
+
+
+# --------------------------------------------------------------------------------------
+# add-skeleton-mode — Labeling Packages Use Their Own Mode
+# --------------------------------------------------------------------------------------
+
+
+def test_skeleton_for_looks_up_the_given_mode():
+    """Arabidopsis primary is 6 nodes in cylinder and 8 on plates; the mode decides."""
+    plate = bp.skeleton_for("arabidopsis", "primary", [3, 4, 5], mode="plate")
+    cylinder = bp.skeleton_for("arabidopsis", "primary", [3, 4, 5], mode="cylinder")
+
+    assert len(plate.nodes) == 8
+    assert len(cylinder.nodes) == 6
+
+
+def test_skeleton_for_requires_a_mode():
+    """A package always knows its mode, so the builder may not fall back to guessing."""
+    with pytest.raises(TypeError):
+        bp.skeleton_for("soybean", "primary", [3])
