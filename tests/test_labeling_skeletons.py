@@ -448,6 +448,60 @@ def test_a_pair_may_be_agnostic_in_one_mode_and_split_in_another(tmp_path):
     assert len(rows) == 2
 
 
+def test_an_equivalently_spelled_age_window_is_a_duplicate(tmp_path):
+    """RED: the dedup compared age *strings*, so ``"2,3"`` and ``"2, 3"`` both loaded."""
+    body = (
+        "skeletons:\n"
+        "  - species: rice\n    root_type: crown\n    mode: cylinder\n"
+        '    age: "2,3"\n    node_count: 6\n'
+        "  - species: rice\n    root_type: crown\n    mode: cylinder\n"
+        '    age: "2, 3"\n    node_count: 9\n'
+    )
+    with pytest.raises(ValueError, match="row 1"):
+        load_skeleton_table(write_table(tmp_path, body))
+
+
+def test_overlapping_age_windows_in_one_mode_are_rejected(tmp_path):
+    """RED: overlapping windows loaded, and a lookup inside the overlap took the first.
+
+    That is the silent first-match failure the dedup exists to prevent. Arabidopsis
+    plate is now split by age, so a second plate window is the likely next edit.
+    """
+    body = (
+        "skeletons:\n"
+        "  - species: arabidopsis\n    root_type: primary\n    mode: plate\n"
+        '    age: "2, 3, 4, 5, 6, 7"\n    node_count: 8\n'
+        "  - species: arabidopsis\n    root_type: primary\n    mode: plate\n"
+        '    age: "7, 8, 9"\n    node_count: 7\n'
+    )
+    with pytest.raises(ValueError, match="overlap") as excinfo:
+        load_skeleton_table(write_table(tmp_path, body))
+
+    assert "plate" in str(excinfo.value)
+
+
+def test_the_same_window_in_two_modes_does_not_overlap(tmp_path):
+    """Characterisation: overlap is per mode, like the rest of the key."""
+    body = (
+        "skeletons:\n"
+        "  - species: rice\n    root_type: crown\n    mode: cylinder\n"
+        '    age: "2, 3"\n    node_count: 6\n'
+        "  - species: rice\n    root_type: crown\n    mode: plate\n"
+        '    age: "2, 3"\n    node_count: 8\n'
+    )
+    assert len(load_skeleton_table(write_table(tmp_path, body))) == 2
+
+
+def test_a_non_string_mode_is_reported_with_its_row_number(tmp_path):
+    """RED: ``mode: [plate]`` raised ``TypeError: unhashable type`` with no row."""
+    body = (
+        "skeletons:\n  - species: soybean\n    root_type: primary\n"
+        "    mode: [plate]\n    node_count: 6\n"
+    )
+    with pytest.raises(ValueError, match="row 0: unknown mode"):
+        load_skeleton_table(write_table(tmp_path, body))
+
+
 # --------------------------------------------------------------------------------------
 # add-skeleton-mode — Mode-Aware Skeleton Lookup
 # --------------------------------------------------------------------------------------
@@ -534,6 +588,35 @@ def test_an_age_split_mode_without_an_age_lists_only_that_modes_windows(tmp_path
     with pytest.raises(ValueError, match="2-7 DAG") as excinfo:
         lookup_skeleton("arabidopsis", "primary", age=8, mode="plate", table=table)
     assert "cylinder" not in str(excinfo.value)
+
+
+def test_a_mode_outside_the_vocabulary_is_reported_as_unknown(tmp_path):
+    """RED: a misspelled mode was told to "add a row for this mode" — one the loader rejects."""
+    table = two_mode_table(tmp_path)
+
+    with pytest.raises(ValueError, match="unknown mode 'Plate'") as excinfo:
+        lookup_skeleton("arabidopsis", "primary", age=3, mode="Plate", table=table)
+
+    assert "add a row" not in str(excinfo.value)
+    for mode in sorted(MODE_VOCAB):
+        assert mode in str(excinfo.value)
+
+
+def test_the_committed_plate_row_requires_an_age():
+    """Scenario: An age-split mode requires an age, on the committed table itself."""
+    with pytest.raises(ValueError, match="an age is required") as excinfo:
+        lookup_skeleton("arabidopsis", "primary", mode="plate")
+
+    assert "2-7 DAG" in str(excinfo.value)
+
+
+def test_the_warning_does_not_call_a_row_read_from_files_transcribed(caplog):
+    """RED: every unverified row was called TRANSCRIBED, including the plate one."""
+    with caplog.at_level("WARNING"):
+        lookup_skeleton("arabidopsis", "primary", age=3, mode="plate")
+
+    assert "NOT VERIFIED" in caplog.text
+    assert "TRANSCRIBED" not in caplog.text
 
 
 def test_the_unverified_warning_names_the_mode(caplog):
