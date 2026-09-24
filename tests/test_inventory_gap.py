@@ -65,7 +65,13 @@ def test_a_species_with_no_row_is_reported(tmp_path):
     later corrects the corpus without breaking this test.
     """
     table = (
-        SkeletonRow(species="soybean", root_type="primary", age=None, node_count=6),
+        SkeletonRow(
+            species="soybean",
+            mode="cylinder",
+            root_type="primary",
+            age=None,
+            node_count=6,
+        ),
     )
     path = write_labels(
         tmp_path / "SLEAP_wheat" / "seminal" / "labels_sr_5-14DAG.v004.slp",
