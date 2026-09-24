@@ -12,9 +12,9 @@ is re-scanned. "Labelled" means `user_instances > 0`.
 
 - **Arabidopsis plate primary: 24 families.**
   - **15 at 8 nodes.** Nine are the `labels_plates_arabidopsis_primary_2-7DAP_8nodes` lineage
-    and its copies (3,032–3,186 user instances). They are v006, v008 and v010 with their
-    `uncropped` variants, plus copies under `primary_8nodes/`, `primary_root_8nodes/`,
-    `primary_root/` and `0908-0901_plates/`. The other six are IAA-experiment and
+    and its relatives (3,032–3,186 user instances): v006, v008 and v010, uncropped v008
+    and v010, copies under `primary_8nodes/`, `primary_root_8nodes/` and `primary_root/`,
+    and `0908-0901_plates/primary_labels.v004` (3,186). The other six are IAA-experiment and
     prediction-copy files (0–122).
   - **4 at 7 nodes.** These are `labels.v00{2,4,5}*` under `primary_root_8nodes/7_dap/labels/`,
     a directory that also holds 8-node files. Three have 92 user instances; one has 0.
@@ -71,10 +71,14 @@ from the files, but it cannot read node names here: every plate file names its s
   change removes. For the same reason, `mode` is required in the YAML.
 - **Why age-split at 2–7?** The evidence covers exactly 2–7. A day-8 lookup fails and lists
   the window, rather than claiming a node count nothing has shown.
-- **Why `verified: false`?** The table's header defines "verified" as checked against a
-  published collection's artifacts. The plate evidence is node counts from unregistered
-  files, whose mode is read from their names. The arabidopsis cylinder row, which has
-  evidence of the same kind, also stays false.
+- **Why `verified: false`?** It was decided before implementation (eberrigan). The
+  evidence was then node counts from unregistered files whose mode is read from their
+  names. During implementation the published collection was read by hand and agrees:
+  8 nodes, `r1`–`r8` (see *Deviations*). The flag still stays false, because the
+  automated check that the header names as what flips rows cannot resolve any
+  collection yet (#64), and flipping it is a human decision. The arabidopsis cylinder
+  row, whose collection also agrees when read by hand (6 nodes), stays false for the
+  same reason.
 - **Why does the plate row share the skeleton name `arabidopsis_primary` with the cylinder
   row?** `to_skeleton()` names skeletons `{species}_{root_type}`. The two are told apart by
   node count and by `package_metadata.yaml`'s `mode`. Renaming is out of scope.

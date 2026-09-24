@@ -143,11 +143,11 @@ def test_every_transcribed_row_is_cylinder():
 
 
 def test_the_plate_row_is_unverified():
-    """Its evidence is node counts from unregistered, name-derived-mode files.
+    """Landed unverified by decision, and stays so until a person flips it.
 
-    That falls short of the header's definition of verified — checked against a
-    published collection — so it warns until the published-collections check reads
-    ``plate_arabidopsis_2-7DAG_primary_8nodes_labels``.
+    The published collection agrees when read by hand (8 nodes, 2026-09-24), but the
+    automated published-collections check cannot resolve any collection yet (#64), and
+    the mode is read off directory names. So a plate build still warns.
     """
     assert _plate_row().verified is False
 
