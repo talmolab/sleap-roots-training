@@ -180,6 +180,28 @@ def test_a_disagreeing_node_count_is_reported(tmp_path):
     assert len(found.paths) == 1
 
 
+def test_counts_matching_any_window_of_the_mode_are_not_a_disagreement(tmp_path):
+    """Age is not derivable from a path, so a count matching *any* window agrees.
+
+    Rice crown split at 6 and 9 nodes, with families at both: neither is reported.
+    """
+    table = (
+        _row("rice", "cylinder", "crown", 6, age="2, 3, 4, 5"),
+        _row("rice", "cylinder", "crown", 9, age="6, 7, 8"),
+    )
+    six = write_labels(
+        tmp_path / "cyl_rice_crown_a" / "labels.v001.slp", node_names=_nodes(6)
+    )
+    nine = write_labels(
+        tmp_path / "cyl_rice_crown_b" / "labels.v001.slp", node_names=_nodes(9)
+    )
+
+    report = gap.build_report([_observe(six), _observe(nine)], table=table)
+
+    assert report.families_analysed == 2
+    assert report.node_count_disagreements == []
+
+
 def test_a_species_with_no_row_is_reported(tmp_path):
     """Scenario: A species with no row is reported.
 

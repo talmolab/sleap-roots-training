@@ -519,8 +519,19 @@ def test_a_plate_package_is_built_against_the_plate_skeleton(tmp_path):
     metadata = PackageMetadata(
         species="arabidopsis", mode="plate", experiment="weep", root_types=("primary",)
     )
+    # Three plants at ages 3, 4 and 5: the multi-age path through the plate window.
+    scans = (
+        (1, "9DK8KJJEZR", 3, 12742739, "A3244"),
+        (2, "8XQ2LMNPQR", 4, 12742740, "WEEP-1-4"),
+        (3, "7ABCDEFGHJ", 5, 12742739, "A3244"),
+    )
+    rows = list(manifest_rows(scans=scans))
     package_dir = build_package_dir(
-        tmp_path, metadata=metadata, node_counts={"primary": 8}
+        tmp_path,
+        rows=rows,
+        scans=scans,
+        metadata=metadata,
+        node_counts={"primary": 8},
     )
 
     record = read_package_metadata(package_dir)
@@ -530,7 +541,7 @@ def test_a_plate_package_is_built_against_the_plate_skeleton(tmp_path):
     )
     assert len(record.skeletons["primary"]) == 8
     assert len(labels.skeletons[0].node_names) == 8
-    assert validate_package(package_dir).frame_count == 6
+    assert validate_package(package_dir).frame_count == len(rows)
 
 
 def test_a_mode_with_no_row_fails_the_build_before_writing(tmp_path):
@@ -558,5 +569,7 @@ def test_a_mode_with_no_row_fails_the_build_before_writing(tmp_path):
         )
 
     assert "'cylinder'" in str(excinfo.value)
-    assert not output_dir.exists()
-    assert not list(output_dir.parent.glob("*.partial-*"))
+    # The parent is created just before the staging directory, so its absence is what
+    # proves the lookup failed before anything was written — globbing a directory that
+    # does not exist for partials would pass however late the failure came.
+    assert not output_dir.parent.exists()

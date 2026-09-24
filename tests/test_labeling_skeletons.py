@@ -166,6 +166,46 @@ def test_the_plate_lookup_has_exact_bounds(age, expected):
     assert cylinder.node_count == 6
 
 
+def _node_count_families(csv_path, key):
+    """Count labelled families per node count for one ``(species, mode, root_type)``.
+
+    Families with no user instances are prediction-only copies and are left out.
+    """
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        return collections.Counter(
+            int(row["node_count"])
+            for row in csv.DictReader(handle)
+            if (row["species"], row["mode"], row["root_type"]) == key
+            and row["node_count"]
+            and int(row["user_instances"] or 0) > 0
+        )
+
+
+def _is_strict_plurality(families_by_count, node_count):
+    """Whether ``node_count`` has strictly more families than every other count."""
+    return families_by_count[node_count] > 0 and all(
+        families > 0 and families_by_count[node_count] > families
+        for other, families in families_by_count.items()
+        if other != node_count
+    )
+
+
+def test_a_tie_or_a_minority_is_not_a_strict_plurality(tmp_path):
+    """The evidence check has to be able to fail; a tie is not agreement."""
+    header = "species,mode,root_type,node_count,user_instances\n"
+    rows = "".join(
+        f"arabidopsis,plate,primary,{count},10\n" for count in (8, 8, 7, 7, 6)
+    )
+    path = tmp_path / "label-inventory.csv"
+    path.write_text(header + rows, encoding="utf-8")
+    counts = _node_count_families(path, ("arabidopsis", "plate", "primary"))
+
+    assert counts == {8: 2, 7: 2, 6: 1}
+    assert not _is_strict_plurality(counts, 8)
+    assert not _is_strict_plurality(counts, 6)
+    assert _is_strict_plurality(collections.Counter({8: 3, 7: 2}), 8)
+
+
 def test_the_plate_row_agrees_with_the_committed_scan():
     """The row's node count is the strict plurality in the committed inventory.
 
@@ -175,21 +215,12 @@ def test_the_plate_row_agrees_with_the_committed_scan():
     re-scan PR runs this.
     """
     assert _INVENTORY_CSV.is_file(), f"committed evidence missing: {_INVENTORY_CSV}"
-    with _INVENTORY_CSV.open(newline="", encoding="utf-8") as handle:
-        counts = collections.Counter(
-            int(row["node_count"])
-            for row in csv.DictReader(handle)
-            if (row["species"], row["mode"], row["root_type"])
-            == ("arabidopsis", "plate", "primary")
-            and row["node_count"]
-            and int(row["user_instances"] or 0) > 0
-        )
+    counts = _node_count_families(_INVENTORY_CSV, ("arabidopsis", "plate", "primary"))
 
     expected = _plate_row().node_count
     assert counts, "the committed scan has no labelled arabidopsis plate primary family"
-    others = [n for count, n in counts.items() if count != expected]
-    assert all(
-        counts[expected] > n for n in others
+    assert _is_strict_plurality(
+        counts, expected
     ), f"{expected} is not the strict plurality: {dict(counts)}"
 
 
@@ -751,18 +782,14 @@ class _FakeApi:
 
 def test_the_registry_is_queried_for_dataset_collections():
     """RED against #61: the test asked for ``model``, which the labels registry rejects."""
-    import test_labeling_skeletons as module
-
     api = _FakeApi()
-    assert list(module._label_collections(api, "entity-org/labels")) == []
+    assert list(_label_collections(api, "entity-org/labels")) == []
     assert api.queried == [("entity-org/labels", "dataset")]
 
 
 def test_a_mapped_collection_is_checked_in_its_own_mode_and_age():
     """The plate collection is age-split, so the map carries an age as well as a mode."""
-    import test_labeling_skeletons as module
-
-    mismatch = module._check_skeleton(
+    mismatch = _check_skeleton(
         "plate_arabidopsis_2-7DAG_primary_8nodes_labels",
         "arabidopsis_primary",
         tuple(f"r{i}" for i in range(1, 9)),
@@ -771,9 +798,7 @@ def test_a_mapped_collection_is_checked_in_its_own_mode_and_age():
 
 
 def test_an_unmapped_two_mode_collection_is_reported_not_guessed():
-    import test_labeling_skeletons as module
-
-    mismatch = module._check_skeleton(
+    mismatch = _check_skeleton(
         "arabidopsis_somewhere_labels",
         "arabidopsis_primary",
         tuple(f"r{i}" for i in range(1, 7)),
@@ -783,9 +808,7 @@ def test_an_unmapped_two_mode_collection_is_reported_not_guessed():
 
 
 def test_a_node_count_disagreement_names_the_collection_and_both_counts():
-    import test_labeling_skeletons as module
-
-    mismatch = module._check_skeleton(
+    mismatch = _check_skeleton(
         "cyl_arabidopsis_7-11DAG_primary_6nodes_labels",
         "arabidopsis_primary",
         tuple(f"r{i}" for i in range(1, 8)),
@@ -796,9 +819,7 @@ def test_a_node_count_disagreement_names_the_collection_and_both_counts():
 
 def test_an_auto_generated_skeleton_name_is_reported_as_a_mismatch():
     """Plate files name their skeleton ``Skeleton-N``; that is reported, not skipped."""
-    import test_labeling_skeletons as module
-
-    mismatch = module._check_skeleton(
+    mismatch = _check_skeleton(
         "plate_arabidopsis_2-7DAG_primary_8nodes_labels",
         "Skeleton-1",
         tuple(f"r{i}" for i in range(1, 9)),
@@ -849,9 +870,17 @@ def _check_skeleton(collection_name, skeleton_name, node_names):
     except ValueError as error:
         return f"{collection_name}: {skeleton_name}: {error}"
     if tuple(node_names) != row.node_names:
+        # An unmapped collection resolved only because the pair has one mode; say so,
+        # so a disagreement is not read as a mode-verified one.
+        assumed = (
+            f" (mode unknown; checked against the table's only mode {row.mode!r})"
+            if mode is None
+            else ""
+        )
         return (
             f"{collection_name}: {skeleton_name} has {len(node_names)} nodes "
             f"{list(node_names)}, table says {row.node_count} {list(row.node_names)}"
+            f"{assumed}"
         )
     return None
 
@@ -869,10 +898,11 @@ def test_the_table_agrees_with_the_published_label_collections(tmp_path):
 
     A disagreement is a finding either way — the table may be wrong, or a published
     collection may have been labeled against a skeleton nobody recorded — so it reports
-    every mismatch rather than stopping at the first, and names the collection. The plate
-    collection's files name their skeleton ``Skeleton-N``, so it is expected to be
-    reported as unparseable until that is resolved; the arabidopsis plate row stays
-    ``verified: false`` until it is not.
+    every mismatch rather than stopping at the first, and names the collection. Run on
+    2026-09-24, it reported all eight collections: every published skeleton is named
+    ``Skeleton-N``, which does not partition into a species and root type (#64). Their
+    node counts, read by hand, agree with every row. Until the check can learn each
+    collection's key, it cannot flip a row to ``verified: true``.
     """
     if not os.environ.get(_REGISTRY_CHECK_ENV):
         pytest.skip(

@@ -511,7 +511,8 @@ def download(tmp_path: Path, rows=None, scans=SCANS, node_counts=None):
     soybean cylinder skeletons (6 and 4), so a plate package can be seeded with 8-node
     predictions and pass the builder's prediction-versus-skeleton check.
     """
-    node_counts = node_counts or {"primary": 6, "lateral": 4}
+    if node_counts is None:
+        node_counts = {"primary": 6, "lateral": 4}
     rows = list(rows if rows is not None else manifest_rows())
     download_dir = tmp_path / "WEEP_soybean/images_downloader_output"
     download_dir.mkdir(parents=True)
