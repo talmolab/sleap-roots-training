@@ -1,10 +1,11 @@
 """Tests for the committed per-crop labeling skeleton table (design.md Decision 7).
 
-The table is transcribed from an advisory source that says of itself "Query the Bloom
-database or check existing test data ... to confirm node counts", so these tests do two
-jobs: pin that a gap fails loudly rather than defaulting, and cross-check the one part of
-the table that has an independent source in this repo — the rice age split, which
-``registry/data/model_selection.yaml`` already encodes.
+The cylinder rows are transcribed from an advisory source that says of itself "Query the
+Bloom database or check existing test data ... to confirm node counts", so these tests pin
+that a gap fails loudly rather than defaulting, and cross-check the parts of the table that
+have an independent source in this repo: the rice age split, which
+``registry/data/model_selection.yaml`` already encodes, and the arabidopsis plate row,
+which the committed label inventory (``inventory/label-inventory.csv``) evidences.
 
 The verification against the eight published collections lives at the bottom, marked
 ``integration``: it is what converts the rest of the table from hypothesis to record, and

@@ -1,10 +1,15 @@
 # Per-crop labeling skeletons: what a labeler must label with so a new package matches
 # the existing corpus.
 #
-# Source of truth: the `/build-labeling-package` command doc's skeleton table
-#   (`build-labeling-package.md:45-51`), Box snapshot 2026-07-29 of
-#   `Phenotyping_team_GH/sleap-roots-training/onboarding/`. Upstream is the vault at
-#   `c:\vaults\sleap-roots\labeling-packages\`, whose history does not survive the copy.
+# Sources:
+#   - Every `mode: cylinder` row: the `/build-labeling-package` command doc's skeleton
+#     table (`build-labeling-package.md:45-51`), Box snapshot 2026-07-29 of
+#     `Phenotyping_team_GH/sleap-roots-training/onboarding/`. Upstream is the vault at
+#     `c:\vaults\sleap-roots\labeling-packages\`, whose history does not survive the copy.
+#     That doc builds packages "from a finished cylinder experiment", so its rows are
+#     cylinder rows.
+#   - The `mode: plate` row: the committed label inventory, `inventory/label-inventory.csv`
+#     (#58). See the row's own comment.
 #
 # ---------------------------------------------------------------------------------------
 # THIS TABLE IS ADVISORY AND PARTLY UNVERIFIED. Its own source says so: "Query the Bloom
@@ -14,9 +19,11 @@
 #     artifacts that became the published collection: `soybean_weep_*_labels.v000.slp` and
 #     the repaired `labels_weep_*.v001.pkg.slp` all carry `soybean_primary` r1-r6 and
 #     `soybean_lateral` r1-r4.
-#   - canola, arabidopsis, and rice are TRANSCRIBED, NOT VERIFIED. Canola's lateral count
-#     (3) is the one asymmetry in the table — soybean and arabidopsis are both 4 — and
-#     nothing here confirms it.
+#   - canola, arabidopsis (cylinder), and rice are TRANSCRIBED, NOT VERIFIED. Canola's
+#     lateral count (3) is the one asymmetry in the table — soybean and arabidopsis are both
+#     4 — and nothing here confirms it.
+#   - arabidopsis plate primary is READ FROM FILES, NOT VERIFIED: its node count comes
+#     from the committed scan, but no published collection has been checked against it.
 #   - pennycress has NO ROW ON PURPOSE. The source table omits it, although pennycress is
 #     in SPECIES_VOCAB and has two `model_selection.yaml` rows. The loader fails loudly on
 #     a missing pair rather than defaulting: a wrong node count produces a labeling package
@@ -33,14 +40,21 @@
 #
 # THESE ARE **NATIVE** SKELETONS, NOT THE UNIFIED ONE. This table is *descriptive*: what a
 # labeler must label with so a new package extends the corpus that already exists.
-# `docs/roadmap.md:422` sets "the common skeleton / node count per root type for
-# unification" as an open question at Tier 2.7 — a *prescriptive* choice, to be validated
-# by a node-count sweep and not yet made. Folding this table into that decision would make
-# new labeling packages silently stop matching the corpus they exist to extend.
+# `docs/roadmap.md` ("Open roadmap decisions") sets "the common skeleton / node count per
+# root type for unification" as an open question at Tier 2.7 — a *prescriptive* choice, to
+# be validated by a node-count sweep and not yet made. Folding this table into that
+# decision would make new labeling packages silently stop matching the corpus they exist to
+# extend.
 #
-# `age` is the native chooser comma-list, matching `registry/data/model_selection.yaml`;
-# `null` means the row applies at every age. Only rice splits by age, and its split is
-# cross-checked against `model_selection.yaml` by a test rather than only transcribed.
+# `mode` is required and is one of `sleap_roots_contracts.Mode` (via `chooser.MODE_VOCAB`).
+# There is no default: a default would pick a mode, and `lookup_skeleton` raises instead
+# when a species and root type have rows in more than one mode and no mode is given. There
+# are no `multiplant cylinder` rows yet, so such a package fails loudly (#62).
+#
+# `age` is the native chooser comma-list (DAG), matching
+# `registry/data/model_selection.yaml`; `null` means the row applies at every age. Rice
+# splits by age, cross-checked against `model_selection.yaml` by a test; arabidopsis plate
+# primary splits at the window its evidence covers.
 #
 # Node names are always `r1`, `r2`, ... `rN` — r1 is the base, the last node is the tip,
 # evenly spaced along the root (`build-labeling-package.md:53`). The convention is fixed,
@@ -113,6 +127,30 @@ skeletons:
     mode: cylinder
     age: "6, 7, 8, 9, 10"
     node_count: 6
+    verified: false
+
+  # Arabidopsis PLATE primary (add-skeleton-mode). 8 nodes is the strict plurality among
+  # labelled arabidopsis/plate/primary families in `inventory/label-inventory.csv`,
+  # enforced by `test_the_plate_row_agrees_with_the_committed_scan`; the labels registry
+  # also holds `plate_arabidopsis_2-7DAG_primary_8nodes_labels`. Not verified: that
+  # collection has not been read against this row, the mode is read off directory names,
+  # and every plate file names its skeleton `Skeleton-N`, so node names are unchecked.
+  #
+  # OPEN, for a person to settle — recorded here, not decided:
+  #   - The window. The files say 2-7 **DAP**; the registry collection says 2-7 **DAG**.
+  #     This row adopts the registry's DAG reading. DAP 2-7 = DAG 2-7 is not established.
+  #   - 7-node families: `labels.v00{2,4,5}*` under `primary_root_8nodes/7_dap/labels/`,
+  #     beside 8-node files. The gap report lists them as disagreeing with this row.
+  #   - 6-node families: four named `labels_wheat_2-3DAG*`, and `day2and3 copy.slp`
+  #     with the same 131 user instances as one of them.
+  # Shares the skeleton name `arabidopsis_primary` with the 6-node cylinder row
+  # (`to_skeleton()` names by species and root type); the two are told apart by node
+  # count and by `package_metadata.yaml`'s `mode`.
+  - species: arabidopsis
+    root_type: primary
+    mode: plate
+    age: "2, 3, 4, 5, 6, 7"
+    node_count: 8
     verified: false
 
   # pennycress: intentionally absent — see the header.
