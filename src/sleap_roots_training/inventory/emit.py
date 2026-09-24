@@ -116,7 +116,7 @@ class Inventory:
         root: The root that was scanned.
         scan: The raw walk result, including exclusions and unreadable directories.
         rows: One row per family, ordered by emitted path.
-        gap: The skeleton-table keying gap.
+        gap: Where the skeleton table cannot express what was found.
         ambiguous_directories: Directories holding several families.
     """
 
@@ -358,18 +358,26 @@ def _render_report(inventory: Inventory) -> str:
             "",
         ]
 
-    if inventory.gap.mode_collisions:
-        lines += ["### Rows selected by more than one capture mode", ""]
-        for collision in inventory.gap.mode_collisions:
-            modes = ", ".join(collision.modes)
-            counts = ", ".join(str(c) for c in collision.node_counts)
+    if inventory.gap.mode_gaps:
+        lines += ["### Capture modes with no row", ""]
+        for found in inventory.gap.mode_gaps:
+            counts = ", ".join(str(c) for c in found.node_counts)
             lines.append(
-                f"- `({collision.species}, {collision.root_type}, "
-                # `null`, not Python's `None`: the spec and skeletons.yaml both write
-                # the age-agnostic row that way.
-                f"age: {collision.row_age if collision.row_age else 'null'})` is "
-                f"selected by {modes}, whose files carry "
-                f"{counts} nodes. One row cannot describe both."
+                f"- `({found.species}, {found.mode}, {found.root_type})`: "
+                f"{len(found.paths)} families at {counts} nodes; the table has it only "
+                f"in {', '.join(found.table_modes)}."
+            )
+        lines.append("")
+
+    if inventory.gap.node_count_disagreements:
+        lines += ["### Node counts that disagree with their row", ""]
+        for found in inventory.gap.node_count_disagreements:
+            row_counts = ", ".join(str(c) for c in found.row_node_counts)
+            observed = ", ".join(str(c) for c in found.observed)
+            files = ", ".join(f"`{path}`" for path in found.paths)
+            lines.append(
+                f"- `({found.species}, {found.mode}, {found.root_type})`: row says "
+                f"{row_counts}, observed {observed} in {files}. Not resolved here."
             )
         lines.append("")
 
