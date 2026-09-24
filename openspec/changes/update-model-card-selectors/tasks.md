@@ -505,7 +505,7 @@ not the file move.
 and the alias lands wherever `link_artifact` ran last — with both reporting success. Announce the
 window, and re-run `--verify` immediately before 6.3 to confirm nothing else wrote since 6.2.
 
-- [ ] 6.0 **Rollback prep, before touching anything.** An earlier draft wrote this for an *in-place*
+- [x] 6.0 **Rollback prep, before touching anything.** An earlier draft wrote this for an *in-place*
       migration; under option 1 nothing is overwritten, so there is no old alias to re-point and the
       real rollback runs the other way. (a) Record the current 13 collection → aliased artifact
       **version** mappings to a file committed with this PR, as a baseline snapshot. (b) The rollback
@@ -532,6 +532,19 @@ the inverse. Neither ever sees two cards for one context, so nothing can hit
 `choose_models`' ambiguity raise. Retirement (6.3) is what ends the un-upgraded generation's access,
 which is why it stays gated on confirmed deployment.
 
+      *Done 2026-09-24:* (a) baseline `docs/migration/2026-09-22-pre-reseed-baseline.json` (`b43464a`,
+      sha256 `8aa8f52e…`). (b) Drop rehearsed on the canary: fetched the registry link, asserted
+      `is_link`, `unlink()` → `:production` no longer resolves; an upgraded predict (predict#45) fell
+      back to `NoReadableModelCardsError` over the 13 flat cards and `main` resolved its 13 flat cards
+      with 0 skips — i.e. exactly the pre-canary state. (c) Nothing deleted. (d) Canary recorded:
+      registry link `rice-younger-primary-230104_182346.multi_instance.n-720:v0` aliases
+      [`latest`, `production`], source
+      `migrate-model-card-selectors/rice-younger-primary-230104_182346.multi_instance.n-720:v0`, digest
+      `bb373c5c5ddd8d7711b8b5cf39c4d638` (equals the old flat `rice-cylinder-primary-age2-5`
+      `weights_checksum`); record the other 7 as they are created in 6.1. (e) Un-retirement rehearsed:
+      `link(<registry target>, aliases=["production"])` on the recorded source `v0` (never `save()`) →
+      identical link (`v0`, `latest`+`production`, same digest and source); both consumer generations
+      returned to the canary state.
 - [ ] 6.1 **Canary first**, and make it falsifiable. Re-seed one collection with
       `seed-registry --only <collection>`, then: (a) `--verify --only <id>` for producer-side alias +
       new-shape read-back; (b) point an **upgraded** predict at the live registry for that collection's
@@ -543,6 +556,16 @@ which is why it stays gated on confirmed deployment.
       check predict's logs for the expected skip warnings on the other side of each pairing, since a
       silent absence of warnings would mean the cards are being filtered somewhere earlier than
       believed. Only then re-seed the remaining 7. A live wandb re-seed is not `git revert`-able.
+      *Progress 2026-09-24 — canary done, remaining 7 NOT yet re-seeded (so 6.1 stays open):*
+      `seed-registry --execute --only rice-younger-primary-230104_182346.multi_instance.n-720`
+      published 1. (a) `--verify --only` → present. (b) predict#45's branch
+      (`scripts/canary_check.py`): lists 1 card, 13 skip warnings, selects the new collection's
+      `registry_id` for rice/cylinder/3 without raising; `pytest -m wandb` 2 passed. (c) predict
+      `main` (contracts 0.1.0a7): lists its 13 flat cards, still selects `rice-cylinder-primary-age2-5`,
+      listing did not fail. (d) Skip warnings present on both sides: 13 on the branch (every flat
+      card), 1 on `main` (the canary, "4 validation errors"). Re-verified on predict#45's final head
+      `cd21bc2`, including its container image on GPU. Evidence: predict#45 and predict#34's
+      2026-09-24 comment.
 - [ ] 6.2 Run a **full** `--verify` (never a canary run — orphan reporting is suppressed under
       `--only`) and confirm the orphan report names exactly **13** collections. That is now fixed rather
       than conditional: 0.2 chose the `source_model_id`-derived scheme, so every existing id changes and
