@@ -359,6 +359,103 @@ def test_a_pair_may_be_agnostic_in_one_mode_and_split_in_another(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
+# add-skeleton-mode — Mode-Aware Skeleton Lookup
+# --------------------------------------------------------------------------------------
+
+
+def two_mode_table(tmp_path):
+    """Arabidopsis primary in both modes, shaped like the committed table; soybean in one.
+
+    Built per test rather than at module scope, so a RED run fails test by test instead
+    of breaking collection of the whole module.
+    """
+    body = (
+        "skeletons:\n"
+        "  - species: arabidopsis\n    root_type: primary\n    mode: cylinder\n"
+        "    age: null\n    node_count: 6\n"
+        "  - species: arabidopsis\n    root_type: primary\n    mode: plate\n"
+        '    age: "2, 3, 4, 5, 6, 7"\n    node_count: 8\n    verified: true\n'
+        "  - species: soybean\n    root_type: primary\n    mode: cylinder\n"
+        "    age: null\n    node_count: 6\n    verified: true\n"
+    )
+    return load_skeleton_table(write_table(tmp_path, body))
+
+
+@pytest.mark.parametrize("age", [None, 3, 9])
+def test_an_omitted_mode_is_ambiguous_with_or_without_an_age(tmp_path, age):
+    """RED: the mode-blind lookup returned the cylinder row for a plate caller.
+
+    ``age=3`` falls inside the plate window and ``age=9`` outside it; neither may break
+    the tie, because a lookup that consulted the age first would hand a plate caller the
+    cylinder skeleton whenever the plate window missed.
+    """
+    table = two_mode_table(tmp_path)
+
+    with pytest.raises(ValueError, match=r"cylinder.*plate") as excinfo:
+        lookup_skeleton("arabidopsis", "primary", age=age, table=table)
+
+    assert "mode=" in str(excinfo.value)
+
+
+def test_an_omitted_mode_with_one_mode_is_unchanged(tmp_path):
+    """Characterisation: a single-mode pair needs no mode, exactly as before."""
+    table = two_mode_table(tmp_path)
+
+    assert lookup_skeleton("soybean", "primary", table=table).node_count == 6
+
+
+def test_a_given_mode_selects_its_own_row(tmp_path):
+    table = two_mode_table(tmp_path)
+
+    plate = lookup_skeleton("arabidopsis", "primary", age=3, mode="plate", table=table)
+    cylinder = lookup_skeleton("arabidopsis", "primary", mode="cylinder", table=table)
+
+    assert (plate.mode, plate.node_count) == ("plate", 8)
+    assert (cylinder.mode, cylinder.node_count) == ("cylinder", 6)
+
+
+def test_a_given_mode_with_no_row_names_the_existing_modes(tmp_path):
+    """Soybean has no multiplant-cylinder row, and taking the cylinder one is picking."""
+    table = two_mode_table(tmp_path)
+
+    with pytest.raises(ValueError, match="multiplant cylinder") as excinfo:
+        lookup_skeleton("soybean", "primary", mode="multiplant cylinder", table=table)
+
+    assert "'cylinder'" in str(excinfo.value)
+
+
+def test_a_given_mode_for_an_uncovered_pair_fails_as_before(tmp_path):
+    """No row in any mode is the existing error, not "the modes that exist: []"."""
+    table = two_mode_table(tmp_path)
+
+    with pytest.raises(ValueError, match="No labeling skeleton is defined"):
+        lookup_skeleton("pennycress", "primary", mode="plate", table=table)
+
+
+def test_an_age_split_mode_without_an_age_lists_only_that_modes_windows(tmp_path):
+    """The cylinder row is age-agnostic; it must not leak into the plate age error."""
+    table = two_mode_table(tmp_path)
+
+    with pytest.raises(ValueError, match="an age is required") as excinfo:
+        lookup_skeleton("arabidopsis", "primary", mode="plate", table=table)
+    assert "2-7 DAG" in str(excinfo.value)
+    assert "plate" in str(excinfo.value)
+
+    with pytest.raises(ValueError, match="2-7 DAG") as excinfo:
+        lookup_skeleton("arabidopsis", "primary", age=8, mode="plate", table=table)
+    assert "cylinder" not in str(excinfo.value)
+
+
+def test_the_unverified_warning_names_the_mode(caplog):
+    """Once one pair has two modes, "(canola, lateral)" no longer says which skeleton."""
+    with caplog.at_level("WARNING"):
+        lookup_skeleton("canola", "lateral")
+
+    assert "NOT VERIFIED" in caplog.text
+    assert "cylinder" in caplog.text
+
+
+# --------------------------------------------------------------------------------------
 # Blocking review of #40 — a row that loads but can never be reached, and `verified`
 # --------------------------------------------------------------------------------------
 
