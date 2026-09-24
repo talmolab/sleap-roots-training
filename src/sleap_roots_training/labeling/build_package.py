@@ -317,31 +317,38 @@ def _scan_frame_order(scan_rows: pd.DataFrame, scan_id: object) -> pd.DataFrame:
     return ordered
 
 
-def skeleton_for(species: str, root_type: str, ages: Sequence[int]) -> sio.Skeleton:
-    """Return the skeleton a package of this species, root type, and age span uses.
+def skeleton_for(
+    species: str, root_type: str, ages: Sequence[int], mode: str
+) -> sio.Skeleton:
+    """Return the skeleton a package of this species, mode, root type and age span uses.
 
     Deviation (task 6.6). The vault script hardcoded a 6-node ``soybean_primary`` and a
     4-node ``soybean_lateral`` and was edited by hand per crop; this reads the committed
     table instead (design.md Decision 7). There was no parameterized original to port.
 
-    A package spans several plant ages, and the table splits rice by age — young 2-5 DAG
-    carries primary and crown, old 6-10 DAG carries crown only. A selection spanning that
-    boundary therefore has no single answer, so it fails here rather than silently
-    labeling half the package against the wrong skeleton.
+    A package spans several plant ages, and the table splits some rows by age — rice
+    young 2-5 DAG carries primary and crown, old 6-10 DAG crown only. A selection spanning
+    such a boundary has no single answer, so it fails here rather than silently labeling
+    half the package against the wrong skeleton.
+
+    ``mode`` is required (add-skeleton-mode): one species and root type can carry
+    different skeletons in different capture modes, and a package always knows its own.
 
     Args:
         species: Crop, already validated against ``SPECIES_VOCAB``.
         root_type: Root type, already validated against ``ROOT_TYPE_VOCAB``.
         ages: The distinct plant ages the manifest covers, in days.
+        mode: The package's capture mode, already validated against ``MODE_VOCAB``.
 
     Returns:
         The skeleton to label with.
 
     Raises:
-        ValueError: If the table has no row for the pair, if an age falls outside every
-            window, or if the package's ages straddle an age split.
+        ValueError: If the table has no row for the pair, or none in ``mode``; if an
+            age falls outside every window; or if the package's ages straddle an age
+            split.
     """
-    rows = {lookup_skeleton(species, root_type, int(age)) for age in ages}
+    rows = {lookup_skeleton(species, root_type, int(age), mode=mode) for age in ages}
     if len(rows) > 1:
         windows = sorted(str(row.age) for row in rows)
         raise ValueError(
@@ -474,7 +481,8 @@ def build_slp_project(
     # table, so a species the table does not cover fails before any image is judged.
     ages = sorted({int(age) for age in manifest["plant_age_days"]})
     skeletons = {
-        rt: skeleton_for(metadata.species, rt, ages) for rt in metadata.root_types
+        rt: skeleton_for(metadata.species, rt, ages, metadata.mode)
+        for rt in metadata.root_types
     }
     frames: dict[str, list[sio.LabeledFrame]] = {rt: [] for rt in metadata.root_types}
     videos: dict[str, list[sio.Video]] = {rt: [] for rt in metadata.root_types}
