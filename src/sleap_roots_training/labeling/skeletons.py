@@ -330,11 +330,12 @@ def _warn_if_unverified(row: SkeletonRow) -> SkeletonRow:
     """
     if not row.verified:
         logger.warning(
-            "Skeleton for (%s, %s) is %d nodes, TRANSCRIBED BUT NOT VERIFIED against a "
-            "real artifact. The package will record this table's SHA256, so it stays "
+            "Skeleton for (%s, %s, %s) is %d nodes, TRANSCRIBED BUT NOT VERIFIED against "
+            "a real artifact. The package will record this table's SHA256, so it stays "
             "distinguishable if the row is corrected — but confirm the count against Bloom "
             "or existing labels before a labeler starts work.",
             row.species,
+            row.mode,
             row.root_type,
             row.node_count,
         )
@@ -346,22 +347,29 @@ def lookup_skeleton(
     root_type: str,
     age: Optional[int] = None,
     table: Optional[tuple[SkeletonRow, ...]] = None,
+    *,
+    mode: Optional[str] = None,
 ) -> SkeletonRow:
-    """Return the skeleton row for a species and root type, failing if there is none.
+    """Return the skeleton row for a species, root type and mode, failing if there is none.
 
     Args:
         species: The crop.
         root_type: The root type.
-        age: Plant age in days. Required only where the table splits by age (rice); an
+        age: Plant age in days. Required only where the chosen mode splits by age; an
             age-agnostic row matches whatever is passed.
         table: The table to search; defaults to the packaged one.
+        mode: The capture mode. Optional only while the species and root type have rows
+            in a single mode; once they have more, omitting it raises rather than picking
+            one (add-skeleton-mode).
 
     Returns:
         The matching row.
 
     Raises:
-        ValueError: If no row matches, if the species has age-split rows and no age was
-            given, or if the given age falls outside every window for that pair.
+        ValueError: If no row matches the species and root type in any mode; if ``mode``
+            is given and has no row for them; if ``mode`` is omitted and rows of more than
+            one mode match; if the chosen mode splits by age and no age was given; or if
+            the given age falls outside every window in that mode.
     """
     rows = load_skeleton_table() if table is None else table
     candidates = [
@@ -376,24 +384,42 @@ def lookup_skeleton(
             "than guessing a node count. Add a verified row before labeling this crop."
         )
 
-    # At most one, and never alongside an age-split row: `_parse_table` rejects both a
-    # duplicate key and a pair that mixes the two, so taking it here cannot shadow anything.
+    modes = sorted({row.mode for row in candidates})
+    if mode is not None:
+        candidates = [row for row in candidates if row.mode == mode]
+        if not candidates:
+            raise ValueError(
+                f"({species!r}, {root_type!r}) has no skeleton in mode {mode!r}; the table "
+                f"has it only in {modes}. Taking another mode's row would be guessing a "
+                "node count, so add a row for this mode before labeling it."
+            )
+    elif len(modes) > 1:
+        # Decided before the age is consulted: a window that happens to miss in one mode
+        # must not quietly hand the caller the other mode's skeleton.
+        raise ValueError(
+            f"({species!r}, {root_type!r}) has skeletons in more than one capture mode "
+            f"({', '.join(modes)}), so a mode is required to choose one; pass mode=."
+        )
+    chosen = candidates[0].mode
+
+    # At most one, and never alongside an age-split row in the same mode: `_parse_table`
+    # rejects both a duplicate key and a mode that mixes the two, so taking it here
+    # cannot shadow anything.
     agnostic = [row for row in candidates if row.age is None]
     if agnostic:
         return _warn_if_unverified(agnostic[0])
 
     windows = [(row, row.age_window) for row in candidates]
+    listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
     if age is None:
-        listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
         raise ValueError(
-            f"({species!r}, {root_type!r}) splits by plant age ({listed}), so an age is "
-            "required to choose a skeleton."
+            f"({species!r}, {root_type!r}) in mode {chosen!r} splits by plant age "
+            f"({listed}), so an age is required to choose a skeleton."
         )
     for row, (low, high) in windows:
         if low <= age <= high:
             return _warn_if_unverified(row)
-    listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
     raise ValueError(
-        f"({species!r}, {root_type!r}) has no skeleton for age {age} DAG; the table "
-        f"covers {listed}."
+        f"({species!r}, {root_type!r}) in mode {chosen!r} has no skeleton for age {age} "
+        f"DAG; the table covers {listed}."
     )
