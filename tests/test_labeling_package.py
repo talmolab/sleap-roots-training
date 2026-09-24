@@ -501,3 +501,75 @@ def test_a_manifest_missing_a_required_column_fails_before_anything_is_copied(tm
         )
 
     assert not output_dir.exists()
+
+
+# --------------------------------------------------------------------------------------
+# add-skeleton-mode — Labeling Packages Use Their Own Mode
+# --------------------------------------------------------------------------------------
+
+
+def test_a_plate_package_is_built_against_the_plate_skeleton(tmp_path):
+    """RED: the mode-blind builder asked for arabidopsis primary without a mode.
+
+    One build exercises both call sites — the orchestrator's recorded skeletons and the
+    builder's written ``.slp`` — and the validator checks that the two agree.
+    """
+    from sleap_roots_training.labeling.metadata import PackageMetadata
+
+    metadata = PackageMetadata(
+        species="arabidopsis", mode="plate", experiment="weep", root_types=("primary",)
+    )
+    # Three plants at ages 3, 4 and 5: the multi-age path through the plate window.
+    scans = (
+        (1, "9DK8KJJEZR", 3, 12742739, "A3244"),
+        (2, "8XQ2LMNPQR", 4, 12742740, "WEEP-1-4"),
+        (3, "7ABCDEFGHJ", 5, 12742739, "A3244"),
+    )
+    rows = list(manifest_rows(scans=scans))
+    package_dir = build_package_dir(
+        tmp_path,
+        rows=rows,
+        scans=scans,
+        metadata=metadata,
+        node_counts={"primary": 8},
+    )
+
+    record = read_package_metadata(package_dir)
+    labels = sio.load_slp(
+        str(package_dir / "arabidopsis_weep_primary_labels.v000.slp"),
+        open_videos=False,
+    )
+    assert len(record.skeletons["primary"]) == 8
+    assert len(labels.skeletons[0].node_names) == 8
+    assert validate_package(package_dir).frame_count == len(rows)
+
+
+def test_a_mode_with_no_row_fails_the_build_before_writing(tmp_path):
+    """RED: a multiplant-cylinder package silently got the cylinder skeleton.
+
+    No row carries that mode, so this fails, naming the mode that does exist, before the
+    output directory or a staging directory is created.
+    """
+    from sleap_roots_training.labeling.metadata import PackageMetadata
+
+    metadata = PackageMetadata(
+        species="soybean",
+        mode="multiplant cylinder",
+        experiment="weep",
+        root_types=("primary",),
+    )
+    output_dir = tmp_path / "out" / "soybean-weep-labeling"
+
+    with pytest.raises(ValueError, match="multiplant cylinder") as excinfo:
+        build_package_dir(
+            tmp_path,
+            metadata=metadata,
+            output_dir=output_dir,
+            node_counts={"primary": 6},
+        )
+
+    assert "'cylinder'" in str(excinfo.value)
+    # The parent is created just before the staging directory, so its absence is what
+    # proves the lookup failed before anything was written — globbing a directory that
+    # does not exist for partials would pass however late the failure came.
+    assert not output_dir.parent.exists()

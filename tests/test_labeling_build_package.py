@@ -704,3 +704,40 @@ def test_the_reported_model_is_the_one_the_builder_actually_reads(tmp_path):
     assert "model_a" in chosen.name
     assert "model_z" not in chosen.name
     assert reported == ("model_a",)
+
+
+# --------------------------------------------------------------------------------------
+# add-skeleton-mode — Labeling Packages Use Their Own Mode
+# --------------------------------------------------------------------------------------
+
+
+def test_skeleton_for_looks_up_the_given_mode():
+    """Arabidopsis primary is 6 nodes in cylinder and 8 on plates; the mode decides."""
+    plate = bp.skeleton_for("arabidopsis", "primary", [3, 4, 5], mode="plate")
+    cylinder = bp.skeleton_for("arabidopsis", "primary", [3, 4, 5], mode="cylinder")
+
+    assert len(plate.nodes) == 8
+    assert len(cylinder.nodes) == 6
+
+
+def test_skeleton_for_requires_a_mode():
+    """A package always knows its mode, so the builder may not fall back to guessing."""
+    with pytest.raises(TypeError, match="mode"):
+        bp.skeleton_for("soybean", "primary", [3])
+
+
+def test_skeleton_for_takes_its_mode_by_keyword():
+    """RED: positional, a growing signature could swap it with a neighbour silently.
+
+    Keyword-only matches ``lookup_skeleton``.
+    """
+    with pytest.raises(TypeError):
+        bp.skeleton_for("soybean", "primary", [3], "cylinder")
+
+
+def test_a_package_straddling_an_age_split_names_the_mode():
+    """RED: two modes can now split by age, so the straddle error must say which."""
+    with pytest.raises(ValueError, match="more than one skeleton") as excinfo:
+        bp.skeleton_for("rice", "crown", [5, 6], mode="cylinder")
+
+    assert "cylinder" in str(excinfo.value)

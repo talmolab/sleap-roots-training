@@ -397,32 +397,54 @@ def test_every_candidate_is_read_not_just_the_latest(tmp_path):
     assert row["members_disagree"] == "node_count"
 
 
-def test_the_mode_collision_section_is_rendered(tmp_path):
-    """The headline finding's report block was at 0% coverage.
+def test_the_mode_gap_sections_are_rendered(tmp_path):
+    """Scenario: The findings are rendered, asserted against the report bytes.
 
-    Scenario 15 says "the **report** records"; nothing ever executed the code that
-    records it.
+    The headline finding's report block was once at 0% coverage; the report is what a
+    reader sees, so each finding is checked there rather than only in the dataclass.
     """
+    from sleap_roots_training.labeling.skeletons import SkeletonRow
+
+    table = (
+        SkeletonRow(
+            species="arabidopsis",
+            mode="cylinder",
+            root_type="lateral",
+            age=None,
+            node_count=4,
+        ),
+        SkeletonRow(
+            species="arabidopsis",
+            mode="plate",
+            root_type="primary",
+            age="2, 3, 4, 5, 6, 7",
+            node_count=8,
+        ),
+    )
     root = tmp_path / "share"
     write_labels(
-        root / "cyl_arabidopsis_primary_6nodes" / "labels.v001.slp",
-        skeleton_names=("arabidopsis_primary",),
-        node_names=tuple(f"r{i}" for i in range(1, 7)),
+        root / "plate_arabidopsis_lateral_3nodes" / "labels.v001.slp",
+        skeleton_names=("Skeleton-1",),
+        node_names=tuple(f"r{i}" for i in range(1, 4)),
     )
     write_labels(
         root / "plate_arabidopsis_primary_8nodes" / "labels.v001.slp",
-        skeleton_names=("arabidopsis_primary",),
-        node_names=tuple(f"r{i}" for i in range(1, 9)),
+        skeleton_names=("Skeleton-1",),
+        node_names=tuple(f"r{i}" for i in range(1, 8)),
     )
 
     out = tmp_path / "inventory"
-    emit.write(emit.build(root), out)
+    emit.write(emit.build(root, table=table), out)
     report = (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
 
-    assert "Rows selected by more than one capture mode" in report
-    assert "cylinder, plate" in report
-    assert "6, 8" in report
-    assert "age: null" in report
+    assert "Rows selected by more than one capture mode" not in report
+    assert "### Capture modes with no row" in report
+    assert "`(arabidopsis, plate, lateral)`" in report
+    assert "only in cylinder" in report
+    assert "### Node counts that disagree with their row" in report
+    assert "`(arabidopsis, plate, primary)`" in report
+    assert "row says 8" in report
+    assert "observed 7" in report
 
 
 def test_the_unparseable_section_is_deduplicated_and_path_qualified(tmp_path):

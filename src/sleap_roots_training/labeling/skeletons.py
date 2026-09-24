@@ -9,9 +9,11 @@ provenance-stamped table, validated on load with row-numbered errors, hashable i
 lineage.
 
 The table is **advisory and partly unverified**, and its header says so. A missing
-``(species, root_type)`` therefore fails loudly rather than defaulting — pennycress has no
-row on purpose — because a wrong node count produces a labeling package that looks fine and
-cannot be combined with anything.
+``(species, mode, root_type)`` therefore fails loudly rather than defaulting — pennycress
+has no row on purpose — because a wrong node count produces a labeling package that looks
+fine and cannot be combined with anything. The capture mode is part of the key
+(add-skeleton-mode) because one species and root type can be labeled at different node
+counts in different modes: arabidopsis primary is 6 nodes in cylinder and 8 on plates.
 
 These are the **native** skeletons, not Tier 2.7's unified one; see the table's header.
 """
@@ -30,6 +32,7 @@ import sleap_io as sio
 from omegaconf import OmegaConf
 
 from sleap_roots_training.registry.chooser import (
+    MODE_VOCAB,
     ROOT_TYPE_VOCAB,
     SPECIES_VOCAB,
     parse_age_window,
@@ -47,9 +50,10 @@ class SkeletonRow:
 
     Attributes:
         species: The crop the row describes.
+        mode: The capture mode the row describes, from ``chooser.MODE_VOCAB``.
         root_type: The root type the row describes.
         age: The native chooser age comma-list this row applies to, or ``None`` for every
-            age. Only rice splits by age.
+            age.
         node_count: How many nodes a labeler places along the root.
         verified: Whether this row's node count has been checked against a real artifact.
             The table header has always distinguished VERIFIED from TRANSCRIBED, NOT
@@ -61,6 +65,7 @@ class SkeletonRow:
     """
 
     species: str
+    mode: str
     root_type: str
     age: Optional[str]
     node_count: int
@@ -102,11 +107,11 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
         The parsed rows, in file order.
 
     Raises:
-        ValueError: If the file has no rows, a row is missing a required key, a species or
-            root type is outside its vocabulary, a node count is not a positive integer,
-            an age list is not a contiguous window, two rows describe the same
-            ``(species, root_type, age)``, or a pair carries both an age-agnostic row and
-            an age-split one.
+        ValueError: If the file has no rows, a row is missing a required key, a species,
+            mode or root type is outside its vocabulary, a node count is not a positive
+            integer, an age list is not a contiguous window, two rows describe the same
+            ``(species, mode, root_type)`` at the same age window, two of its age windows
+            overlap, or it carries both an age-agnostic row and an age-split one.
     """
     # resolve=False for the same reason the selection matrix uses it: the table has no
     # interpolations, and a value containing `${...}` must not be treated as one.
@@ -128,14 +133,17 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
         )
 
     rows: list[SkeletonRow] = []
-    seen: set[tuple[str, str, Optional[str]]] = set()
+    seen: set[tuple[str, str, str, Optional[tuple[int, int]]]] = set()
+    windows: dict[tuple[str, str, str], list[tuple[int, tuple[int, int]]]] = {}
     for index, raw in enumerate(raw_rows):
         if not isinstance(raw, dict):
             raise ValueError(
                 f"row {index}: expected a mapping of keys, got a "
                 f"{type(raw).__name__}"
             )
-        for required in ("species", "root_type", "node_count"):
+        # `mode` has no default: defaulting it would be picking a mode, which is the silent
+        # wrong answer the key exists to remove (add-skeleton-mode).
+        for required in ("species", "root_type", "node_count", "mode"):
             if required not in raw:
                 raise ValueError(f"row {index}: missing required key {required!r}")
         species, root_type = raw["species"], raw["root_type"]
@@ -149,6 +157,14 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
                 f"row {index}: unknown root_type {root_type!r} "
                 f"(expected one of {sorted(ROOT_TYPE_VOCAB)})"
             )
+        mode = raw["mode"]
+        # `isinstance` first: an unhashable value (`mode: [plate]`) would otherwise escape
+        # as a `TypeError` with no row number.
+        if not isinstance(mode, str) or mode not in MODE_VOCAB:
+            raise ValueError(
+                f"row {index}: unknown mode {mode!r} "
+                f"(expected one of {sorted(MODE_VOCAB)})"
+            )
         node_count = raw["node_count"]
         if not isinstance(node_count, int) or node_count < 2:
             raise ValueError(
@@ -156,15 +172,19 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
                 "A skeleton with fewer than two nodes has no edge to label along."
             )
         age = raw.get("age")
+        window = None
         if age is not None:
             age = str(age)
             # Raises with the same message the selection matrix uses for a gapped window.
-            parse_age_window(age)
-        key = (species, root_type, age)
+            window = parse_age_window(age)
+            windows.setdefault((species, mode, root_type), []).append((index, window))
+        # Keyed on the parsed window, not the string: "2,3" and "2, 3" are one window, and
+        # comparing spellings let both load.
+        key = (species, mode, root_type, window)
         if key in seen:
             raise ValueError(
-                f"row {index}: duplicate entry for {species!r}/{root_type!r} at age "
-                f"{age!r}; a lookup would silently take the first"
+                f"row {index}: duplicate entry for {species!r}/{root_type!r} in mode "
+                f"{mode!r} at age {age!r}; a lookup would silently take the first"
             )
         seen.add(key)
         verified = raw.get("verified", False)
@@ -175,6 +195,7 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
         rows.append(
             SkeletonRow(
                 species=species,
+                mode=mode,
                 root_type=root_type,
                 age=age,
                 node_count=node_count,
@@ -182,23 +203,39 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
             )
         )
 
-    # A pair with both an age-agnostic row and an age-split one loads cleanly under the
-    # per-key dedup above — the keys differ — but `lookup_skeleton` returns the agnostic
-    # row before it ever consults the age, so the age-split rows are unreachable. Both
-    # `(rice, crown, null)` and `(rice, crown, "6,7,8")` could sit in the table with the
-    # second silently doing nothing, which is the failure the dedup exists to prevent, one
-    # level up (blocking review of #40).
-    by_pair: dict[tuple[str, str], set[Optional[str]]] = {}
+    # One (species, mode, root_type) with both an age-agnostic row and an age-split one
+    # loads cleanly under the per-key dedup above — the keys differ — but `lookup_skeleton`
+    # returns the agnostic row before it ever consults the age, so the age-split rows are
+    # unreachable. `(rice, cylinder, crown, null)` and `(rice, cylinder, crown, "6,7,8")`
+    # could sit in the table with the second silently doing nothing, which is the failure
+    # the dedup exists to prevent, one level up (blocking review of #40). The rule is per
+    # mode: rows in different modes are never candidates for the same lookup, so
+    # arabidopsis primary may be age-agnostic in cylinder and split on plates.
+    # Overlapping windows in one (species, mode, root_type) load cleanly under the
+    # per-window dedup, and a lookup inside the overlap silently takes the first row in
+    # file order — the same failure the dedup prevents, for windows that are not equal.
+    for (species, mode, root_type), found in sorted(windows.items()):
+        ordered = sorted(found, key=lambda item: item[1])
+        for (first, (_, high)), (second, (low, _)) in zip(ordered, ordered[1:]):
+            if low <= high:
+                raise ValueError(
+                    f"rows {first} and {second}: age windows for {species!r}/"
+                    f"{root_type!r} in mode {mode!r} overlap; a lookup inside the overlap "
+                    "would silently take the first. Make the windows disjoint."
+                )
+
+    by_key: dict[tuple[str, str, str], set[Optional[str]]] = {}
     for row in rows:
-        by_pair.setdefault((row.species, row.root_type), set()).add(row.age)
-    for (species, root_type), ages in sorted(by_pair.items(), key=lambda item: item[0]):
+        by_key.setdefault((row.species, row.mode, row.root_type), set()).add(row.age)
+    for (species, mode, root_type), ages in sorted(by_key.items(), key=lambda i: i[0]):
         if None in ages and len(ages) > 1:
             split = sorted(age for age in ages if age is not None)
             raise ValueError(
-                f"{species!r}/{root_type!r} has both an age-agnostic row (age: null) and "
-                f"age-split row(s) for {split}. A lookup takes the age-agnostic row "
-                "without ever consulting the age, so the age-split rows would never be "
-                "reached. Either split the pair completely, or drop the split rows."
+                f"{species!r}/{root_type!r} in mode {mode!r} has both an age-agnostic "
+                f"row (age: null) and age-split row(s) for {split}. A lookup takes the "
+                "age-agnostic row without ever consulting the age, so the age-split rows "
+                "would never be reached. Either split it completely, or drop the split "
+                "rows."
             )
     return tuple(rows)
 
@@ -313,11 +350,13 @@ def _warn_if_unverified(row: SkeletonRow) -> SkeletonRow:
     """
     if not row.verified:
         logger.warning(
-            "Skeleton for (%s, %s) is %d nodes, TRANSCRIBED BUT NOT VERIFIED against a "
-            "real artifact. The package will record this table's SHA256, so it stays "
+            "Skeleton for (%s, %s, %s) is %d nodes, NOT VERIFIED against a published "
+            "collection (see the table's header for its source). The package will "
+            "record this table's SHA256, so it stays "
             "distinguishable if the row is corrected — but confirm the count against Bloom "
             "or existing labels before a labeler starts work.",
             row.species,
+            row.mode,
             row.root_type,
             row.node_count,
         )
@@ -329,23 +368,36 @@ def lookup_skeleton(
     root_type: str,
     age: Optional[int] = None,
     table: Optional[tuple[SkeletonRow, ...]] = None,
+    *,
+    mode: Optional[str] = None,
 ) -> SkeletonRow:
-    """Return the skeleton row for a species and root type, failing if there is none.
+    """Return the skeleton row for a species, root type and mode, failing if there is none.
 
     Args:
         species: The crop.
         root_type: The root type.
-        age: Plant age in days. Required only where the table splits by age (rice); an
+        age: Plant age in days. Required only where the chosen mode splits by age; an
             age-agnostic row matches whatever is passed.
         table: The table to search; defaults to the packaged one.
+        mode: The capture mode. Optional only while the species and root type have rows
+            in a single mode; once they have more, omitting it raises rather than picking
+            one (add-skeleton-mode).
 
     Returns:
         The matching row.
 
     Raises:
-        ValueError: If no row matches, if the species has age-split rows and no age was
-            given, or if the given age falls outside every window for that pair.
+        ValueError: If ``mode`` is outside ``MODE_VOCAB``; if no row matches the species
+            and root type in any mode; if ``mode`` is given and has no row for them; if ``mode`` is omitted and rows of more than
+            one mode match; if the chosen mode splits by age and no age was given; or if
+            the given age falls outside every window in that mode.
     """
+    if mode is not None and mode not in MODE_VOCAB:
+        # Before any row is consulted: a misspelled mode is a caller error, and "add a
+        # row for this mode" would be advice the loader then refuses.
+        raise ValueError(
+            f"unknown mode {mode!r} (expected one of {sorted(MODE_VOCAB)})"
+        )
     rows = load_skeleton_table() if table is None else table
     candidates = [
         row for row in rows if row.species == species and row.root_type == root_type
@@ -359,24 +411,42 @@ def lookup_skeleton(
             "than guessing a node count. Add a verified row before labeling this crop."
         )
 
-    # At most one, and never alongside an age-split row: `_parse_table` rejects both a
-    # duplicate key and a pair that mixes the two, so taking it here cannot shadow anything.
+    modes = sorted({row.mode for row in candidates})
+    if mode is not None:
+        candidates = [row for row in candidates if row.mode == mode]
+        if not candidates:
+            raise ValueError(
+                f"({species!r}, {root_type!r}) has no skeleton in mode {mode!r}; the table "
+                f"has it only in {modes}. Taking another mode's row would be guessing a "
+                "node count, so add a row for this mode before labeling it."
+            )
+    elif len(modes) > 1:
+        # Decided before the age is consulted: a window that happens to miss in one mode
+        # must not quietly hand the caller the other mode's skeleton.
+        raise ValueError(
+            f"({species!r}, {root_type!r}) has skeletons in more than one capture mode "
+            f"({', '.join(modes)}), so a mode is required to choose one; pass mode=."
+        )
+    chosen = candidates[0].mode
+
+    # At most one, and never alongside an age-split row in the same mode: `_parse_table`
+    # rejects both a duplicate key and a mode that mixes the two, so taking it here
+    # cannot shadow anything.
     agnostic = [row for row in candidates if row.age is None]
     if agnostic:
         return _warn_if_unverified(agnostic[0])
 
     windows = [(row, row.age_window) for row in candidates]
+    listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
     if age is None:
-        listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
         raise ValueError(
-            f"({species!r}, {root_type!r}) splits by plant age ({listed}), so an age is "
-            "required to choose a skeleton."
+            f"({species!r}, {root_type!r}) in mode {chosen!r} splits by plant age "
+            f"({listed}), so an age is required to choose a skeleton."
         )
     for row, (low, high) in windows:
         if low <= age <= high:
             return _warn_if_unverified(row)
-    listed = ", ".join(f"{lo}-{hi} DAG" for _, (lo, hi) in windows)
     raise ValueError(
-        f"({species!r}, {root_type!r}) has no skeleton for age {age} DAG; the table "
-        f"covers {listed}."
+        f"({species!r}, {root_type!r}) in mode {chosen!r} has no skeleton for age {age} "
+        f"DAG; the table covers {listed}."
     )

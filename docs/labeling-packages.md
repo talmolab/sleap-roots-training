@@ -88,8 +88,10 @@ The selection parameters are repeated here on purpose — they go into `package_
 the build checks them against the manifest rather than taking them on trust.
 
 Skeletons come from the committed table in `src/sleap_roots_training/labeling/data/skeletons.yaml`,
-keyed by `(species, root_type)` and, for rice, by age. A pair the table does not cover **fails**;
-it does not fall back to another crop's node counts. Add a verified row before labeling a new crop.
+keyed by `(species, mode, root_type)` and, where the table splits by age (rice; arabidopsis plate),
+by age. The build uses the package's `--mode`. A species, root type or mode the table does not
+cover **fails**; it does not fall back to another crop's or another mode's node counts — there are
+no `multiplant cylinder` rows yet (#62). Add a verified row before labeling a new crop.
 
 ### Re-running one stage
 

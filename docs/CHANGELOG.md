@@ -17,9 +17,9 @@ All notable changes to this project are documented here. The format is based on
   suffix chain)`, and reads each one's skeletons, nodes, frames and instance counts out of the file
   itself.
 
-  Its headline output is the **`skeletons.yaml` keying gap**: `lookup_skeleton` is keyed
-  `(species, root_type, age)` with no `mode`, so a 6-node cylinder arabidopsis primary family and an
-  8-node plate one select the same row. That finding needs no external service. Digest verification
+  Its headline output on the first scan was the **`skeletons.yaml` keying gap** (no `mode`, so
+  cylinder and plate arabidopsis primary selected one row), since closed; see *Changed*. That
+  finding needs no external service. Digest verification
   against the labels registry is on by default and degrades to `not-checked` with a warning when no
   credential resolves; pass `--no-registry` to skip it.
 
@@ -33,6 +33,20 @@ All notable changes to this project are documented here. The format is based on
   nowhere to record the answer: a person reads the output and decides.
 
 ### Changed
+- **`skeletons.yaml` rows carry a required `mode`, and `lookup_skeleton` takes one** — closing the
+  keying gap the label inventory reported (#58). Every transcribed row is `mode: cylinder`; a new
+  `arabidopsis / plate / primary` row covers ages 2–7 at 8 nodes, read from the committed scan and
+  verified by hand against the published `plate_arabidopsis_2-7DAG_primary_8nodes_labels` (the
+  automated check cannot resolve collections yet, #64). The labeling builder passes the package's
+  own `--mode`, so it needs no new input. **Breaking:** `lookup_skeleton(species,
+  root_type)` now raises when rows of more than one mode match, rather than picking; `SkeletonRow`
+  requires `mode=`; a `plate` or `multiplant cylinder` package for a pair with no row in that mode
+  fails instead of silently getting the cylinder skeleton (no multiplant rows yet, #62); and the
+  inventory's `ModeCollision` / `mode_collisions` are replaced by `ModeGap` / `mode_gaps` and
+  `NodeCountDisagreement` / `node_count_disagreements`. The table's SHA256 changes, so packages
+  built before and after stay distinguishable. The committed `inventory/label-inventory.md`
+  predates this and still shows "Rows selected by more than one capture mode". The
+  published-collections check now queries `type="dataset"` (#61).
 - Pinned `sleap-roots-contracts` to `0.1.0a8` and **reshaped the registry so one card describes one
   physical model** (#39). A card now carries a scalar `root_type` plus a `selectors` list — one
   entry per `(species, mode, age_min, age_max)` combination the weights were validated for —

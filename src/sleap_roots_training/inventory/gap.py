@@ -1,11 +1,12 @@
 """Report where ``skeletons.yaml`` cannot express the corpus.
 
-This is the headline finding, and it needs no external service. ``lookup_skeleton``
-(``labeling/skeletons.py:327``) takes ``species``, ``root_type`` and ``age`` and no
-``mode``, so a 6-node cylinder arabidopsis primary family and an 8-node plate one both
-select the single ``(arabidopsis, primary, age: null)`` row. Node counts are read from
-the files; species, mode and root type are derived from the path and are labelled as
-such, because a name is not evidence.
+It needs no external service. Table rows carry a ``mode`` (add-skeleton-mode), so a
+family is matched on species, mode and root type, and what the table can still fail to
+express is a mode the corpus uses with no row of its own, or a node count its row does not
+have. The first scan's headline finding — the table had no ``mode`` at all, so a 6-node
+cylinder and an 8-node plate arabidopsis primary family selected one row — is what added
+the key. Node counts are read from the files; species, mode and root type are derived from
+the path and are labelled as such, because a name is not evidence.
 
 Derivation is open, not a closed vocabulary. It recognizes the tokens the share actually
 uses and returns ``None`` when it sees something else — a species the table has never
@@ -102,24 +103,51 @@ class Observed:
 
 
 @dataclass(frozen=True)
-class ModeCollision:
-    """Two or more capture modes selecting one skeleton-table row.
+class ModeGap:
+    """A capture mode the corpus uses for a species and root type the table has no row for.
+
+    Reported only where the table has the species and root type in some other mode: a
+    species with no row at all is the uncovered-species finding instead.
 
     Attributes:
-        species: The crop both families derive.
-        root_type: The root type both families derive.
-        row_age: The selected row's age window, or ``None`` if age-agnostic.
-        modes: The distinct capture modes that collide.
-        node_counts: The distinct node counts they carry — the evidence that the single
-            row cannot describe them both.
+        species: The crop the families derive.
+        root_type: The root type they derive.
+        mode: The capture mode they derive, which has no row.
+        table_modes: The modes the table does have for this species and root type.
+        node_counts: The distinct node counts the families carry.
         paths: The files involved.
     """
 
     species: str
     root_type: str
-    row_age: Optional[str]
-    modes: tuple[str, ...]
+    mode: str
+    table_modes: tuple[str, ...]
     node_counts: tuple[int, ...]
+    paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NodeCountDisagreement:
+    """Families whose node count none of their matched rows has.
+
+    Printed, not resolved: the tool cannot tell an abandoned draft from a second
+    skeleton, so it names the counts and the files and leaves the decision to a person.
+    Age is not considered, because it is not derivable from a path.
+
+    Attributes:
+        species: The crop the families derive.
+        mode: The capture mode they derive.
+        root_type: The root type they derive.
+        row_node_counts: The node counts of the table's rows for this key.
+        observed: The observed node counts outside ``row_node_counts``.
+        paths: The disagreeing files.
+    """
+
+    species: str
+    mode: str
+    root_type: str
+    row_node_counts: tuple[int, ...]
+    observed: tuple[int, ...]
     paths: tuple[str, ...]
 
 
@@ -141,12 +169,14 @@ class GapReport:
     """Everywhere the skeleton table cannot describe what is on the share.
 
     Attributes:
-        mode_collisions: Rows selected by more than one capture mode.
+        mode_gaps: Observed modes with no row of their own.
+        node_count_disagreements: Observed node counts their matched rows lack.
         uncovered_species: Derived species with no row at all.
         unparseable_skeletons: Files the ``partition("_")`` check cannot resolve.
     """
 
-    mode_collisions: list[ModeCollision] = field(default_factory=list)
+    mode_gaps: list[ModeGap] = field(default_factory=list)
+    node_count_disagreements: list[NodeCountDisagreement] = field(default_factory=list)
     uncovered_species: set[str] = field(default_factory=set)
     unparseable_skeletons: list[UnparseableSkeleton] = field(default_factory=list)
     families_considered: int = 0
@@ -222,7 +252,7 @@ def build_report(
     table: Optional[Sequence[SkeletonRow]] = None,
     emit_path: Optional[Callable[[Path], str]] = None,
 ) -> GapReport:
-    """Build the keying-gap report from what the scan observed.
+    """Build the skeleton-table gap report from what the scan observed.
 
     Args:
         observations: Families paired with their read facts.
@@ -269,7 +299,7 @@ def build_report(
         ]
         if missing:
             # Recorded, not silently dropped. Without a denominator a reader cannot tell
-            # the collision finding rested on 47 of 1,250 families.
+            # the first scan's headline finding rested on 47 of 1,250 families.
             for name in missing:
                 report.families_skipped_reasons[name] = (
                     report.families_skipped_reasons.get(name, 0) + 1
@@ -282,25 +312,44 @@ def build_report(
         )
 
     for (species, root_type), entries in sorted(selected.items()):
-        modes = {mode for mode, _count, _path in entries}
-        if len(modes) < 2:
-            continue
-        matching = [
+        pair_rows = [
             r for r in rows if r.species == species and r.root_type == root_type
         ]
-        if not matching:
-            # No row to collide over — that is the uncovered-species finding instead.
+        if not pair_rows:
+            # No row in any mode. An uncovered species is its own finding; a covered
+            # species missing this root type is reported as neither (the spec says so).
             continue
-        report.mode_collisions.append(
-            ModeCollision(
-                species=species,
-                root_type=root_type,
-                row_age=matching[0].age,
-                modes=tuple(sorted(modes)),
-                node_counts=tuple(sorted({count for _m, count, _p in entries})),
-                paths=tuple(sorted(path for _m, _c, path in entries)),
-            )
-        )
+        table_modes = tuple(sorted({r.mode for r in pair_rows}))
+        by_mode: dict[str, list[tuple[int, str]]] = {}
+        for mode, node_count, path in entries:
+            by_mode.setdefault(mode, []).append((node_count, path))
+        for mode, found in sorted(by_mode.items()):
+            mode_rows = [r for r in pair_rows if r.mode == mode]
+            if not mode_rows:
+                report.mode_gaps.append(
+                    ModeGap(
+                        species=species,
+                        root_type=root_type,
+                        mode=mode,
+                        table_modes=table_modes,
+                        node_counts=tuple(sorted({count for count, _ in found})),
+                        paths=tuple(sorted(path for _, path in found)),
+                    )
+                )
+                continue
+            row_counts = tuple(sorted({r.node_count for r in mode_rows}))
+            off = [(count, path) for count, path in found if count not in row_counts]
+            if off:
+                report.node_count_disagreements.append(
+                    NodeCountDisagreement(
+                        species=species,
+                        mode=mode,
+                        root_type=root_type,
+                        row_node_counts=row_counts,
+                        observed=tuple(sorted({count for count, _ in off})),
+                        paths=tuple(sorted(path for _, path in off)),
+                    )
+                )
 
     report.families_considered = len(observations)
     report.uncovered_species = uncovered(derived_species, table=rows)

@@ -153,8 +153,9 @@ One command does the copy, the projects, the metadata, the README, and validatio
 **all-or-nothing**: `--output-dir` does not exist until a complete validated package is ready
 to move into it. There is no separate README step — it is generated from the package metadata.
 
-Skeletons come from the committed table, keyed by `(species, root_type)` and, for rice, by age.
-A crop the table does not cover fails; add a verified row rather than letting it guess.
+Skeletons come from the committed table, keyed by `(species, mode, root_type)` and, where it
+splits by age, by age; see `docs/labeling-packages.md`. The build uses `--mode`. A crop or mode the
+table does not cover fails; add a verified row rather than letting it guess.
 
 If you need the copy stage on its own (a re-download, a path problem):
 ```bash

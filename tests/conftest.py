@@ -496,7 +496,7 @@ SELECTION = SelectionParameters(
 )
 
 
-def download(tmp_path: Path, rows=None, scans=SCANS):
+def download(tmp_path: Path, rows=None, scans=SCANS, node_counts=None):
     """Materialize a Bloom download, a manifest, and the pipeline's predictions.
 
     The source images live where ``scans.csv`` says they do — the copy step resolves
@@ -506,7 +506,13 @@ def download(tmp_path: Path, rows=None, scans=SCANS):
     ``scans`` is a parameter so a test can supply rows spanning more scans than the
     standard fixture — a plant scanned at several ages, for instance — and still get a
     download and predictions covering them.
+
+    ``node_counts`` maps root type to the predictions' node count, defaulting to the
+    soybean cylinder skeletons (6 and 4), so a plate package can be seeded with 8-node
+    predictions and pass the builder's prediction-versus-skeleton check.
     """
+    if node_counts is None:
+        node_counts = {"primary": 6, "lateral": 4}
     rows = list(rows if rows is not None else manifest_rows())
     download_dir = tmp_path / "WEEP_soybean/images_downloader_output"
     download_dir.mkdir(parents=True)
@@ -526,17 +532,24 @@ def download(tmp_path: Path, rows=None, scans=SCANS):
     predictions_dir = tmp_path / "sleap_roots_traits_input"
     predictions_dir.mkdir()
     for scan_id, *_ in scans:
-        write_predictions(predictions_dir, scan_id, "primary", node_count=6)
-        write_predictions(predictions_dir, scan_id, "lateral", node_count=4)
+        for root_type, node_count in node_counts.items():
+            write_predictions(
+                predictions_dir, scan_id, root_type, node_count=node_count
+            )
     return manifest_csv, download_dir / "scans.csv", predictions_dir
 
 
 def build_package_dir(
-    tmp_path: Path, rows=None, output_dir=None, scans=SCANS, **overrides
+    tmp_path: Path,
+    rows=None,
+    output_dir=None,
+    scans=SCANS,
+    node_counts=None,
+    **overrides,
 ):
     """Assemble a complete package over the standard fixture and return its directory."""
     manifest_csv, scans_csv, predictions_dir = download(
-        tmp_path, rows=rows, scans=scans
+        tmp_path, rows=rows, scans=scans, node_counts=node_counts
     )
     kwargs = {
         "metadata": METADATA,
