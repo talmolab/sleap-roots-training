@@ -145,19 +145,18 @@ skeletons:
   # Ages are DAG. The plate files say "DAP"; the team uses DAP and DAG for the same thing
   # and calls it DAG throughout (eberrigan, 2026-09-24), so 2-7 DAP is this row's 2-7 DAG.
   #
-  # OPEN, for a person to settle — recorded here, not decided. Neither group's video
-  # filenames name a species, and each group's capture session appears in no other
-  # family on the share, so the committed scan cannot confirm either one is arabidopsis:
-  #   - 7-node families: `labels.v00{2,4,5}*` under `7_dap/labels/` (and its copy under
-  #     `primary_root_8nodes/`), beside 8-node files. Their 24 videos are one 2023-01-20
-  #     session named `7_<date>-<time>_<n>.tif`, the naming the 8-node arabidopsis plate
-  #     lineage uses. The gap report lists them as disagreeing with this row.
-  #   - 6-node families: four named `labels_wheat_2-3DAG*`, and `day2and3 copy.slp`
-  #     with the same 131 user instances as one of them. Their 7-8 videos are one
-  #     2024-07-05/06 session named `_set1_day<N>_<date>-<time>_<n>.tif`, the naming the
-  #     arabidopsis plate lateral and the medicago plate labels use. Their species is
-  #     arabidopsis only by the `SLEAP_arabidopsis_plates/` directory; the filenames say
-  #     wheat.
+  # The families that disagree with this row's 8 nodes, identified by eberrigan from
+  # their images (2026-09-24):
+  #   - 6-node families are WHEAT, not arabidopsis: four `labels_wheat_2-3DAG*` and
+  #     `day2and3 copy.slp`. Their images are in `SLEAP_arabidopsis_plates/
+  #     suyash_wheat_day_2and3/` — wheat plate data placed beside arabidopsis, likely to
+  #     train one model for arabidopsis inference. They are not evidence for this row. The
+  #     inventory still calls them arabidopsis, because it reads species from the
+  #     directory before the filename (#65).
+  #   - 7-node families are ARABIDOPSIS: `labels.v00{2,4,5}*` under `7_dap/labels/` (and
+  #     its copy under `primary_root_8nodes/`), 24 images of one 2023-01-20 session in
+  #     `7_dap/GDSL_Sow_Day_7_Processed/`. OPEN, for a person to settle: 7 nodes against
+  #     this row's 8. The gap report lists them as disagreeing.
   # Shares the skeleton name `arabidopsis_primary` with the 6-node cylinder row
   # (`to_skeleton()` names by species and root type); the two are told apart by node
   # count and by `package_metadata.yaml`'s `mode`.

@@ -28,11 +28,14 @@ is re-scanned. "Labelled" means `user_instances > 0`.
   themselves say **DAP**. The team uses the two for the same thing and calls it **DAG**
   throughout (eberrigan, 2026-09-24), so 2-7 DAP is the row's 2-7 DAG, in the unit of the
   table's `age` column.
-- **The 7-node and 6-node families' videos name no species** (checked 2026-09-24 against
-  the CSV's `video_filenames`). Each group is one capture session that appears in no
-  other family: 2023-01-20 `7_<date>…tif` for the 7-node files, and 2024-07-05/06
-  `_set1_day<N>_<date>…tif` for the 6-node files. So the scan cannot confirm that either
-  group is arabidopsis. Both stay listed as open in the row's comment.
+- **The 7-node and 6-node families were identified from their images** (eberrigan,
+  2026-09-24). Their video filenames name no species, so the images were located on the
+  share and checked. The 6-node files are **wheat**: their images sit in
+  `SLEAP_arabidopsis_plates/suyash_wheat_day_2and3/`, so they are not evidence for this
+  row. The 7-node files are **arabidopsis**: 2023-01-20 images in
+  `7_dap/GDSL_Sow_Day_7_Processed/`. That leaves a genuine 7-versus-8 disagreement,
+  recorded as open in the row's comment. Without the wheat files, the labelled arabidopsis
+  plate primary families are 13 at 8 nodes and 3 at 7.
 
 The inventory derives species and mode from file and directory names. It reads node counts
 from the files, but it cannot read node names here: every plate file names its skeleton
