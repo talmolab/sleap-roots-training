@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Optional
 
 import click
+from omegaconf import DictConfig, OmegaConf
 
 from sleap_roots_training import __version__
+from sleap_roots_training import backend
 from sleap_roots_training import config as training_config
 from sleap_roots_training.inventory import emit as inventory_emit
 from sleap_roots_training.inventory import verify as inventory_verify
@@ -18,8 +20,10 @@ from sleap_roots_training.registry.models import resolve_model_dir
 def main() -> None:
     """Config-driven training and evaluation of SLEAP root models.
 
-    Subcommands are added as the pipeline is built out tier by tier (see the
-    program roadmap). Run ``sleap-roots-training --help`` to list them.
+    ``validate`` and ``emit`` are base-install safe, so a config can be authored and
+    checked anywhere; ``run`` chains validate -> emit -> ``sleap-nn train`` on a host that
+    also has the ``train`` extra installed. Subcommands are added as the pipeline is built
+    out tier by tier (see the program roadmap).
     """
 
 
@@ -365,7 +369,13 @@ def emit_command(config_path: Path, output: Optional[Path]) -> None:
         click.echo(sleap_nn_yaml, nl=False)
         return
     try:
-        output.write_text(sleap_nn_yaml, encoding="utf-8")
+        # newline="\n" is explicit, not incidental: the default (newline=None) translates
+        # every "\n" to os.linesep, so the same config emits CRLF on Windows -- the platform
+        # the target GPU box runs (docs/training-backend.md) -- and LF everywhere else. That
+        # makes the emitted bytes host-dependent, which breaks byte-comparison of one config
+        # against another (the `run` command relies on it, and the deferred content hashing
+        # in #32 would too).
+        output.write_text(sleap_nn_yaml, encoding="utf-8", newline="\n")
     except OSError as error:
         raise click.ClickException(f"could not write {output}: {error}")
     click.echo(f"wrote sleap-nn config to {output}")
@@ -729,6 +739,146 @@ def labeling_validate_command(package_dir: Path) -> None:
         f"({record.metadata.species} / {record.metadata.experiment}, "
         f"{record.frame_count} frames, "
         f"{', '.join(record.metadata.root_types)})"
+    )
+
+
+def _warn_on_dataset_mismatch(cfg: DictConfig) -> None:
+    """Note when the recorded dataset identity is not what the backend will actually read.
+
+    ``run`` promotes ``experiment.dataset.path`` into the published lineage record, so a config
+    where it disagrees with ``data_config.train_labels_path`` produces a ``source_config.yaml``
+    that faithfully records the wrong dataset. Pre-existing in ``validate``, but this is the
+    command that makes the field load-bearing, so it is the command that should say something.
+    A note rather than a refusal: the two are not required to be equal (a packaged split can
+    legitimately differ), and failing a run over it would be a step too far.
+
+    Args:
+        cfg: A loaded training config.
+    """
+    dataset = OmegaConf.select(cfg, "experiment.dataset.path", default=None)
+    train_paths = (
+        OmegaConf.select(cfg, "data_config.train_labels_path", default=None) or []
+    )
+    if isinstance(train_paths, str):
+        train_paths = [train_paths]
+    if (
+        dataset
+        and train_paths
+        and str(dataset) not in [str(path) for path in train_paths]
+    ):
+        click.echo(
+            f"note: experiment.dataset.path ({dataset}) is not among "
+            f"data_config.train_labels_path ({[str(p) for p in train_paths]}); "
+            "source_config.yaml will record the former as this run's dataset identity"
+        )
+
+
+@main.command(name="run")
+@click.argument(
+    "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option(
+    "--emitted-config",
+    # dir_okay=False for the same reason --selection-matrix has it: a directory would
+    # otherwise reach the writer and surface as a raw IsADirectoryError.
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Stage the emitted config here instead of in the run directory.",
+)
+@click.pass_context
+def run_command(
+    ctx: click.Context, config_path: Path, emitted_config: Optional[Path]
+) -> None:
+    """Validate CONFIG_PATH, stage it, and run ``sleap-nn train`` on it.
+
+    The one-command path for a host that has **both** this package and the ``train``
+    extra installed (the GPU box). ``validate`` and ``emit`` are unchanged and remain
+    base-install safe, so the author-here / train-there workflow still uses them.
+
+    Two configs are written into ``<trainer_config.ckpt_dir>/<trainer_config.run_name>/``
+    before training starts: ``emitted_config.yaml`` (what ``sleap-nn`` is given) and
+    ``source_config.yaml`` (what you wrote, ``experiment`` block included -- the identity
+    no ``sleap-nn`` artifact records). The backend's own output streams live, and its exit
+    status is this command's exit status.
+    """
+    # Step order is the contract (see the change's design.md D6): every step that can fail
+    # cheaply runs before any step with a side effect, so a failure here leaves nothing
+    # written and no subprocess started. A stale config beside a run that never happened
+    # is indistinguishable later from a real one.
+    try:
+        binary = backend.resolve_sleap_nn()
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+
+    try:
+        cfg = training_config.load_config(config_path)
+        notes = training_config.validate_config(cfg)
+    except training_config.ConfigError as error:
+        raise click.ClickException(str(error))
+    for note in notes:
+        # Resolving the console script does NOT mean `sleap_nn` is importable here (it may
+        # come from another environment entirely), so deep validation can still be skipped.
+        # Say so rather than let an operator assume a multi-hour run was fully checked.
+        click.echo(f"note: {note}")
+
+    try:
+        # Field reads first. Each one reports the field that carries an unresolvable
+        # interpolation; the coarse gate below resolves the *whole* sleap-nn portion, so
+        # running it first replaced every one of those field-named errors with one generic
+        # message -- and left `_select`'s error path unreachable through this command.
+        run_dir = backend.run_directory(cfg)
+        backend.reject_inline_api_key(cfg)
+        wandb_on = backend.wandb_enabled(cfg)
+        # Still before anything is staged, which is the part that matters. Every read above
+        # resolves against the **full** config, while the emitted file is written unresolved
+        # and with the `experiment` block stripped -- so `run_name: ${experiment.species}_v1`
+        # gates and stages happily under `arabidopsis_v1` and then hands the backend a config
+        # it cannot reload at all.
+        backend.check_emitted_config_resolvable(cfg)
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+    _warn_on_dataset_mismatch(cfg)
+    if wandb_on:
+        # Every committed baseline example sets use_wandb; without a resolvable credential
+        # the run dies hours in, at wandb.init(). Fail now instead.
+        _require_api_key()
+
+    try:
+        backend.check_run_directory(run_dir)
+        destination = backend.emitted_config_path(run_dir, emitted_config)
+        backend.stage_artifacts(cfg, config_path, run_dir, destination)
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+
+    # Echo the resolved backend before a multi-hour run: this is the only signal that the
+    # interpreter-first search picked a different environment than the operator expected --
+    # and record it, so the signal survives the console session.
+    version = backend.backend_version(binary)
+    try:
+        backend.stage_run_metadata(run_dir, binary, version)
+    except backend.BackendError as error:
+        raise click.ClickException(str(error))
+    click.echo(f"backend: {binary}" + (f" ({version})" if version else ""))
+    # Absolute: with a relative or drive-relative `ckpt_dir`, the printed path is the only clue
+    # about where the files actually went, and a bare relative path is no clue at all.
+    click.echo(f"config:  {destination.resolve()}")
+    click.echo(f"run dir: {run_dir.resolve()}")
+    try:
+        outcome = backend.run_backend(backend.build_argv(binary, destination))
+    except backend.BackendError as error:
+        # The backend can fail to *launch* (a truncated wheel, a PATHEXT hit on something that
+        # is not executable) after the artifacts are staged. Those stay on disk deliberately --
+        # they record what was attempted -- but the failure is still a clean CLI error.
+        raise click.ClickException(str(error))
+    if outcome.note:
+        click.echo(outcome.note, err=True)
+    if outcome.exit_code != 0:
+        ctx.exit(outcome.exit_code)
+    # Name what was actually written: hard-coding the constants would claim both configs are
+    # in the run directory even when --emitted-config put one elsewhere.
+    click.echo(
+        f"OK: training finished; {run_dir.resolve()} holds {backend.SOURCE_CONFIG_NAME} "
+        f"and {backend.RUN_METADATA_NAME}, emitted config at {destination.resolve()}"
     )
 
 

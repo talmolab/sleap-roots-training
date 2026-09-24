@@ -36,7 +36,10 @@ Goals (built out tier by tier; see the program roadmap):
   `validate` CLI checks configs.
 - Thin, well-bounded modules with clear interfaces; mirror `sleap-roots-analyze` structure.
 - `sleap-nn` / `sleap-io` are consumed as libraries (pinned to tagged releases; commit pins only as
-  a documented last-resort stopgap) — we do not modify their internals.
+  a documented last-resort stopgap) — we do not modify their internals. One deliberate exception to
+  the library-only rule: the `run` command invokes the `sleap-nn train` **console script** as a
+  subprocess rather than importing its training entry points, so the backend's process semantics
+  (exit codes, signals, CUDA init) stay outside this CLI's process.
 
 ### Testing Strategy
 - TDD. Unit tests are fast and run in CI across OS × Python (3.11/3.12). Slow tests that run real
@@ -44,8 +47,10 @@ Goals (built out tier by tier; see the program roadmap):
 - Keep `main` green: `black --check`, `ruff check`, and `pytest` must pass before every commit.
 
 ### Git Workflow
-- Trunk-based on `main`; feature branches → PRs with CI. One **OpenSpec change per PR**, archived
-  with the code on merge. Conventional, descriptive commit messages.
+- Trunk-based on `main`; feature branches → PRs with CI. One **OpenSpec change per PR** (proposal
+  and implementation together), archived in a **separate follow-up PR** after merge — that is what
+  `openspec/AGENTS.md` Stage 3 says and what every archive PR here has actually done (#5, #18, #19,
+  #42, #45). Conventional, descriptive commit messages.
 
 ## Domain Context
 SLEAP root skeletons are linear chains of evenly-spaced nodes (base = `r1` … tip = last node).
