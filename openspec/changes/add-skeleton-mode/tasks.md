@@ -122,7 +122,8 @@ mode-blind `gap.py`.
     - Arabidopsis plate primary is not transcribed, but it is still unverified.
     - Rice and arabidopsis plate both split by age.
     - Cite roadmap *Open roadmap decisions* rather than `:422`.
-  - Record the open questions in the header: the 7-node and 6-node families, DAP versus DAG,
+  - Record the open questions in the header: the 7-node and 6-node families, DAP versus DAG
+    (since settled: DAP is DAG, eberrigan 2026-09-24),
     and the shared skeleton name. State the evidence as the invariant the test enforces, not
     as hard-coded counts.
   - Update `SkeletonRow.age`'s "Only rice splits by age". Update the test module docstring

@@ -25,9 +25,14 @@ is re-scanned. "Labelled" means `user_instances > 0`.
   it.
 - **The registry names the plate window in DAG.** The labels registry holds
   `plate_arabidopsis_2-7DAG_primary_8nodes_labels` (#11's collection table). The files
-  themselves say **DAP**. This change adopts the registry's DAG reading, which is also the
-  unit of the table's `age` column. **It does not establish that DAP 2–7 equals DAG 2–7**;
-  that is left for a person to settle.
+  themselves say **DAP**. The team uses the two for the same thing and calls it **DAG**
+  throughout (eberrigan, 2026-09-24), so 2-7 DAP is the row's 2-7 DAG, in the unit of the
+  table's `age` column.
+- **The 7-node and 6-node families' videos name no species** (checked 2026-09-24 against
+  the CSV's `video_filenames`). Each group is one capture session that appears in no
+  other family: 2023-01-20 `7_<date>…tif` for the 7-node files, and 2024-07-05/06
+  `_set1_day<N>_<date>…tif` for the 6-node files. So the scan cannot confirm that either
+  group is arabidopsis. Both stay listed as open in the row's comment.
 
 The inventory derives species and mode from file and directory names. It reads node counts
 from the files, but it cannot read node names here: every plate file names its skeleton
@@ -40,8 +45,8 @@ from the files, but it cannot read node names here: every plate file names its s
   "from a finished cylinder experiment".
 - **One new row:** `arabidopsis / plate / primary`, `age: "2, 3, 4, 5, 6, 7"`, `node_count: 8`,
   **`verified: true`**, on a hand read of `plate_arabidopsis_2-7DAG_primary_8nodes_labels`
-  (see *Decisions*). The header records the evidence
-  and the open questions: the 7-node and 6-node families, and DAP versus DAG.
+  (see *Decisions*). The header records the evidence and the open questions, which are
+  the 7-node and 6-node families.
 - **BREAKING — `SkeletonRow`** gains a required `mode: str`, and the loader validates it
   against `chooser.MODE_VOCAB` (`Skeleton Table Mode Key`).
 - **BREAKING — `lookup_skeleton(..., mode=None)`** raises rather than picking when rows of more

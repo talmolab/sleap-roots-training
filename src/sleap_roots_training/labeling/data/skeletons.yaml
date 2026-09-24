@@ -142,15 +142,22 @@ skeletons:
   # agreeing with the row. The automated check cannot resolve it (#64); its mode here is
   # the collection name's `plate`, and the scan's is read off directory names.
   #
-  # OPEN, for a person to settle — recorded here, not decided:
-  #   - The window's unit. The files say 2-7 **DAP**; the registry collection's name says
-  #     2-7 **DAG**. The row's window is that literal 2-7, compared against the age the
-  #     caller passes; which unit plate ages are in is not established.
-  #   - 7-node families: `labels.v00{2,4,5}*` under `primary_root_8nodes/7_dap/labels/`,
-  #     beside 8-node files. The gap report lists them as disagreeing with this row.
+  # Ages are DAG. The plate files say "DAP"; the team uses DAP and DAG for the same thing
+  # and calls it DAG throughout (eberrigan, 2026-09-24), so 2-7 DAP is this row's 2-7 DAG.
+  #
+  # OPEN, for a person to settle — recorded here, not decided. Neither group's video
+  # filenames name a species, and each group's capture session appears in no other
+  # family on the share, so the committed scan cannot confirm either one is arabidopsis:
+  #   - 7-node families: `labels.v00{2,4,5}*` under `7_dap/labels/` (and its copy under
+  #     `primary_root_8nodes/`), beside 8-node files. Their 24 videos are one 2023-01-20
+  #     session named `7_<date>-<time>_<n>.tif`, the naming the 8-node arabidopsis plate
+  #     lineage uses. The gap report lists them as disagreeing with this row.
   #   - 6-node families: four named `labels_wheat_2-3DAG*`, and `day2and3 copy.slp`
-  #     with the same 131 user instances as one of them. Their species is name-derived
-  #     from the `SLEAP_arabidopsis_plates/` directory, while their filenames say wheat.
+  #     with the same 131 user instances as one of them. Their 7-8 videos are one
+  #     2024-07-05/06 session named `_set1_day<N>_<date>-<time>_<n>.tif`, the naming the
+  #     arabidopsis plate lateral and the medicago plate labels use. Their species is
+  #     arabidopsis only by the `SLEAP_arabidopsis_plates/` directory; the filenames say
+  #     wheat.
   # Shares the skeleton name `arabidopsis_primary` with the 6-node cylinder row
   # (`to_skeleton()` names by species and root type); the two are told apart by node
   # count and by `package_metadata.yaml`'s `mode`.
