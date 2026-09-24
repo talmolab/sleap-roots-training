@@ -545,7 +545,7 @@ which is why it stays gated on confirmed deployment.
       `link(<registry target>, aliases=["production"])` on the recorded source `v0` (never `save()`) →
       identical link (`v0`, `latest`+`production`, same digest and source); both consumer generations
       returned to the canary state.
-- [ ] 6.1 **Canary first**, and make it falsifiable. Re-seed one collection with
+- [x] 6.1 **Canary first**, and make it falsifiable. Re-seed one collection with
       `seed-registry --only <collection>`, then: (a) `--verify --only <id>` for producer-side alias +
       new-shape read-back; (b) point an **upgraded** predict at the live registry for that collection's
       selection contexts and assert it resolves to the new collection's `registry_id` and that
@@ -566,12 +566,26 @@ which is why it stays gated on confirmed deployment.
       card), 1 on `main` (the canary, "4 validation errors"). Re-verified on predict#45's final head
       `cd21bc2`, including its container image on GPU. Evidence: predict#45 and predict#34's
       2026-09-24 comment.
-- [ ] 6.2 Run a **full** `--verify` (never a canary run — orphan reporting is suppressed under
+      *Completed 2026-09-24:* the remaining 7 re-seeded with
+      `seed-registry --execute --only <each of the 7>` — published 7, skipped 0, failed 0. Each new
+      collection's `production` link is `v0` and selector-shaped; versions and digests recorded in
+      `docs/migration/2026-09-24-post-reseed-state.json` (6.0(d)). Every new card's digest equals the
+      old flat cards' `weights_checksum` for the same `source_model_id` — byte-identical weights, not
+      only matching labels. predict#34 C1: predict `main` (after #45) over the 8 live cards
+      reproduces the offline A1 selection table exactly — 270 cells, 67 selecting on each side, 0
+      errors.
+- [x] 6.2 Run a **full** `--verify` (never a canary run — orphan reporting is suppressed under
       `--only`) and confirm the orphan report names exactly **13** collections. That is now fixed rather
       than conditional: 0.2 chose the `source_model_id`-derived scheme, so every existing id changes and
       the re-seed is purely additive. While
       here, record the registry's actual storage figures for the 13 collections, so `proposal.md` can
       stop hedging about whether the duplication ever cost real bytes.
+      *Done 2026-09-24:* full `--verify` — all 8 expected collections present; **exactly 13 orphans**,
+      the 13 flat collections (`arabidopsis-cylinder-lateral-age2-14` … `soybean-cylinder-primary-age2-8`).
+      Storage (`Artifact.size`, logical bytes): the 13 flat collections total **1,145,440,066** bytes
+      for **665,522,407** bytes of distinct weights (8 physical models); the 8 new collections total
+      exactly **665,522,407**. The duplication therefore cost ~480 MB of *logical* size; whether W&B
+      stores duplicate content once physically is not visible from the API.
 - [ ] 6.3 Execute the 0.4 decision — gated on confirmed **deployment** of the upgraded
       `sleap-roots-predict`, not merely on `--verify` passing on the producer side. Producer
       verification proves we wrote the new collections correctly; it says nothing about whether
