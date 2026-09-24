@@ -581,10 +581,28 @@ which is why it stays gated on confirmed deployment.
       canola/pennycress pair differs by species *and* age, not "only by age"), so the issue this
       proposal names as the source of truth stops contradicting the landed design. Link the contracts
       and predict issues from 1.0 / 2.0, plus #46 and predict#14.
-- [ ] 6.5 While the canary is live, settle the question no offline fake can: re-log one card with
+- [x] 6.5 While the canary is live, settle the question no offline fake can: re-log one card with
       byte-identical weights and record whether the production-aliased artifact's metadata actually
       refreshed. If it does, the Re-Publish Metadata Refresh requirement is over-built and should be
       downgraded; if it does not, this is the only direct evidence for it that exists.
+      *Result 2026-09-24: metadata DOES refresh.* Re-logged the canary
+      (`rice-younger-primary-230104_182346.multi_instance.n-720`) exactly as `publish_card` does —
+      same `add_dir` of the same resolved weights, `log_artifact` → `wait` → `link_artifact` with
+      `production` — with one extra, consumer-ignored metadata key (`probe_6_5`). wandb 0.28.0 logged
+      "already exists with the same content. No new version will be created" (still `v0`, digest
+      `bb373c5c…` unchanged), **yet** a fresh `wandb.Api()` read of `:production` — and of the source
+      artifact `v0` — showed the new key with selectors otherwise identical. So the "log_artifact is a
+      no-op on an unchanged digest" premise does not hold for metadata on this wandb version: a
+      same-weights, new-metadata re-publish updates the live metadata in place. Restored the exact
+      pre-probe metadata via `Artifact.save()` on the asserted link (the requirement's remedy path —
+      also confirmed to work live); both link and source re-read equal to the snapshot, and
+      predict#45's `scripts/canary_check.py` still resolves the canary (13 skips). Evidence:
+      `docs/migration/2026-09-24-probe-6-5-metadata-refresh.py` and `…-record.json`.
+      **Follow-up, not done here:** per this task's own rule the Re-Publish Metadata Refresh
+      requirement looks over-built and is a candidate for downgrading. Separately, its read-back
+      (`_is_selectors_shape`) only detects the *legacy flat* shape, so it could never have caught a
+      stale-but-selector-shaped blob (e.g. a missing newly added selector); if the requirement is
+      kept, the check should compare the read-back to the intended metadata, not its shape.
 - [ ] 6.6 In the archive PR, restore the requirement order in
       `openspec/specs/model-registry/spec.md`. Verified: because the expansion and publishing
       requirements are replaced (removed + re-added) rather than modified in place, the archiver

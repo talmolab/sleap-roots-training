@@ -1,0 +1,74 @@
+{
+  "collection": "rice-younger-primary-230104_182346.multi_instance.n-720",
+  "before": {
+    "version": "v0",
+    "digest": "bb373c5c5ddd8d7711b8b5cf39c4d638",
+    "aliases": [
+      "latest",
+      "production"
+    ],
+    "is_link": true,
+    "source": "eberrigan-salk-institute-for-biological-studies/migrate-model-card-selectors/rice-younger-primary-230104_182346.multi_instance.n-720:v0",
+    "metadata": {
+      "root_type": "primary",
+      "selectors": [
+        {
+          "mode": "cylinder",
+          "age_max": 5,
+          "age_min": 2,
+          "species": "rice"
+        }
+      ],
+      "source_model_id": "rice/younger/primary/230104_182346.multi_instance.n=720"
+    }
+  },
+  "logged_version": "v0",
+  "logged_digest": "bb373c5c5ddd8d7711b8b5cf39c4d638",
+  "after": {
+    "version": "v0",
+    "digest": "bb373c5c5ddd8d7711b8b5cf39c4d638",
+    "aliases": [
+      "latest",
+      "production"
+    ],
+    "is_link": true,
+    "source": "eberrigan-salk-institute-for-biological-studies/migrate-model-card-selectors/rice-younger-primary-230104_182346.multi_instance.n-720:v0",
+    "metadata": {
+      "probe_6_5": "2026-09-24 metadata-refresh probe (training 6.5)",
+      "root_type": "primary",
+      "selectors": [
+        {
+          "mode": "cylinder",
+          "age_max": 5,
+          "age_min": 2,
+          "species": "rice"
+        }
+      ],
+      "source_model_id": "rice/younger/primary/230104_182346.multi_instance.n=720"
+    }
+  },
+  "probe_visible_on_production": true,
+  "new_version_created": false,
+  "restored": {
+    "version": "v0",
+    "digest": "bb373c5c5ddd8d7711b8b5cf39c4d638",
+    "aliases": [
+      "latest",
+      "production"
+    ],
+    "is_link": true,
+    "source": "eberrigan-salk-institute-for-biological-studies/migrate-model-card-selectors/rice-younger-primary-230104_182346.multi_instance.n-720:v0",
+    "metadata": {
+      "root_type": "primary",
+      "selectors": [
+        {
+          "mode": "cylinder",
+          "age_max": 5,
+          "age_min": 2,
+          "species": "rice"
+        }
+      ],
+      "source_model_id": "rice/younger/primary/230104_182346.multi_instance.n=720"
+    }
+  }
+}
