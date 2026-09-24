@@ -232,18 +232,21 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   `labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp` with a character-matching age window — it may
   be the wheat half of that set, or the whole thing, in which case a single-species card would be
   wrong. So the work splits:
-  1. **`add-label-inventory`** (this repo, proposed) — a re-runnable
+  1. **`add-label-inventory`** (this repo; shipped in #58, archived in #63) — a re-runnable
      `sleap-roots-training inventory labels` that enumerates the labels files on the share,
      derives their facts **from the files themselves**, digest-verifies the ones a registry
      artifact covers, and emits **evidence, not cards**: one table, one report, and a
      skeleton-table diff. It also establishes the corpus size — the registry's 8 collections sit
      inside an expected ~25–30. **Bloom reconciliation is deliberately not part of it**
      (rescoped 2026-09-15): Bloom's coverage of this corpus was never measured, and the headline
-     finding — that `skeletons.yaml` has no `mode` key — needs no external service. Species
-     derived from a name is reported as name-derived and is not treated as evidence.
-  2. **#11 / #49** — consumes that evidence and builds the cards, supplying `registry_id`,
-     `version`, `mode` and `root_type` (which have no source in scan metadata) from its own decision
-     record. It keeps its durable output: the committed YAML mapping, confidence levels, and
+     finding — that `skeletons.yaml` had no `mode` key — needs no external service; the key was
+     added by `add-skeleton-mode`. Species derived from a name is reported as name-derived and is
+     not treated as evidence.
+  2. **#11 / #49** — **unsolved prerequisite:** `mode` is not derivable from the path for 515 of
+     the 611 labelled families in the first scan, so a (species, mode, root_type) collection cannot
+     be populated from names alone. It consumes that evidence and builds the cards, supplying
+     `registry_id`, `version`, `mode` and `root_type` (which have no source in scan metadata) from
+     its own decision record. It keeps its durable output: the committed YAML mapping, confidence levels, and
      automated checks.
 
   Deferred until the inventory lands, because they only matter if these collections are preserved

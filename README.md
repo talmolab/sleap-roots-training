@@ -134,10 +134,12 @@ uv run sleap-roots-training inventory labels "Z:/users/<you>/SLEAP"
 uv run sleap-roots-training inventory labels "Z:/users/<you>/SLEAP" --no-registry
 ```
 
-The headline finding is the **`skeletons.yaml` keying gap**: `lookup_skeleton` is keyed
-`(species, root_type, age)` with no `mode`, so a 6-node cylinder arabidopsis primary family and an
-8-node plate one select the same row. Node counts are read from the files, so that finding needs no
-external service.
+The first scan's (#58) headline finding was that `skeletons.yaml` had no `mode`, so a 6-node
+cylinder arabidopsis primary family and an 8-node plate one selected the same row. The table now
+carries a mode, and the report lists the capture modes observed with no row of their own and the
+node counts that disagree with their row. Node counts are read from the files, so none of this
+needs an external service. The committed `inventory/label-inventory.md` predates the mode key and
+still shows the old finding until the next scan.
 
 Two things to know before reading the output. `species`, `mode` and `root_type` are **name-derived**
 — read off the path, not out of the file — and the report says so; they are not evidence. And where
