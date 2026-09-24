@@ -79,6 +79,34 @@ from the files, but it cannot read node names here: every plate file names its s
   row?** `to_skeleton()` names skeletons `{species}_{root_type}`. The two are told apart by
   node count and by `package_metadata.yaml`'s `mode`. Renaming is out of scope.
 
+## Deviations found during implementation
+
+### Why every collection, not only the plate one, fails the published-collections check
+
+The proposal expected only `plate_arabidopsis_2-7DAG_primary_8nodes_labels` to be reported,
+as unparseable. The check was run locally on 2026-09-24, and all eight collections were
+reported: every published collection names its skeleton `Skeleton-N`. So the #61 query
+fix works, but the check cannot resolve any collection by name. Reading the downloaded
+files directly, the plate collection is 8 nodes (`r1`–`r8`, 3,032 user instances) and
+the cylinder one is 6. Every count agrees with its row. This is filed as #64, which has
+the full table. The plate row stays `verified: false`, as decided: flipping it waits on
+a way for the check to know each collection's key.
+
+### Why the #61 unit tests inject a fake `Api` instead of monkeypatching `wandb.Api`
+
+The review asked for `wandb.Api` monkeypatched to return fake collections. Instead, the
+extracted `_label_collections(api, project)` takes the api as a parameter, and the tests
+pass a fake that records the artifact type it is queried with. That is the same
+assertion, that `artifact_collections` receives `"dataset"`. It avoids importing wandb
+in a CI unit test, and it avoids driving the integration test's download body.
+
+### Why the #61 fix is a RED/GREEN pair
+
+The plan had a single `fix(tests)` commit. It is split into a RED commit and a GREEN
+commit, to keep "failing tests before the fix". The RED commit fails with "API missing",
+not on behaviour, because the `"model"` literal sat inline in a test CI never runs, so
+there was no seam to fail against until the fix extracted one.
+
 ## Out of scope
 
 - **Deriving `mode` for the 515 of the 611 labelled families whose paths carry no mode

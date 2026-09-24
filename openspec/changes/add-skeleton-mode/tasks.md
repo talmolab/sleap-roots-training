@@ -20,7 +20,7 @@ commit exists, so push only at GREEN points.
 
 ## 1. Table mode key (`Skeleton Table Mode Key`)
 
-- [ ] 1.1 RED — `test(labeling): pin the skeleton table's mode key (RED)`
+- [x] 1.1 RED — `test(labeling): pin the skeleton table's mode key (RED)`
   - Add `mode: cylinder` to every packaged `skeletons.yaml` row and to every inline YAML
     fixture. The loader ignores unknown keys, so the existing tests stay green.
   - In `tests/test_labeling_skeletons.py`, add:
@@ -33,7 +33,7 @@ commit exists, so push only at GREEN points.
     - `test_a_pair_may_be_agnostic_in_one_mode_and_split_in_another`
   - Tighten the existing duplicate and shadow tests to put both rows in one mode, and to
     assert that the message names the mode.
-- [ ] 1.2 GREEN — `feat(labeling): key the skeleton table on capture mode (GREEN)`
+- [x] 1.2 GREEN — `feat(labeling): key the skeleton table on capture mode (GREEN)`
   - In `skeletons.py`:
     - Add `SkeletonRow.mode: str`, second after `species`.
     - `_parse_table` requires `mode` and validates it against `MODE_VOCAB`.
@@ -46,7 +46,7 @@ commit exists, so push only at GREEN points.
 
 ## 2. Mode-aware lookup (`Mode-Aware Skeleton Lookup`)
 
-- [ ] 2.1 RED — `test(labeling): pin that lookup refuses to pick a capture mode (RED)`. Tests
+- [x] 2.1 RED — `test(labeling): pin that lookup refuses to pick a capture mode (RED)`. Tests
   run against an injected two-mode table:
   - `test_an_omitted_mode_is_ambiguous_with_or_without_an_age`: no age, `age=3` and `age=9`.
     Each raises, matching `r"cylinder.*plate"` and `"mode="`. This is a behaviour-level RED.
@@ -57,7 +57,7 @@ commit exists, so push only at GREEN points.
     `mode="plate"` raises the existing no-row message.
   - `test_an_age_split_mode_without_an_age_lists_only_that_modes_windows`
   - `test_the_unverified_warning_names_the_mode`
-- [ ] 2.2 GREEN — `feat(labeling): make lookup_skeleton mode-aware (GREEN)`
+- [x] 2.2 GREEN — `feat(labeling): make lookup_skeleton mode-aware (GREEN)`
   - Add `mode` as a keyword-only parameter.
   - Order the checks:
     1. The pair is absent entirely: raise the existing error.
@@ -71,7 +71,7 @@ commit exists, so push only at GREEN points.
 This comes before the plate row lands, so no test depends on row order under the old
 mode-blind `gap.py`.
 
-- [ ] 3.1 RED — `test(inventory): pin the gap report's match on mode (RED)`
+- [x] 3.1 RED — `test(inventory): pin the gap report's match on mode (RED)`
   - In `tests/test_inventory_gap.py`, every test uses an injected table built in the test:
     - `test_an_observed_mode_with_no_row_is_reported`: a 3-node plate lateral family
       against a cylinder-only lateral row.
@@ -85,7 +85,7 @@ mode-blind `gap.py`.
   - In `tests/test_inventory_emit.py`, replace
     `test_the_mode_collision_section_is_rendered` with a test that asserts the two new
     headings and their lines against the report bytes.
-- [ ] 3.2 GREEN — `feat(inventory): report modes with no row and disagreeing node counts
+- [x] 3.2 GREEN — `feat(inventory): report modes with no row and disagreeing node counts
   (GREEN)`
   - In `gap.py`, replace `ModeCollision`/`mode_collisions` with:
     - `ModeGap(species, root_type, mode, table_modes, node_counts, paths)`/`mode_gaps`
@@ -98,7 +98,7 @@ mode-blind `gap.py`.
 
 ## 4. Committed rows (`Committed Skeleton Rows Carry Their Mode`)
 
-- [ ] 4.1 RED — `test(labeling): pin the committed plate row against the scan (RED)`
+- [x] 4.1 RED — `test(labeling): pin the committed plate row against the scan (RED)`
   - `test_every_transcribed_row_is_cylinder`
   - `test_the_plate_row_is_unverified`
   - `test_the_plate_lookup_has_exact_bounds`: ages 1, 2, 7 and 8, with 2 and 7 giving 8
@@ -113,7 +113,7 @@ mode-blind `gap.py`.
   - In `test_the_doc_table_is_transcribed_faithfully`, pass `mode="cylinder"`. Its docstring
     points to the Box snapshot, not the in-repo file.
   - Re-key `test_the_table_records_which_rows_are_verified` on `(species, mode, root_type)`.
-- [ ] 4.2 GREEN — `feat(labeling): add the arabidopsis plate primary skeleton row (GREEN)`
+- [x] 4.2 GREEN — `feat(labeling): add the arabidopsis plate primary skeleton row (GREEN)`
   - Add `arabidopsis / plate / primary / "2, 3, 4, 5, 6, 7" / 8 / verified: false`, after
     the cylinder arabidopsis rows.
   - Correct the `skeletons.yaml` header:
@@ -130,20 +130,20 @@ mode-blind `gap.py`.
 
 ## 5. Builder uses the package mode (`Labeling Packages Use Their Own Mode`)
 
-- [ ] 5.1 RED — `test(labeling): pin that packages look up their own mode (RED)`
+- [x] 5.1 RED — `test(labeling): pin that packages look up their own mode (RED)`
   - Add a `node_counts=` parameter to `tests/conftest.py`'s `download`/`build_package_dir`,
     defaulting to today's 6 and 4, so existing callers are unchanged.
   - In `tests/test_labeling_build_package.py`:
     - `skeleton_for(..., mode="plate")` over ages 3-5 gives 8 nodes, and
       `mode="cylinder"` gives 6.
-    - `test_skeleton_for_without_a_mode_is_not_possible`: `mode` is a required argument.
+    - `test_skeleton_for_requires_a_mode`: `mode` is a required argument.
   - In `tests/test_labeling_package.py`:
     - An orchestrator build with `mode: plate`, `root_types=("primary",)` and 8-node
       predictions writes 8 nodes into the `.slp` and into `package_metadata.yaml`, and
       `validate_package` passes. This is a behaviour-level RED: it fails on the 6-node row.
     - A soybean `mode: "multiplant cylinder"` build raises naming `cylinder`, and neither
       the output directory nor a `*.partial-*` directory exists.
-- [ ] 5.2 GREEN — `feat(labeling): build each package against its own capture mode (GREEN)`
+- [x] 5.2 GREEN — `feat(labeling): build each package against its own capture mode (GREEN)`
   - `skeleton_for(species, root_type, ages, mode)` passes `mode` through, from
     `build_package.py:477` and `package.py:226`.
   - Update `skeleton_for`'s docstring: Args and Raises gain mode, and "splits rice by age"
@@ -151,7 +151,8 @@ mode-blind `gap.py`.
 
 ## 6. Integration test (#61)
 
-- [ ] 6.1 `fix(tests): query the labels registry as datasets and pass each collection's mode (#61)`
+- [x] 6.1 `fix(tests): query the labels registry as datasets and pass each collection's mode (#61)`,
+  landed as a RED/GREEN pair (see proposal *Deviations*)
   - Use `inventory.verify._LABELS_ARTIFACT_TYPE`, not `"model"`.
   - Use an explicit literal map from collection name to `(mode, age)`:
     `plate_arabidopsis_2-7DAG_primary_8nodes_labels` maps to `("plate", 2)`, and
@@ -164,14 +165,15 @@ mode-blind `gap.py`.
     the mismatch line) into a helper. Unit-test it in CI with fake names, and with
     `wandb.Api` monkeypatched to assert that `artifact_collections` receives `"dataset"`.
   - Run it locally with `SLEAP_ROOTS_LABEL_SKELETON_CHECK=1` if credentials allow, and paste
-    the result into the PR, or state "not run". Its CI workflow has no `WANDB_API_KEY`, so
+    the result into the PR, or state "not run". It was run on 2026-09-24: 8 collections read,
+    all reported as `Skeleton-N`; filed as #64. Its CI workflow has no `WANDB_API_KEY`, so
     a green check there is not evidence.
 
 ## 7. CI, docs, verification
 
-- [ ] 7.1 `ci(tests): run the suite when the committed inventory changes`: add `inventory/**`
+- [x] 7.1 `ci(tests): run the suite when the committed inventory changes`: add `inventory/**`
   to both path lists in `.github/workflows/ci.yml`.
-- [ ] 7.2 `docs(labeling): the skeleton table's mode key`. Each of these files gets its own
+- [x] 7.2 `docs(labeling): the skeleton table's mode key`. Each of these files gets its own
   edit:
   - `README.md:137-140`: the gap is now history, and the report lists modes with no row.
   - `docs/labeling-packages.md:90-92` and `.claude/commands/build-labeling-package.md:156`:
@@ -181,12 +183,12 @@ mode-blind `gap.py`.
     has an unsolved prerequisite: mode is underivable for 515 of 611 labelled families.
   - `docs/CHANGELOG.md`: add a `### Changed` first bullet with the breaking calls and the
     stale committed report. Amend `### Added`'s #58 sentence to say "since closed".
-- [ ] 7.3 Run CI's gate: `uv run black --check src/sleap_roots_training tests && uv run
+- [x] 7.3 Run CI's gate: `uv run black --check src/sleap_roots_training tests && uv run
   ruff check src/sleap_roots_training && uv run pytest -m "not integration"
   --cov=src/sleap_roots_training --cov-fail-under=95`.
-- [ ] 7.4 Run `openspec validate add-skeleton-mode --strict` on
+- [x] 7.4 Run `openspec validate add-skeleton-mode --strict` on
   `npx -y @fission-ai/openspec@1.5.0` and `@1.11.0`, and paste both into the PR body.
-- [ ] 7.5 Reconcile the implementation against `proposal.md` and both specs. Any deviation
+- [x] 7.5 Reconcile the implementation against `proposal.md` and both specs. Any deviation
   gets a `### Why N instead of M?` note in `proposal.md`.
-- [ ] 7.6 At archive, which happens in its own PR, replace the new `labeling-skeletons`
+- [ ] 7.6 (Deferred to the archive PR, by design.) At archive, which happens in its own PR, replace the new `labeling-skeletons`
   spec's placeholder Purpose. 1.11.0 `--strict` rejects the placeholder.
