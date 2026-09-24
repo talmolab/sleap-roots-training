@@ -110,8 +110,8 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
         ValueError: If the file has no rows, a row is missing a required key, a species,
             mode or root type is outside its vocabulary, a node count is not a positive
             integer, an age list is not a contiguous window, two rows describe the same
-            ``(species, mode, root_type, age)``, or one ``(species, mode, root_type)``
-            carries both an age-agnostic row and an age-split one.
+            ``(species, mode, root_type)`` at the same age window, two of its age windows
+            overlap, or it carries both an age-agnostic row and an age-split one.
     """
     # resolve=False for the same reason the selection matrix uses it: the table has no
     # interpolations, and a value containing `${...}` must not be treated as one.
@@ -133,7 +133,8 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
         )
 
     rows: list[SkeletonRow] = []
-    seen: set[tuple[str, str, str, Optional[str]]] = set()
+    seen: set[tuple[str, str, str, Optional[tuple[int, int]]]] = set()
+    windows: dict[tuple[str, str, str], list[tuple[int, tuple[int, int]]]] = {}
     for index, raw in enumerate(raw_rows):
         if not isinstance(raw, dict):
             raise ValueError(
@@ -157,7 +158,9 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
                 f"(expected one of {sorted(ROOT_TYPE_VOCAB)})"
             )
         mode = raw["mode"]
-        if mode not in MODE_VOCAB:
+        # `isinstance` first: an unhashable value (`mode: [plate]`) would otherwise escape
+        # as a `TypeError` with no row number.
+        if not isinstance(mode, str) or mode not in MODE_VOCAB:
             raise ValueError(
                 f"row {index}: unknown mode {mode!r} "
                 f"(expected one of {sorted(MODE_VOCAB)})"
@@ -169,11 +172,15 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
                 "A skeleton with fewer than two nodes has no edge to label along."
             )
         age = raw.get("age")
+        window = None
         if age is not None:
             age = str(age)
             # Raises with the same message the selection matrix uses for a gapped window.
-            parse_age_window(age)
-        key = (species, mode, root_type, age)
+            window = parse_age_window(age)
+            windows.setdefault((species, mode, root_type), []).append((index, window))
+        # Keyed on the parsed window, not the string: "2,3" and "2, 3" are one window, and
+        # comparing spellings let both load.
+        key = (species, mode, root_type, window)
         if key in seen:
             raise ValueError(
                 f"row {index}: duplicate entry for {species!r}/{root_type!r} in mode "
@@ -204,6 +211,19 @@ def _parse_table(table_path: Path) -> tuple[SkeletonRow, ...]:
     # the dedup exists to prevent, one level up (blocking review of #40). The rule is per
     # mode: rows in different modes are never candidates for the same lookup, so
     # arabidopsis primary may be age-agnostic in cylinder and split on plates.
+    # Overlapping windows in one (species, mode, root_type) load cleanly under the
+    # per-window dedup, and a lookup inside the overlap silently takes the first row in
+    # file order — the same failure the dedup prevents, for windows that are not equal.
+    for (species, mode, root_type), found in sorted(windows.items()):
+        ordered = sorted(found, key=lambda item: item[1])
+        for (first, (_, high)), (second, (low, _)) in zip(ordered, ordered[1:]):
+            if low <= high:
+                raise ValueError(
+                    f"rows {first} and {second}: age windows for {species!r}/"
+                    f"{root_type!r} in mode {mode!r} overlap; a lookup inside the overlap "
+                    "would silently take the first. Make the windows disjoint."
+                )
+
     by_key: dict[tuple[str, str, str], set[Optional[str]]] = {}
     for row in rows:
         by_key.setdefault((row.species, row.mode, row.root_type), set()).add(row.age)
@@ -330,8 +350,9 @@ def _warn_if_unverified(row: SkeletonRow) -> SkeletonRow:
     """
     if not row.verified:
         logger.warning(
-            "Skeleton for (%s, %s, %s) is %d nodes, TRANSCRIBED BUT NOT VERIFIED against "
-            "a real artifact. The package will record this table's SHA256, so it stays "
+            "Skeleton for (%s, %s, %s) is %d nodes, NOT VERIFIED against a published "
+            "collection (see the table's header for its source). The package will "
+            "record this table's SHA256, so it stays "
             "distinguishable if the row is corrected — but confirm the count against Bloom "
             "or existing labels before a labeler starts work.",
             row.species,
@@ -366,11 +387,17 @@ def lookup_skeleton(
         The matching row.
 
     Raises:
-        ValueError: If no row matches the species and root type in any mode; if ``mode``
-            is given and has no row for them; if ``mode`` is omitted and rows of more than
+        ValueError: If ``mode`` is outside ``MODE_VOCAB``; if no row matches the species
+            and root type in any mode; if ``mode`` is given and has no row for them; if ``mode`` is omitted and rows of more than
             one mode match; if the chosen mode splits by age and no age was given; or if
             the given age falls outside every window in that mode.
     """
+    if mode is not None and mode not in MODE_VOCAB:
+        # Before any row is consulted: a misspelled mode is a caller error, and "add a
+        # row for this mode" would be advice the loader then refuses.
+        raise ValueError(
+            f"unknown mode {mode!r} (expected one of {sorted(MODE_VOCAB)})"
+        )
     rows = load_skeleton_table() if table is None else table
     candidates = [
         row for row in rows if row.species == species and row.root_type == root_type

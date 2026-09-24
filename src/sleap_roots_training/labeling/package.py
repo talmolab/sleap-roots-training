@@ -224,7 +224,9 @@ def build_labeling_package(
     # `validate_package`'s check that the two agree compares a thing with itself.
     skeletons = {
         root_type: tuple(
-            skeleton_for(metadata.species, root_type, ages, metadata.mode).node_names
+            skeleton_for(
+                metadata.species, root_type, ages, mode=metadata.mode
+            ).node_names
         )
         for root_type in metadata.root_types
     }
