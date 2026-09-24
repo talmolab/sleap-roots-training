@@ -23,6 +23,7 @@ from sleap_roots_training.labeling.skeletons import (
     skeleton_table_sha256,
 )
 from sleap_roots_training.registry.chooser import (
+    MODE_VOCAB,
     load_selection_matrix,
     parse_age_window,
 )
@@ -223,13 +224,15 @@ def test_an_empty_table_is_rejected(tmp_path):
 
 
 def test_a_missing_key_is_reported_with_its_row_number(tmp_path):
-    body = "skeletons:\n  - species: soybean\n    root_type: primary\n"
+    body = (
+        "skeletons:\n  - species: soybean\n    root_type: primary\n    mode: cylinder\n"
+    )
     with pytest.raises(ValueError, match="row 0: missing required key 'node_count'"):
         load_skeleton_table(write_table(tmp_path, body))
 
 
 def test_an_unknown_species_is_reported_with_its_row_number(tmp_path):
-    body = "skeletons:\n  - species: wheat\n    root_type: primary\n    node_count: 6\n"
+    body = "skeletons:\n  - species: wheat\n    root_type: primary\n    mode: cylinder\n    node_count: 6\n"
     with pytest.raises(ValueError, match="row 0: unknown species 'wheat'"):
         load_skeleton_table(write_table(tmp_path, body))
 
@@ -237,8 +240,8 @@ def test_an_unknown_species_is_reported_with_its_row_number(tmp_path):
 def test_an_unknown_root_type_is_reported_with_its_row_number(tmp_path):
     body = (
         "skeletons:\n"
-        "  - species: soybean\n    root_type: primary\n    node_count: 6\n"
-        "  - species: soybean\n    root_type: taproot\n    node_count: 6\n"
+        "  - species: soybean\n    root_type: primary\n    mode: cylinder\n    node_count: 6\n"
+        "  - species: soybean\n    root_type: taproot\n    mode: cylinder\n    node_count: 6\n"
     )
     with pytest.raises(ValueError, match="row 1: unknown root_type 'taproot'"):
         load_skeleton_table(write_table(tmp_path, body))
@@ -248,7 +251,7 @@ def test_an_unknown_root_type_is_reported_with_its_row_number(tmp_path):
 def test_a_node_count_that_cannot_describe_a_root_is_rejected(tmp_path, node_count):
     """Fewer than two nodes leaves no edge to label along."""
     body = (
-        f"skeletons:\n  - species: soybean\n    root_type: primary\n"
+        f"skeletons:\n  - species: soybean\n    root_type: primary\n    mode: cylinder\n"
         f"    node_count: {node_count}\n"
     )
     with pytest.raises(ValueError, match="node_count"):
@@ -258,7 +261,7 @@ def test_a_node_count_that_cannot_describe_a_root_is_rejected(tmp_path, node_cou
 def test_a_gapped_age_window_is_rejected(tmp_path):
     """Same rule the selection matrix applies, so the two files cannot drift on it."""
     body = (
-        "skeletons:\n  - species: rice\n    root_type: crown\n"
+        "skeletons:\n  - species: rice\n    root_type: crown\n    mode: cylinder\n"
         '    age: "2, 3, 5"\n    node_count: 6\n'
     )
     with pytest.raises(ValueError, match="not contiguous"):
@@ -269,11 +272,90 @@ def test_a_duplicate_entry_is_rejected(tmp_path):
     """A silent first-match win is how a table grows two answers to one question."""
     body = (
         "skeletons:\n"
-        "  - species: soybean\n    root_type: primary\n    node_count: 6\n"
-        "  - species: soybean\n    root_type: primary\n    node_count: 8\n"
+        "  - species: soybean\n    root_type: primary\n    mode: cylinder\n    node_count: 6\n"
+        "  - species: soybean\n    root_type: primary\n    mode: cylinder\n    node_count: 8\n"
     )
-    with pytest.raises(ValueError, match="row 1: duplicate entry"):
+    with pytest.raises(ValueError, match="row 1: duplicate entry") as excinfo:
         load_skeleton_table(write_table(tmp_path, body))
+
+    # Both rows are cylinder, so the message has to say which mode the clash is in.
+    assert "cylinder" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------------------
+# add-skeleton-mode — Skeleton Table Mode Key
+# --------------------------------------------------------------------------------------
+
+
+def test_a_row_without_a_mode_is_rejected(tmp_path):
+    """A default mode would be picking; a missing one is a table error, row-numbered."""
+    body = (
+        "skeletons:\n"
+        "  - species: soybean\n    root_type: primary\n    mode: cylinder\n"
+        "    node_count: 6\n"
+        "  - species: soybean\n    root_type: lateral\n    node_count: 4\n"
+    )
+    with pytest.raises(ValueError, match="row 1: missing required key 'mode'"):
+        load_skeleton_table(write_table(tmp_path, body))
+
+
+def test_an_unknown_mode_lists_the_vocabulary(tmp_path):
+    """``plates`` is the path token, not the contract's ``plate``."""
+    body = (
+        "skeletons:\n  - species: soybean\n    root_type: primary\n"
+        "    mode: plates\n    node_count: 6\n"
+    )
+    with pytest.raises(ValueError, match="row 0: unknown mode 'plates'") as excinfo:
+        load_skeleton_table(write_table(tmp_path, body))
+
+    # Derived from the vocabulary, so a contract that grows a mode updates the check.
+    for mode in sorted(MODE_VOCAB):
+        assert mode in str(excinfo.value)
+
+
+def test_multiplant_cylinder_is_a_valid_table_mode(tmp_path):
+    """Characterisation: validation is vocabulary-driven, so every contract mode loads."""
+    body = (
+        "skeletons:\n  - species: arabidopsis\n    root_type: primary\n"
+        "    mode: multiplant cylinder\n    node_count: 6\n"
+    )
+    assert load_skeleton_table(write_table(tmp_path, body))
+
+
+def test_one_key_in_two_modes_is_not_a_duplicate(tmp_path):
+    """RED against the mode-blind key: this was rejected as a duplicate."""
+    body = (
+        "skeletons:\n"
+        "  - species: soybean\n    root_type: primary\n    mode: cylinder\n"
+        "    age: null\n    node_count: 6\n"
+        "  - species: soybean\n    root_type: primary\n    mode: plate\n"
+        "    age: null\n    node_count: 8\n"
+    )
+    rows = load_skeleton_table(write_table(tmp_path, body))
+
+    assert sorted((row.mode, row.node_count) for row in rows) == [
+        ("cylinder", 6),
+        ("plate", 8),
+    ]
+
+
+def test_a_pair_may_be_agnostic_in_one_mode_and_split_in_another(tmp_path):
+    """RED against the mode-blind shadow check, which rejected this outright.
+
+    It is the committed table's own shape: arabidopsis primary is age-agnostic in
+    cylinder and split by age in plate. The shadow rule is about one lookup reaching
+    every row, and rows in different modes are never candidates for the same lookup.
+    """
+    body = (
+        "skeletons:\n"
+        "  - species: arabidopsis\n    root_type: primary\n    mode: cylinder\n"
+        "    age: null\n    node_count: 6\n"
+        "  - species: arabidopsis\n    root_type: primary\n    mode: plate\n"
+        '    age: "2, 3, 4, 5, 6, 7"\n    node_count: 8\n'
+    )
+    rows = load_skeleton_table(write_table(tmp_path, body))
+
+    assert len(rows) == 2
 
 
 # --------------------------------------------------------------------------------------
@@ -292,12 +374,15 @@ def test_an_age_agnostic_row_may_not_shadow_an_age_split_one(tmp_path):
     """
     body = (
         "skeletons:\n"
-        "  - species: rice\n    root_type: crown\n    age: null\n    node_count: 6\n"
-        "  - species: rice\n    root_type: crown\n"
+        "  - species: rice\n    root_type: crown\n    mode: cylinder\n    age: null\n    node_count: 6\n"
+        "  - species: rice\n    root_type: crown\n    mode: cylinder\n"
         '    age: "6, 7, 8"\n    node_count: 9\n'
     )
-    with pytest.raises(ValueError, match="both an age-agnostic row"):
+    with pytest.raises(ValueError, match="both an age-agnostic row") as excinfo:
         load_skeleton_table(write_table(tmp_path, body))
+
+    # The rule now applies per mode, so the message names the mode it fired in.
+    assert "cylinder" in str(excinfo.value)
 
 
 def test_a_fully_age_split_pair_is_still_allowed(tmp_path):
@@ -341,7 +426,7 @@ def test_looking_up_a_verified_skeleton_is_quiet(caplog):
 @pytest.mark.parametrize("bad", ["maybe", "1", "null"])
 def test_a_non_boolean_verified_flag_is_rejected(tmp_path, bad):
     body = (
-        "skeletons:\n  - species: soybean\n    root_type: primary\n"
+        "skeletons:\n  - species: soybean\n    root_type: primary\n    mode: cylinder\n"
         f"    node_count: 6\n    verified: {bad}\n"
     )
     with pytest.raises(ValueError, match="verified must be true or false"):
@@ -471,9 +556,7 @@ def test_an_edited_table_is_re_read_rather_than_served_from_the_cache(tmp_path):
     same-length correction (``6`` to ``9``) leaves the size identical, and a checkout can
     reuse an mtime at coarser resolution than an edit-and-rerun takes.
     """
-    body = (
-        "skeletons:\n  - species: soybean\n    root_type: primary\n    node_count: 6\n"
-    )
+    body = "skeletons:\n  - species: soybean\n    root_type: primary\n    mode: cylinder\n    node_count: 6\n"
     path = write_table(tmp_path, body)
     assert load_skeleton_table(path)[0].node_count == 6
 
