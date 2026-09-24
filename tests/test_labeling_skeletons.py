@@ -18,6 +18,7 @@ import collections
 import csv
 import os
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -729,6 +730,48 @@ def test_an_auto_generated_skeleton_name_is_reported_as_a_mismatch():
 #: local run should not do that by accident.
 _REGISTRY_CHECK_ENV = "SLEAP_ROOTS_LABEL_SKELETON_CHECK"
 
+#: The mode (and, for an age-split row, an age inside its window) each collection is
+#: checked in. An explicit literal, not parsed from names: only these two collections'
+#: names carry a mode, and a collection absent from the map is looked up with no mode, so
+#: a species and root type with rows in several modes is *reported* rather than guessed.
+_COLLECTION_MODES: dict[str, tuple[Optional[str], Optional[int]]] = {
+    "plate_arabidopsis_2-7DAG_primary_8nodes_labels": ("plate", 2),
+    "cyl_arabidopsis_7-11DAG_primary_6nodes_labels": ("cylinder", None),
+}
+
+
+def _label_collections(api, project):
+    """Yield the labels registry's collections.
+
+    The labels registry holds ``dataset`` collections; querying ``model`` raises
+    ``Unable to parse 'ArtifactCollections' response data`` (#61, measured in #58). The
+    type is the inventory's own constant, so the two checks cannot drift apart again.
+    """
+    from sleap_roots_training.inventory.verify import _LABELS_ARTIFACT_TYPE
+
+    return api.artifact_collections(project, _LABELS_ARTIFACT_TYPE)
+
+
+def _check_skeleton(collection_name, skeleton_name, node_names):
+    """Return a mismatch line for one skeleton in one collection, or ``None`` if it agrees.
+
+    ``Skeleton-N`` names — every plate file's — do not partition into a species and root
+    type, so they are reported here rather than skipped: a check that skipped them would
+    pass without having looked.
+    """
+    species, _, root_type = skeleton_name.partition("_")
+    mode, age = _COLLECTION_MODES.get(collection_name, (None, None))
+    try:
+        row = lookup_skeleton(species, root_type, age=age, mode=mode)
+    except ValueError as error:
+        return f"{collection_name}: {skeleton_name}: {error}"
+    if tuple(node_names) != row.node_names:
+        return (
+            f"{collection_name}: {skeleton_name} has {len(node_names)} nodes "
+            f"{list(node_names)}, table says {row.node_count} {list(row.node_names)}"
+        )
+    return None
+
 
 @pytest.mark.integration
 def test_the_table_agrees_with_the_published_label_collections(tmp_path):
@@ -743,7 +786,10 @@ def test_the_table_agrees_with_the_published_label_collections(tmp_path):
 
     A disagreement is a finding either way — the table may be wrong, or a published
     collection may have been labeled against a skeleton nobody recorded — so it reports
-    every mismatch rather than stopping at the first, and names the collection.
+    every mismatch rather than stopping at the first, and names the collection. The plate
+    collection's files name their skeleton ``Skeleton-N``, so it is expected to be
+    reported as unparseable until that is resolved; the arabidopsis plate row stays
+    ``verified: false`` until it is not.
     """
     if not os.environ.get(_REGISTRY_CHECK_ENV):
         pytest.skip(
@@ -763,26 +809,17 @@ def test_the_table_agrees_with_the_published_label_collections(tmp_path):
 
     mismatches: list[str] = []
     checked = 0
-    for collection in api.artifact_collections(project, "model"):
+    for collection in _label_collections(api, project):
         artifact = api.artifact(f"{project}/{collection.name}:latest")
         directory = artifact.download(root=str(tmp_path / collection.name))
         for slp in sorted(pathlib.Path(directory).rglob("*.slp")):
             labels = sio.load_slp(str(slp), open_videos=False)
             for skeleton in labels.skeletons:
-                species, _, root_type = skeleton.name.partition("_")
-                try:
-                    row = lookup_skeleton(species, root_type)
-                except ValueError as error:
-                    mismatches.append(f"{collection.name}: {skeleton.name}: {error}")
-                    continue
                 checked += 1
                 names = tuple(node.name for node in skeleton.nodes)
-                if names != row.node_names:
-                    mismatches.append(
-                        f"{collection.name}: {skeleton.name} has {len(names)} nodes "
-                        f"{list(names)}, table says {row.node_count} "
-                        f"{list(row.node_names)}"
-                    )
+                mismatch = _check_skeleton(collection.name, skeleton.name, names)
+                if mismatch:
+                    mismatches.append(mismatch)
 
     assert checked, "no skeletons were read; the registry query found nothing"
     assert not mismatches, "\n".join(mismatches)
