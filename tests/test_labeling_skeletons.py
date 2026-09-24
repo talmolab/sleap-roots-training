@@ -142,14 +142,21 @@ def test_every_transcribed_row_is_cylinder():
     assert {r.mode for r in others} == {"cylinder"}
 
 
-def test_the_plate_row_is_unverified():
-    """Landed unverified by decision, and stays so until a person flips it.
+def test_the_plate_row_is_verified():
+    """Verified against the published collection, read by hand (eberrigan, 2026-09-24).
 
-    The published collection agrees when read by hand (8 nodes, 2026-09-24), but the
-    automated published-collections check cannot resolve any collection yet (#64), and
-    the mode is read off directory names. So a plate build still warns.
+    ``plate_arabidopsis_2-7DAG_primary_8nodes_labels`` is 8 nodes r1-r8 with 3,032 user
+    instances, matching this row — the same kind of check the soybean rows were verified
+    on. The automated published-collections check cannot resolve it yet (#64).
     """
-    assert _plate_row().verified is False
+    assert _plate_row().verified is True
+
+
+def test_looking_up_the_verified_plate_row_is_quiet(caplog):
+    with caplog.at_level("WARNING"):
+        lookup_skeleton("arabidopsis", "primary", age=3, mode="plate")
+
+    assert "NOT VERIFIED" not in caplog.text
 
 
 @pytest.mark.parametrize("age, expected", [(1, None), (2, 8), (7, 8), (8, None)])
@@ -641,10 +648,10 @@ def test_the_committed_plate_row_requires_an_age():
     assert "2-7 DAG" in str(excinfo.value)
 
 
-def test_the_warning_does_not_call_a_row_read_from_files_transcribed(caplog):
-    """RED: every unverified row was called TRANSCRIBED, including the plate one."""
+def test_the_warning_does_not_call_every_unverified_row_transcribed(caplog):
+    """Every unverified row was called TRANSCRIBED, whatever its source."""
     with caplog.at_level("WARNING"):
-        lookup_skeleton("arabidopsis", "primary", age=3, mode="plate")
+        lookup_skeleton("arabidopsis", "primary", mode="cylinder")
 
     assert "NOT VERIFIED" in caplog.text
     assert "TRANSCRIBED" not in caplog.text
