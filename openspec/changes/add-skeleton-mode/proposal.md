@@ -39,8 +39,8 @@ from the files, but it cannot read node names here: every plate file names its s
   `mode: cylinder`. Their only in-repo provenance is `/build-labeling-package`, which builds
   "from a finished cylinder experiment".
 - **One new row:** `arabidopsis / plate / primary`, `age: "2, 3, 4, 5, 6, 7"`, `node_count: 8`,
-  **`verified: false`**. It is flipped in a later change, once the published-collections check
-  can read `plate_arabidopsis_2-7DAG_primary_8nodes_labels`. The header records the evidence
+  **`verified: true`**, on a hand read of `plate_arabidopsis_2-7DAG_primary_8nodes_labels`
+  (see *Decisions*). The header records the evidence
   and the open questions: the 7-node and 6-node families, and DAP versus DAG.
 - **BREAKING — `SkeletonRow`** gains a required `mode: str`, and the loader validates it
   against `chooser.MODE_VOCAB` (`Skeleton Table Mode Key`).
@@ -71,14 +71,14 @@ from the files, but it cannot read node names here: every plate file names its s
   change removes. For the same reason, `mode` is required in the YAML.
 - **Why age-split at 2–7?** The evidence covers exactly 2–7. A day-8 lookup fails and lists
   the window, rather than claiming a node count nothing has shown.
-- **Why `verified: false`?** It was decided before implementation (eberrigan). The
-  evidence was then node counts from unregistered files whose mode is read from their
-  names. During implementation the published collection was read by hand and agrees:
-  8 nodes, `r1`–`r8` (see *Deviations*). The flag still stays false, because the
-  automated check that the header names as what flips rows cannot resolve any
-  collection yet (#64), and flipping it is a human decision. The arabidopsis cylinder
-  row, whose collection also agrees when read by hand (6 nodes), stays false for the
-  same reason.
+- **Why `verified: true`?** Before implementation the decision was to land it `false`
+  and flip it once the published collection had been checked (eberrigan). During
+  implementation the collection was downloaded and read by hand: 8 nodes, `r1`–`r8`,
+  3,032 user instances (see *Deviations*). On 2026-09-24 eberrigan chose to flip it on
+  that read, which is the same kind of check the soybean rows were verified on, rather
+  than wait for the automated check, which cannot resolve any collection yet (#64). The
+  arabidopsis cylinder row, whose collection also reads as 6 nodes, was not in that
+  decision and stays `false`.
 - **Why does the plate row share the skeleton name `arabidopsis_primary` with the cylinder
   row?** `to_skeleton()` names skeletons `{species}_{root_type}`. The two are told apart by
   node count and by `package_metadata.yaml`'s `mode`. Renaming is out of scope.
@@ -93,8 +93,8 @@ reported: every published collection names its skeleton `Skeleton-N`. So the #61
 fix works, but the check cannot resolve any collection by name. Reading the downloaded
 files directly, the plate collection is 8 nodes (`r1`–`r8`, 3,032 user instances) and
 the cylinder one is 6. Every count agrees with its row. This is filed as #64, which has
-the full table. The plate row stays `verified: false`, as decided: flipping it waits on
-a way for the check to know each collection's key.
+the full table. On that hand read the plate row was flipped to `verified: true`
+(eberrigan); see *Decisions*.
 
 ### Why the loader also rejects overlapping age windows
 

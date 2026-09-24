@@ -36,8 +36,9 @@ All notable changes to this project are documented here. The format is based on
 - **`skeletons.yaml` rows carry a required `mode`, and `lookup_skeleton` takes one** — closing the
   keying gap the label inventory reported (#58). Every transcribed row is `mode: cylinder`; a new
   `arabidopsis / plate / primary` row covers ages 2–7 at 8 nodes, read from the committed scan and
-  `verified: false` until the automated published-collections check can read it (#64). The
-  labeling builder passes the package's own `--mode`, so it needs no new input. **Breaking:** `lookup_skeleton(species,
+  verified by hand against the published `plate_arabidopsis_2-7DAG_primary_8nodes_labels` (the
+  automated check cannot resolve collections yet, #64). The labeling builder passes the package's
+  own `--mode`, so it needs no new input. **Breaking:** `lookup_skeleton(species,
   root_type)` now raises when rows of more than one mode match, rather than picking; `SkeletonRow`
   requires `mode=`; a `plate` or `multiplant cylinder` package for a pair with no row in that mode
   fails instead of silently getting the cylinder skeleton (no multiplant rows yet, #62); and the

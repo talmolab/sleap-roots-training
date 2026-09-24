@@ -83,7 +83,7 @@ mode. The warning for an unverified row names the species, mode and root type.
 - **THEN** the logged warning names its species, mode and root type
 
 ### Requirement: Committed Skeleton Rows Carry Their Mode
-The committed `skeletons.yaml` SHALL mark every transcribed row `mode: cylinder` and SHALL carry an unverified `arabidopsis/plate/primary` row at 8 nodes for ages 2-7 whose node count agrees with the committed label inventory.
+The committed `skeletons.yaml` SHALL mark every transcribed row `mode: cylinder` and SHALL carry a verified `arabidopsis/plate/primary` row at 8 nodes for ages 2-7 whose node count agrees with the committed label inventory.
 
 The transcribed rows' only in-repo source, `/build-labeling-package`, builds from cylinder
 experiments. The plate row's node count SHALL be the strict plurality among labelled
@@ -95,9 +95,9 @@ later scan that moves the evidence fails the test instead of silently diverging.
 - **WHEN** the committed table is loaded
 - **THEN** every row other than the arabidopsis plate primary row has `mode` `cylinder`
 
-#### Scenario: The plate row is unverified
+#### Scenario: The plate row is verified
 - **WHEN** the committed table is loaded
-- **THEN** the arabidopsis plate primary row has `verified: false`
+- **THEN** the arabidopsis plate primary row has `verified: true`, recorded against a hand read of `plate_arabidopsis_2-7DAG_primary_8nodes_labels`
 
 #### Scenario: The plate row agrees with the committed scan
 - **WHEN** labelled arabidopsis plate primary families in `inventory/label-inventory.csv` are counted by node count

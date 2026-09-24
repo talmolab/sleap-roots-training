@@ -22,9 +22,9 @@
 #   - canola, arabidopsis (cylinder), and rice are TRANSCRIBED, NOT VERIFIED. Canola's
 #     lateral count (3) is the one asymmetry in the table — soybean and arabidopsis are both
 #     4 — and nothing here confirms it.
-#   - arabidopsis plate primary is READ FROM FILES, NOT VERIFIED: its node count comes
-#     from the committed scan, and the published collection agrees when read by hand, but
-#     the automated check below cannot yet read any collection (#64). See the row.
+#   - arabidopsis plate primary (8) is VERIFIED (2026-09-24) against the published
+#     collection `plate_arabidopsis_2-7DAG_primary_8nodes_labels`, downloaded and read by
+#     hand: `Skeleton-1`, r1-r8, 3,032 user instances. See the row.
 #   - pennycress has NO ROW ON PURPOSE. The source table omits it, although pennycress is
 #     in SPECIES_VOCAB and has two `model_selection.yaml` rows. The loader fails loudly on
 #     a missing pair rather than defaulting: a wrong node count produces a labeling package
@@ -36,7 +36,10 @@
 # before and after are distinguishable rather than silently different.
 #
 # The verification test against the eight published collections in
-# `wandb-registry-sleap-roots-labels` is what flips the remaining rows to `verified: true`.
+# `wandb-registry-sleap-roots-labels` is meant to flip the remaining rows to
+# `verified: true`, but it cannot yet resolve any collection: every published skeleton is
+# named `Skeleton-N` (#64). Until it can, a row is flipped only on a hand read, as the
+# soybean and arabidopsis plate rows were.
 # ---------------------------------------------------------------------------------------
 #
 # THESE ARE **NATIVE** SKELETONS, NOT THE UNIFIED ONE. This table is *descriptive*: what a
@@ -134,11 +137,10 @@ skeletons:
   # labelled arabidopsis/plate/primary families in `inventory/label-inventory.csv`,
   # enforced by `test_the_plate_row_agrees_with_the_committed_scan` (9 of those 13
   # families are one lineage and its copies, so this is not 13 independent labelings).
-  # The published `plate_arabidopsis_2-7DAG_primary_8nodes_labels`, downloaded and read by
-  # hand on 2026-09-24, is 8 nodes r1-r8 with 3,032 user instances, agreeing with the row.
-  # Still `verified: false`: the automated published-collections check cannot resolve it
-  # (its skeleton is named `Skeleton-1`, #64), the mode is read off directory names, and
-  # flipping the flag is a human decision.
+  # VERIFIED (eberrigan, 2026-09-24) on a hand read of the published
+  # `plate_arabidopsis_2-7DAG_primary_8nodes_labels`: 8 nodes r1-r8, 3,032 user instances,
+  # agreeing with the row. The automated check cannot resolve it (#64); its mode here is
+  # the collection name's `plate`, and the scan's is read off directory names.
   #
   # OPEN, for a person to settle — recorded here, not decided:
   #   - The window's unit. The files say 2-7 **DAP**; the registry collection's name says
@@ -157,6 +159,6 @@ skeletons:
     mode: plate
     age: "2, 3, 4, 5, 6, 7"
     node_count: 8
-    verified: false
+    verified: true
 
   # pennycress: intentionally absent — see the header.

@@ -128,6 +128,13 @@ mode-blind `gap.py`.
   - Update `SkeletonRow.age`'s "Only rice splits by age". Update the test module docstring
     (`:3-7`).
 
+- [x] 4.3 Flip the plate row to `verified: true` (eberrigan, 2026-09-24), after the
+  published collection was read by hand in task 6.1: 8 nodes, `r1`–`r8`, 3,032 user
+  instances (#64). RED: `test_the_plate_row_is_verified` and
+  `test_looking_up_the_verified_plate_row_is_quiet`. GREEN: the row, its comment, the
+  header, the spec scenario and the CHANGELOG. Tasks 4.1–4.2 above record how it first
+  landed, as `false`.
+
 ## 5. Builder uses the package mode (`Labeling Packages Use Their Own Mode`)
 
 - [x] 5.1 RED — `test(labeling): pin that packages look up their own mode (RED)`
