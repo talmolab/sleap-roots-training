@@ -4,8 +4,9 @@
 The skeleton table SHALL key every row on `(species, mode, root_type, age)`, with `mode` a required value from `chooser.MODE_VOCAB`, and SHALL reject a table that violates this with the offending row number.
 
 `mode` is required rather than defaulted: a default is picking, and a missing mode is a
-table error. Duplicate detection and the rule that an age-agnostic row may not shadow an
-age-split one both apply per `(species, mode, root_type)`.
+table error. Duplicate detection, the rule that age windows may not overlap, and the rule
+that an age-agnostic row may not shadow an age-split one all apply per
+`(species, mode, root_type)`, and compare parsed age windows rather than their spelling.
 
 #### Scenario: A row without a mode is rejected
 - **WHEN** row 1 of a table omits `mode`
@@ -26,6 +27,10 @@ age-split one both apply per `(species, mode, root_type)`.
 #### Scenario: A duplicate within one mode is rejected
 - **WHEN** two rows share species, mode, root type and age
 - **THEN** loading raises `ValueError` naming the second row and the mode
+
+#### Scenario: Overlapping age windows in one mode are rejected
+- **WHEN** a table has `arabidopsis/primary` in `plate` at ages 2-7 and at ages 7-9
+- **THEN** loading raises `ValueError` naming both rows and the mode
 
 #### Scenario: Shadowing is still rejected within one mode
 - **WHEN** a table has `rice/crown` in `cylinder` both with `age: null` and split by age
@@ -55,6 +60,10 @@ mode. The warning for an unverified row names the species, mode and root type.
 #### Scenario: A given mode with no row raises
 - **WHEN** `lookup_skeleton("soybean", "primary", mode="multiplant cylinder")` is called and soybean has only cylinder rows
 - **THEN** it raises `ValueError` naming `cylinder` as the mode that exists
+
+#### Scenario: A mode outside the vocabulary is rejected at lookup
+- **WHEN** `lookup_skeleton("arabidopsis", "primary", age=3, mode="Plate")` is called
+- **THEN** it raises `ValueError` naming the mode as unknown and listing `MODE_VOCAB`, before any row is consulted
 
 #### Scenario: A given mode for an uncovered pair fails as before
 - **WHEN** `lookup_skeleton("pennycress", "primary", mode="plate")` is called and pennycress has no row

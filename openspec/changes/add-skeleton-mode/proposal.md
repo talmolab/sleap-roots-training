@@ -96,6 +96,16 @@ the cylinder one is 6. Every count agrees with its row. This is filed as #64, wh
 the full table. The plate row stays `verified: false`, as decided: flipping it waits on
 a way for the check to know each collection's key.
 
+### Why the loader also rejects overlapping age windows
+
+Added after the pre-PR review. The dedup compared age strings, so `"2,3"` and `"2, 3"`,
+or two windows that overlap, loaded within one mode, and a lookup inside the overlap
+took the first row silently. That predates this change, but this change adds a second
+age-split mode. So windows are compared parsed, and overlap within one
+`(species, mode, root_type)` is rejected (`Skeleton Table Mode Key`, new scenario). For
+the same reason, `lookup_skeleton` now rejects a mode outside `MODE_VOCAB` before it
+consults any row, and `skeleton_for`'s `mode` became keyword-only.
+
 ### Why the #61 unit tests inject a fake `Api` instead of monkeypatching `wandb.Api`
 
 The review asked for `wandb.Api` monkeypatched to return fake collections. Instead, the
