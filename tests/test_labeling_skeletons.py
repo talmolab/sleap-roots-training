@@ -13,7 +13,10 @@ it downloads multi-gigabyte artifacts, so it is not part of the default run.
 
 from __future__ import annotations
 
+import collections
+import csv
 import os
+from pathlib import Path
 
 import pytest
 
@@ -61,13 +64,15 @@ def test_the_committed_table_loads_and_is_hashable():
     ],
 )
 def test_the_doc_table_is_transcribed_faithfully(species, root_type, node_count):
-    """Row-for-row against ``build-labeling-package.md:45-51``.
+    """Row-for-row against the Box snapshot's ``build-labeling-package.md:45-51``.
+
+    That source covers cylinder only, so every row it gave is ``mode: cylinder``.
 
     Canola's lateral 3 is deliberately included as-is: it is the table's one asymmetry —
     soybean and arabidopsis laterals are both 4 — and transcribing it accurately is what
     lets the verification test find out whether it is real.
     """
-    assert lookup_skeleton(species, root_type).node_count == node_count
+    assert lookup_skeleton(species, root_type, mode="cylinder").node_count == node_count
 
 
 def test_soybean_matches_the_real_published_artifacts():
@@ -101,6 +106,89 @@ def test_node_names_and_edges_follow_the_fixed_convention():
 def test_the_skeleton_name_matches_what_the_vault_script_wrote():
     """A new package's skeleton has to be recognizable as the same one the corpus uses."""
     assert lookup_skeleton("soybean", "lateral").to_skeleton().name == "soybean_lateral"
+
+
+# --------------------------------------------------------------------------------------
+# add-skeleton-mode — Committed Skeleton Rows Carry Their Mode
+# --------------------------------------------------------------------------------------
+
+#: The committed scan (#58). Resolved from this file, not the working directory, so the
+#: evidence check runs the same from any cwd. It is committed, so absence is a failure.
+_INVENTORY_CSV = (
+    Path(__file__).resolve().parents[1] / "inventory" / "label-inventory.csv"
+)
+
+
+def _plate_row():
+    matches = [
+        r
+        for r in load_skeleton_table()
+        if (r.species, r.mode, r.root_type) == ("arabidopsis", "plate", "primary")
+    ]
+    assert len(matches) == 1, f"expected one arabidopsis plate primary row: {matches}"
+    return matches[0]
+
+
+def test_every_transcribed_row_is_cylinder():
+    """Characterisation: the onboarding doc every other row came from is cylinder-only."""
+    others = [
+        r
+        for r in load_skeleton_table()
+        if (r.species, r.mode, r.root_type) != ("arabidopsis", "plate", "primary")
+    ]
+    assert others
+    assert {r.mode for r in others} == {"cylinder"}
+
+
+def test_the_plate_row_is_unverified():
+    """Its evidence is node counts from unregistered, name-derived-mode files.
+
+    That falls short of the header's definition of verified — checked against a
+    published collection — so it warns until the published-collections check reads
+    ``plate_arabidopsis_2-7DAG_primary_8nodes_labels``.
+    """
+    assert _plate_row().verified is False
+
+
+@pytest.mark.parametrize("age, expected", [(1, None), (2, 8), (7, 8), (8, None)])
+def test_the_plate_lookup_has_exact_bounds(age, expected):
+    """The evidence covers 2-7 exactly; a lookup outside it lists the window."""
+    if expected is None:
+        with pytest.raises(ValueError, match="2-7 DAG"):
+            lookup_skeleton("arabidopsis", "primary", age=age, mode="plate")
+    else:
+        row = lookup_skeleton("arabidopsis", "primary", age=age, mode="plate")
+        assert row.node_count == expected
+    # The cylinder row is untouched by the plate one.
+    cylinder = lookup_skeleton("arabidopsis", "primary", age=age, mode="cylinder")
+    assert cylinder.node_count == 6
+
+
+def test_the_plate_row_agrees_with_the_committed_scan():
+    """The row's node count is the strict plurality in the committed inventory.
+
+    Read, never re-scanned. Families with no user instances are prediction-only copies
+    and are left out. A later scan that moves the evidence fails here instead of
+    silently diverging from the table; CI's path filter includes ``inventory/**`` so a
+    re-scan PR runs this.
+    """
+    assert _INVENTORY_CSV.is_file(), f"committed evidence missing: {_INVENTORY_CSV}"
+    with _INVENTORY_CSV.open(newline="", encoding="utf-8") as handle:
+        counts = collections.Counter(
+            int(row["node_count"])
+            for row in csv.DictReader(handle)
+            if (row["species"], row["mode"], row["root_type"])
+            == ("arabidopsis", "plate", "primary")
+            and row["node_count"]
+            and int(row["user_instances"] or 0) > 0
+        )
+
+    expected = _plate_row().node_count
+    assert counts, "the committed scan has no labelled arabidopsis plate primary family"
+    others = [n for count, n in counts.items() if count != expected]
+    assert all(
+        counts[expected] > n for n in others
+    ), f"{expected} is not the strict plurality: {dict(counts)}"
 
 
 # --------------------------------------------------------------------------------------
@@ -493,15 +581,17 @@ def test_a_fully_age_split_pair_is_still_allowed(tmp_path):
 
 def test_the_table_records_which_rows_are_verified():
     """The header always said so in prose; nothing downstream could read it."""
-    rows = {(r.species, r.root_type): r for r in load_skeleton_table()}
+    # Keyed on the mode too: keyed on (species, root_type) alone, the last row per pair
+    # wins, and a second-mode row silently replaces the one being asserted about.
+    rows = {(r.species, r.mode, r.root_type): r for r in load_skeleton_table()}
 
     # Verified 2026-08-04 against the real WEEP artifacts that became the published
     # collection.
-    assert rows[("soybean", "primary")].verified
-    assert rows[("soybean", "lateral")].verified
+    assert rows[("soybean", "cylinder", "primary")].verified
+    assert rows[("soybean", "cylinder", "lateral")].verified
     # Transcribed from the advisory doc table and not yet confirmed against an artifact.
-    assert not rows[("canola", "lateral")].verified
-    assert not rows[("arabidopsis", "primary")].verified
+    assert not rows[("canola", "cylinder", "lateral")].verified
+    assert not rows[("arabidopsis", "cylinder", "primary")].verified
 
 
 def test_looking_up_an_unverified_skeleton_warns(caplog):
