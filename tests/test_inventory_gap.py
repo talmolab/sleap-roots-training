@@ -1,10 +1,10 @@
-"""The `skeletons.yaml` keying gap — the headline finding.
+"""Where `skeletons.yaml` cannot express the corpus.
 
-Covers ``Requirement: Skeleton Table Keying Gap``. `lookup_skeleton` is keyed
-``(species, root_type, age)`` and takes no ``mode``, so a cylinder family and a plate
-family of the same species and root type select the same row however far apart their
-node counts are. Node counts come from the files and the mode is name-derived from the
-path, so none of this needs a scan database or any other external service.
+Covers ``Requirement: Skeleton Table Mode Gap``. Rows carry a ``mode``, so a family is
+matched on species, mode and root type; what the table can still fail to express is a
+mode the corpus uses and the table has no row for, or a node count the matched row does
+not have. Node counts come from the files and the mode is name-derived from the path, so
+none of this needs a scan database or any other external service.
 """
 
 from __future__ import annotations
@@ -23,39 +23,161 @@ def _observe(path):
     return gap.Observed(family=family, facts=read.read_facts(path))
 
 
-def test_two_capture_modes_select_one_row(tmp_path, monkeypatch):
-    """Scenario: Two capture modes select one row.
+def _row(species, mode, root_type, node_count, age=None):
+    """One injected table row, built inside a test rather than at module scope."""
+    return SkeletonRow(
+        species=species,
+        mode=mode,
+        root_type=root_type,
+        age=age,
+        node_count=node_count,
+    )
 
-    Also asserts the report reaches no network: the repo's own registry tests install
-    this guard because an unguarded read-back would load ``~/.netrc`` and hit
-    api.wandb.ai from a unit test.
+
+def _nodes(count):
+    return tuple(f"r{i}" for i in range(1, count + 1))
+
+
+def test_an_observed_mode_with_no_row_is_reported(tmp_path):
+    """Scenario: An observed mode with no row is reported.
+
+    The committed scan's own case: 10 plate arabidopsis lateral families at 3 nodes, and
+    the table has arabidopsis lateral only in cylinder.
+    """
+    table = (_row("arabidopsis", "cylinder", "lateral", 4),)
+    path = write_labels(
+        tmp_path / "plate_arabidopsis_lateral_3nodes" / "labels.v001.slp",
+        skeleton_names=("Skeleton-1",),
+        node_names=_nodes(3),
+    )
+
+    report = gap.build_report([_observe(path)], table=table)
+
+    assert len(report.mode_gaps) == 1
+    found = report.mode_gaps[0]
+    assert (found.species, found.mode, found.root_type) == (
+        "arabidopsis",
+        "plate",
+        "lateral",
+    )
+    assert found.table_modes == ("cylinder",)
+    assert found.node_counts == (3,)
+    assert len(found.paths) == 1
+
+
+def test_a_mode_with_its_own_row_is_not_a_gap(tmp_path, monkeypatch):
+    """Scenario: A mode with its own row is not a gap.
+
+    The inverse of what the mode-blind table reported as its headline. Also asserts the
+    report reaches no network: the repo's own registry tests install this guard because
+    an unguarded read-back would load ``~/.netrc`` and hit api.wandb.ai from a unit test.
     """
 
     def _no_api(*_args, **_kwargs):
         raise AssertionError("the gap report must not construct a wandb.Api")
 
     monkeypatch.setattr(wandb, "Api", _no_api)
-
+    table = (
+        _row("arabidopsis", "cylinder", "primary", 6),
+        _row("arabidopsis", "plate", "primary", 8, age="2, 3, 4, 5, 6, 7"),
+    )
     cylinder = write_labels(
         tmp_path / "cyl_arabidopsis_primary_6nodes" / "labels.v001.slp",
         skeleton_names=("arabidopsis_primary",),
-        node_names=tuple(f"r{i}" for i in range(1, 7)),
+        node_names=_nodes(6),
     )
     plate = write_labels(
         tmp_path / "plate_arabidopsis_primary_8nodes" / "labels.v001.slp",
         skeleton_names=("arabidopsis_primary",),
-        node_names=tuple(f"r{i}" for i in range(1, 9)),
+        node_names=_nodes(8),
     )
 
-    report = gap.build_report([_observe(cylinder), _observe(plate)])
+    report = gap.build_report([_observe(cylinder), _observe(plate)], table=table)
 
-    assert len(report.mode_collisions) == 1
-    collision = report.mode_collisions[0]
-    assert collision.species == "arabidopsis"
-    assert collision.root_type == "primary"
-    assert set(collision.modes) == {"cylinder", "plate"}
-    assert sorted(collision.node_counts) == [6, 8]
-    assert collision.row_age is None
+    assert report.families_analysed == 2
+    assert report.mode_gaps == []
+    assert report.node_count_disagreements == []
+
+
+def test_an_uncovered_species_is_not_a_mode_gap(tmp_path):
+    """Scenario: An uncovered species is not a mode gap. It is reported once, as uncovered."""
+    table = (_row("soybean", "cylinder", "lateral", 4),)
+    path = write_labels(
+        tmp_path / "SLEAP_medicago_plates" / "lateral" / "labels.v001.slp",
+        skeleton_names=("Skeleton-0",),
+        node_names=_nodes(3),
+    )
+
+    report = gap.build_report([_observe(path)], table=table)
+
+    assert "medicago" in report.uncovered_species
+    assert report.mode_gaps == []
+
+
+def test_a_covered_species_whose_root_type_has_no_row_is_neither(tmp_path):
+    """Rice has rows, but no lateral row in any mode: not a mode gap, not uncovered."""
+    table = (_row("rice", "cylinder", "crown", 6, age="2, 3, 4, 5"),)
+    path = write_labels(
+        tmp_path / "plate_rice_lateral" / "labels.v001.slp",
+        skeleton_names=("Skeleton-0",),
+        node_names=_nodes(4),
+    )
+
+    report = gap.build_report([_observe(path)], table=table)
+
+    assert report.families_analysed == 1
+    assert report.mode_gaps == []
+    assert report.node_count_disagreements == []
+    assert "rice" not in report.uncovered_species
+
+
+def test_a_mode_gap_aggregates_node_counts_across_families(tmp_path):
+    table = (_row("arabidopsis", "cylinder", "lateral", 4),)
+    three = write_labels(
+        tmp_path / "plate_arabidopsis_lateral_a" / "labels.v001.slp",
+        node_names=_nodes(3),
+    )
+    four = write_labels(
+        tmp_path / "plate_arabidopsis_lateral_b" / "labels.v001.slp",
+        node_names=_nodes(4),
+    )
+
+    report = gap.build_report([_observe(three), _observe(four)], table=table)
+
+    assert len(report.mode_gaps) == 1
+    assert report.mode_gaps[0].node_counts == (3, 4)
+    assert len(report.mode_gaps[0].paths) == 2
+
+
+def test_a_disagreeing_node_count_is_reported(tmp_path):
+    """Scenario: A disagreeing node count is reported. Printed, not resolved.
+
+    The committed scan's own case: plate arabidopsis primary families at 7 nodes sit in a
+    directory named `primary_root_8nodes`, beside the 8-node files the row describes.
+    """
+    table = (_row("arabidopsis", "plate", "primary", 8, age="2, 3, 4, 5, 6, 7"),)
+    agrees = write_labels(
+        tmp_path / "plate_arabidopsis_primary_a" / "labels.v001.slp",
+        node_names=_nodes(8),
+    )
+    disagrees = write_labels(
+        tmp_path / "plate_arabidopsis_primary_b" / "labels.v001.slp",
+        node_names=_nodes(7),
+    )
+
+    report = gap.build_report([_observe(agrees), _observe(disagrees)], table=table)
+
+    assert report.mode_gaps == []
+    assert len(report.node_count_disagreements) == 1
+    found = report.node_count_disagreements[0]
+    assert (found.species, found.mode, found.root_type) == (
+        "arabidopsis",
+        "plate",
+        "primary",
+    )
+    assert found.row_node_counts == (8,)
+    assert found.observed == (7,)
+    assert len(found.paths) == 1
 
 
 def test_a_species_with_no_row_is_reported(tmp_path):
@@ -95,8 +217,8 @@ def test_an_auto_generated_skeleton_name_is_unparseable(tmp_path):
     """Scenario: An auto-generated skeleton name is unparseable.
 
     ``"Skeleton-1".partition("_")`` yields ``('Skeleton-1', '', '')`` — an empty root
-    type — so the weekly check at ``tests/test_labeling_skeletons.py:419`` cannot resolve
-    it, and neither can anything else keyed that way.
+    type — so ``test_the_table_agrees_with_the_published_label_collections`` cannot
+    resolve it, and neither can anything else keyed that way.
     """
     path = write_labels(
         tmp_path / "SLEAP_sorghum" / "primary_6nodes" / "labels.v001.slp",
