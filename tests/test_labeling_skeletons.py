@@ -643,6 +643,86 @@ def test_a_malformed_table_fails_as_a_message_not_an_attribute_error(
 # --------------------------------------------------------------------------------------
 
 
+# The per-collection resolution the integration test below runs, unit-tested here with fake
+# collections so the #61 fix — the registry is queried for `dataset` collections, and each
+# collection is looked up in its own mode — is verified in CI, where the download is not.
+
+
+class _FakeCollection:
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakeApi:
+    """Records the artifact type it is queried with; returns the given collections."""
+
+    def __init__(self, names=()):
+        self.names = names
+        self.queried = []
+
+    def artifact_collections(self, project, type_name):
+        self.queried.append((project, type_name))
+        return [_FakeCollection(name) for name in self.names]
+
+
+def test_the_registry_is_queried_for_dataset_collections():
+    """RED against #61: the test asked for ``model``, which the labels registry rejects."""
+    import test_labeling_skeletons as module
+
+    api = _FakeApi()
+    assert list(module._label_collections(api, "entity-org/labels")) == []
+    assert api.queried == [("entity-org/labels", "dataset")]
+
+
+def test_a_mapped_collection_is_checked_in_its_own_mode_and_age():
+    """The plate collection is age-split, so the map carries an age as well as a mode."""
+    import test_labeling_skeletons as module
+
+    mismatch = module._check_skeleton(
+        "plate_arabidopsis_2-7DAG_primary_8nodes_labels",
+        "arabidopsis_primary",
+        tuple(f"r{i}" for i in range(1, 9)),
+    )
+    assert mismatch is None
+
+
+def test_an_unmapped_two_mode_collection_is_reported_not_guessed():
+    import test_labeling_skeletons as module
+
+    mismatch = module._check_skeleton(
+        "arabidopsis_somewhere_labels",
+        "arabidopsis_primary",
+        tuple(f"r{i}" for i in range(1, 7)),
+    )
+    assert mismatch is not None
+    assert "more than one capture mode" in mismatch
+
+
+def test_a_node_count_disagreement_names_the_collection_and_both_counts():
+    import test_labeling_skeletons as module
+
+    mismatch = module._check_skeleton(
+        "cyl_arabidopsis_7-11DAG_primary_6nodes_labels",
+        "arabidopsis_primary",
+        tuple(f"r{i}" for i in range(1, 8)),
+    )
+    assert mismatch.startswith("cyl_arabidopsis_7-11DAG_primary_6nodes_labels:")
+    assert "7 nodes" in mismatch and "table says 6" in mismatch
+
+
+def test_an_auto_generated_skeleton_name_is_reported_as_a_mismatch():
+    """Plate files name their skeleton ``Skeleton-N``; that is reported, not skipped."""
+    import test_labeling_skeletons as module
+
+    mismatch = module._check_skeleton(
+        "plate_arabidopsis_2-7DAG_primary_8nodes_labels",
+        "Skeleton-1",
+        tuple(f"r{i}" for i in range(1, 9)),
+    )
+    assert mismatch is not None
+    assert "Skeleton-1" in mismatch
+
+
 #: Opt-in for the registry verification below. It is marked ``integration`` (so CI's
 #: ``-m "not integration"`` deselects it) *and* gated on this variable, because unlike the
 #: other integration tests it downloads 170 MB - 1.2 GB per collection, eight times. A
