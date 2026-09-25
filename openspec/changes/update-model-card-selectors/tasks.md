@@ -505,7 +505,7 @@ not the file move.
 and the alias lands wherever `link_artifact` ran last — with both reporting success. Announce the
 window, and re-run `--verify` immediately before 6.3 to confirm nothing else wrote since 6.2.
 
-- [ ] 6.0 **Rollback prep, before touching anything.** An earlier draft wrote this for an *in-place*
+- [x] 6.0 **Rollback prep, before touching anything.** An earlier draft wrote this for an *in-place*
       migration; under option 1 nothing is overwritten, so there is no old alias to re-point and the
       real rollback runs the other way. (a) Record the current 13 collection → aliased artifact
       **version** mappings to a file committed with this PR, as a baseline snapshot. (b) The rollback
@@ -532,7 +532,20 @@ the inverse. Neither ever sees two cards for one context, so nothing can hit
 `choose_models`' ambiguity raise. Retirement (6.3) is what ends the un-upgraded generation's access,
 which is why it stays gated on confirmed deployment.
 
-- [ ] 6.1 **Canary first**, and make it falsifiable. Re-seed one collection with
+      *Done 2026-09-24:* (a) baseline `docs/migration/2026-09-22-pre-reseed-baseline.json` (`b43464a`,
+      sha256 `8aa8f52e…`). (b) Drop rehearsed on the canary: fetched the registry link, asserted
+      `is_link`, `unlink()` → `:production` no longer resolves; an upgraded predict (predict#45) fell
+      back to `NoReadableModelCardsError` over the 13 flat cards and `main` resolved its 13 flat cards
+      with 0 skips — i.e. exactly the pre-canary state. (c) Nothing deleted. (d) Canary recorded:
+      registry link `rice-younger-primary-230104_182346.multi_instance.n-720:v0` aliases
+      [`latest`, `production`], source
+      `migrate-model-card-selectors/rice-younger-primary-230104_182346.multi_instance.n-720:v0`, digest
+      `bb373c5c5ddd8d7711b8b5cf39c4d638` (equals the old flat `rice-cylinder-primary-age2-5`
+      `weights_checksum`); record the other 7 as they are created in 6.1. (e) Un-retirement rehearsed:
+      `link(<registry target>, aliases=["production"])` on the recorded source `v0` (never `save()`) →
+      identical link (`v0`, `latest`+`production`, same digest and source); both consumer generations
+      returned to the canary state.
+- [x] 6.1 **Canary first**, and make it falsifiable. Re-seed one collection with
       `seed-registry --only <collection>`, then: (a) `--verify --only <id>` for producer-side alias +
       new-shape read-back; (b) point an **upgraded** predict at the live registry for that collection's
       selection contexts and assert it resolves to the new collection's `registry_id` and that
@@ -543,12 +556,36 @@ which is why it stays gated on confirmed deployment.
       check predict's logs for the expected skip warnings on the other side of each pairing, since a
       silent absence of warnings would mean the cards are being filtered somewhere earlier than
       believed. Only then re-seed the remaining 7. A live wandb re-seed is not `git revert`-able.
-- [ ] 6.2 Run a **full** `--verify` (never a canary run — orphan reporting is suppressed under
+      *Progress 2026-09-24 — canary done, remaining 7 NOT yet re-seeded (so 6.1 stays open):*
+      `seed-registry --execute --only rice-younger-primary-230104_182346.multi_instance.n-720`
+      published 1. (a) `--verify --only` → present. (b) predict#45's branch
+      (`scripts/canary_check.py`): lists 1 card, 13 skip warnings, selects the new collection's
+      `registry_id` for rice/cylinder/3 without raising; `pytest -m wandb` 2 passed. (c) predict
+      `main` (contracts 0.1.0a7): lists its 13 flat cards, still selects `rice-cylinder-primary-age2-5`,
+      listing did not fail. (d) Skip warnings present on both sides: 13 on the branch (every flat
+      card), 1 on `main` (the canary, "4 validation errors"). Re-verified on predict#45's final head
+      `cd21bc2`, including its container image on GPU. Evidence: predict#45 and predict#34's
+      2026-09-24 comment.
+      *Completed 2026-09-24:* the remaining 7 re-seeded with
+      `seed-registry --execute --only <each of the 7>` — published 7, skipped 0, failed 0. Each new
+      collection's `production` link is `v0` and selector-shaped; versions and digests recorded in
+      `docs/migration/2026-09-24-post-reseed-state.json` (6.0(d)). Every new card's digest equals the
+      old flat cards' `weights_checksum` for the same `source_model_id` — byte-identical weights, not
+      only matching labels. predict#34 C1: predict `main` (after #45) over the 8 live cards
+      reproduces the offline A1 selection table exactly — 270 cells, 67 selecting on each side, 0
+      errors.
+- [x] 6.2 Run a **full** `--verify` (never a canary run — orphan reporting is suppressed under
       `--only`) and confirm the orphan report names exactly **13** collections. That is now fixed rather
       than conditional: 0.2 chose the `source_model_id`-derived scheme, so every existing id changes and
       the re-seed is purely additive. While
       here, record the registry's actual storage figures for the 13 collections, so `proposal.md` can
       stop hedging about whether the duplication ever cost real bytes.
+      *Done 2026-09-24:* full `--verify` — all 8 expected collections present; **exactly 13 orphans**,
+      the 13 flat collections (`arabidopsis-cylinder-lateral-age2-14` … `soybean-cylinder-primary-age2-8`).
+      Storage (`Artifact.size`, logical bytes): the 13 flat collections total **1,145,440,066** bytes
+      for **665,522,407** bytes of distinct weights (8 physical models); the 8 new collections total
+      exactly **665,522,407**. The duplication therefore cost ~480 MB of *logical* size; whether W&B
+      stores duplicate content once physically is not visible from the API.
 - [ ] 6.3 Execute the 0.4 decision — gated on confirmed **deployment** of the upgraded
       `sleap-roots-predict`, not merely on `--verify` passing on the producer side. Producer
       verification proves we wrote the new collections correctly; it says nothing about whether
@@ -558,10 +595,28 @@ which is why it stays gated on confirmed deployment.
       canola/pennycress pair differs by species *and* age, not "only by age"), so the issue this
       proposal names as the source of truth stops contradicting the landed design. Link the contracts
       and predict issues from 1.0 / 2.0, plus #46 and predict#14.
-- [ ] 6.5 While the canary is live, settle the question no offline fake can: re-log one card with
+- [x] 6.5 While the canary is live, settle the question no offline fake can: re-log one card with
       byte-identical weights and record whether the production-aliased artifact's metadata actually
       refreshed. If it does, the Re-Publish Metadata Refresh requirement is over-built and should be
       downgraded; if it does not, this is the only direct evidence for it that exists.
+      *Result 2026-09-24: metadata DOES refresh.* Re-logged the canary
+      (`rice-younger-primary-230104_182346.multi_instance.n-720`) exactly as `publish_card` does —
+      same `add_dir` of the same resolved weights, `log_artifact` → `wait` → `link_artifact` with
+      `production` — with one extra, consumer-ignored metadata key (`probe_6_5`). wandb 0.28.0 logged
+      "already exists with the same content. No new version will be created" (still `v0`, digest
+      `bb373c5c…` unchanged), **yet** a fresh `wandb.Api()` read of `:production` — and of the source
+      artifact `v0` — showed the new key with selectors otherwise identical. So the "log_artifact is a
+      no-op on an unchanged digest" premise does not hold for metadata on this wandb version: a
+      same-weights, new-metadata re-publish updates the live metadata in place. Restored the exact
+      pre-probe metadata via `Artifact.save()` on the asserted link (the requirement's remedy path —
+      also confirmed to work live); both link and source re-read equal to the snapshot, and
+      predict#45's `scripts/canary_check.py` still resolves the canary (13 skips). Evidence:
+      `docs/migration/2026-09-24-probe-6-5-metadata-refresh.py` and `…-record.json`.
+      **Follow-up, not done here:** per this task's own rule the Re-Publish Metadata Refresh
+      requirement looks over-built and is a candidate for downgrading. Separately, its read-back
+      (`_is_selectors_shape`) only detects the *legacy flat* shape, so it could never have caught a
+      stale-but-selector-shaped blob (e.g. a missing newly added selector); if the requirement is
+      kept, the check should compare the read-back to the intended metadata, not its shape.
 - [ ] 6.6 In the archive PR, restore the requirement order in
       `openspec/specs/model-registry/spec.md`. Verified: because the expansion and publishing
       requirements are replaced (removed + re-added) rather than modified in place, the archiver
