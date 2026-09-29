@@ -616,10 +616,15 @@ which is why it stays gated on confirmed deployment.
       `Artifact.link(<registry>/<collection>, aliases=["production"])` on the recorded source `v0`
       (`…/sleap-roots-training-talmolab/<collection>:v0`, matching the 6.0(a) snapshot) and
       asserts the restored link's digest — never `save()` on the source. Then re-pin the image.
-- [ ] 6.4 Comment the outcome on #39, and **post the correction** to its 2026-08-10 comment (the
+- [x] 6.4 Comment the outcome on #39, and **post the correction** to its 2026-08-10 comment (the
       canola/pennycress pair differs by species *and* age, not "only by age"), so the issue this
       proposal names as the source of truth stops contradicting the landed design. Link the contracts
       and predict issues from 1.0 / 2.0, plus #46 and predict#14.
+      *Done 2026-09-29:* #39 issuecomment-5893045831 — outcome (13 → 8 registrations, storage
+      figures, links to contracts#31/#32, predict#34/#45, srp#89, #68) and the correction, checked
+      against the baseline: `canola-cylinder-{primary,lateral}-age2-13` and
+      `pennycress-cylinder-{primary,lateral}-age2-14` share weights but differ in species and age
+      window. Links #46 and predict#14 as still open.
 - [x] 6.5 While the canary is live, settle the question no offline fake can: re-log one card with
       byte-identical weights and record whether the production-aliased artifact's metadata actually
       refreshed. If it does, the Re-Publish Metadata Refresh requirement is over-built and should be
