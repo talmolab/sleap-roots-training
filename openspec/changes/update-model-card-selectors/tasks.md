@@ -496,9 +496,11 @@ Runs against the live registry **after** the code PR merges. Precedent: the arch
 docs-only PR — `7e81d80` (`archive add-config-schema`, #45) and `df411d3` (`archive
 seed-production-model-registry`, #5, the change this one supersedes). Note the precedent also shows
 these tasks get **ticked**: `seed-production-model-registry`'s live-wandb group 9 was `[x]` when it
-archived. So tick 6.0–6.5 in the migration PR before running `openspec archive`. That PR runs no CI
-(`openspec/**` is not in `ci.yml`'s path filters), and its risky part is the capability-spec promotion,
-not the file move.
+archived. So tick 6.0–6.5 in the migration PR before running `openspec archive`. The archive PR runs
+no CI (`openspec/**` is not in `ci.yml`'s path filters), and its risky part is the capability-spec
+promotion, not the file move. (The migration PR itself does run CI, because `docs/**` is in the
+filters; Lint still covers only `src/` and `tests/`, so its `docs/migration/` scripts are linted by
+hand.)
 
 **Migration steps are single-operator.** `_existing_collections` is read once up front
 (`publish.py:146`), so two concurrent `--execute` runs both see a collection as absent, both publish,
@@ -556,7 +558,7 @@ which is why it stays gated on confirmed deployment.
       check predict's logs for the expected skip warnings on the other side of each pairing, since a
       silent absence of warnings would mean the cards are being filtered somewhere earlier than
       believed. Only then re-seed the remaining 7. A live wandb re-seed is not `git revert`-able.
-      *Progress 2026-09-24 — canary done, remaining 7 NOT yet re-seeded (so 6.1 stays open):*
+      *Progress 2026-09-24 — canary step (superseded by "Completed" below):*
       `seed-registry --execute --only rice-younger-primary-230104_182346.multi_instance.n-720`
       published 1. (a) `--verify --only` → present. (b) predict#45's branch
       (`scripts/canary_check.py`): lists 1 card, 13 skip warnings, selects the new collection's
@@ -615,7 +617,23 @@ which is why it stays gated on confirmed deployment.
       --rollback [COLLECTION ...] --execute`, which runs
       `Artifact.link(<registry>/<collection>, aliases=["production"])` on the recorded source `v0`
       (`…/sleap-roots-training-talmolab/<collection>:v0`, matching the 6.0(a) snapshot) and
-      asserts the restored link's digest — never `save()` on the source. Then re-pin the image.
+      asserts the restored link's digest — never `save()` on the source. Then re-pin the image,
+      and commit the updated record. After a full rollback, `--verify` should again show 13
+      orphans and predict `main` 8 cards with 13 skips.
+      **Caveats of the script as executed (kept unchanged here as the record of what ran; found
+      by `/review-pr` on 2026-09-29).** The committed `…-retire-flat-collections-record.json` is
+      the rollback anchor, and the script does not protect it:
+      - **Never run the script without `--rollback` again.** Any forward run, including the default
+        dry run, now fails pre-flight and overwrites the record without the anchors. `--rollback`
+        then raises `KeyError`. If that happens, restore the record with `git checkout` first.
+      - **Check names before `--execute`.** A mistyped name raises `KeyError` partway through the
+        list.
+      - **Only roll back collections whose `:production` is absent.** Rollback does not check first.
+      - **Treat a mid-run network error as unknown.** The script's catch-all `resolves()` treats
+        any error as "not found".
+
+      A tested package command is to supersede this script as the rollback: the follow-up change
+      that adds registry retire/restore.
 - [x] 6.4 Comment the outcome on #39, and **post the correction** to its 2026-08-10 comment (the
       canola/pennycress pair differs by species *and* age, not "only by age"), so the issue this
       proposal names as the source of truth stops contradicting the landed design. Link the contracts
