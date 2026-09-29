@@ -586,11 +586,36 @@ which is why it stays gated on confirmed deployment.
       for **665,522,407** bytes of distinct weights (8 physical models); the 8 new collections total
       exactly **665,522,407**. The duplication therefore cost ~480 MB of *logical* size; whether W&B
       stores duplicate content once physically is not visible from the API.
-- [ ] 6.3 Execute the 0.4 decision — gated on confirmed **deployment** of the upgraded
+- [x] 6.3 Execute the 0.4 decision — gated on confirmed **deployment** of the upgraded
       `sleap-roots-predict`, not merely on `--verify` passing on the producer side. Producer
       verification proves we wrote the new collections correctly; it says nothing about whether
       anything can read them yet. Acceptance: after retirement, `--verify` reports zero orphans and
       zero legacy-shape expected collections; paste that output into the PR.
+      *Done 2026-09-29:* gate met by C2 (predict#34's 2026-09-25 "C2 done" comment; srp#89, runs
+      `6bhzn` + `fcdrk`; the predictor has since moved to predict#47's image via srp#91, also
+      selector-reading). Pre-flight at 14:47 UTC: full `--verify` → 8 present, exactly 13 orphans;
+      predict `main` (`9a6f20c`) `list_cards()` → 8 cards, 13 skips. Other consumers checked: the
+      local-WSL2 predictor (`registry.gitlab.com/salk-tm/sleap-roots-predict:latest`) never reads
+      W&B — it takes a mounted `models_input` filled by the legacy `models-downloader` from an xlsx
+      chooser and local zips; `salk-bloom`'s vendored workflow reaches the predictor only through
+      `templateRef: sleap-roots-predictor-template`; `sleap-roots` and `sleap-roots-pipeline` code
+      have no registry reads. Retired with `docs/migration/2026-09-29-retire-flat-collections.py
+      --execute` (15:02 UTC): pre-flight of all 13 (`v0`, `latest`+`production`, `is_link`, source
+      resolves with equal digest), then per collection fetch link → assert `is_link` → `unlink()` →
+      fresh-Api check that `:production` is gone and the source still resolves — 13 of 13, no
+      `save()`, nothing deleted. Per-step record: `…-retire-flat-collections-record.json`.
+      Acceptance at 15:03 UTC: full `--verify` → 8 present, **0 orphans, 0 legacy**; predict `main`
+      → 8 cards, **0 skips**, rice/cylinder/3 resolves. State:
+      `docs/migration/2026-09-29-post-retirement-state.json` — the 8 new collections unchanged since
+      2026-09-24; the 13 flat collections still exist, now empty, `production` resolves nowhere,
+      every rollback source resolves with its recorded digest.
+      **Rollback is no longer an image re-pin**: the pre-guard image (`sha-e025e309…`) exits `3`
+      silently against selector-only cards. To roll back, restore `production` on the flat
+      collections first: `uv run python docs/migration/2026-09-29-retire-flat-collections.py
+      --rollback [COLLECTION ...] --execute`, which runs
+      `Artifact.link(<registry>/<collection>, aliases=["production"])` on the recorded source `v0`
+      (`…/sleap-roots-training-talmolab/<collection>:v0`, matching the 6.0(a) snapshot) and
+      asserts the restored link's digest — never `save()` on the source. Then re-pin the image.
 - [ ] 6.4 Comment the outcome on #39, and **post the correction** to its 2026-08-10 comment (the
       canola/pennycress pair differs by species *and* age, not "only by age"), so the issue this
       proposal names as the source of truth stops contradicting the landed design. Link the contracts
