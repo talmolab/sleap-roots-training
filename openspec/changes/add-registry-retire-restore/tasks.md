@@ -17,7 +17,7 @@ Nothing in any group writes to W&B.
         full-text copy.
 - [x] 0.2 **Approval.** The proposal is reviewed (`/review-openspec`, three rounds) and approved by
       Elizabeth on 2026-09-29.
-- [ ] 0.3 **Draft PR.** Open the draft PR from this branch, proposal only. Its body notes that an
+- [x] 0.3 **Draft PR.** Opened as #69 (2026-09-29), proposal only. Its body notes that an
       `openspec/**`-only diff triggers no CI, and that the PR becomes the implementation PR after
       0.1. The archive follows as its own `chore(openspec): archive ...` PR, which is the precedent
       set by #63 and #67.
