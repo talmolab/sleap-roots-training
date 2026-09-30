@@ -33,6 +33,18 @@ All notable changes to this project are documented here. The format is based on
   nowhere to record the answer: a person reads the output and decides.
 
 ### Changed
+- **`seed-registry` pins its wandb entity and project** (#69). The seed run used to pass no
+  `project=`, so wandb named the project after the working directory. That is how all 8
+  production sources came to live in a project called `migrate-model-card-selectors`. The run is
+  now created with the configured entity and `SLEAP_ROOTS_SEED_PROJECT` (default
+  `sleap-roots-training`; empty means default). If wandb reports a different project, as it does
+  when a sweep or launch context drops the argument, the seed finishes the run and exits non-zero
+  before publishing anything.
+  **For registry operators:** a re-seed that publishes a changed card now puts its new source in
+  `sleap-roots-training`; unchanged cards are skipped as before. Existing sources are **not**
+  moved. Do not delete `migrate-model-card-selectors` or `sleap-roots-training-talmolab`: they
+  hold the live production sources and the 2026-09-29 rollback sources (README, "Do not delete
+  these wandb projects").
 - **`skeletons.yaml` rows carry a required `mode`, and `lookup_skeleton` takes one** — closing the
   keying gap the label inventory reported (#58). Every transcribed row is `mode: cylinder`; a new
   `arabidopsis / plate / primary` row covers ages 2–7 at 8 nodes, read from the committed scan and

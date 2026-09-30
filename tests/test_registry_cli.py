@@ -123,9 +123,10 @@ def test_execute_yes_seeds_and_reports(monkeypatch, tiny_matrix, stub_models_roo
 
     init_calls = {}
 
-    def fake_init(job_type=None, config=None, **kw):
+    def fake_init(job_type=None, config=None, project=None, **kw):
         init_calls["config"] = config
-        return SimpleNamespace(finish=lambda: None)
+        # A real run reports the project it was started in; the seed checks it.
+        return SimpleNamespace(project=project, finish=lambda: None)
 
     resolve_calls = {}
 
@@ -407,7 +408,9 @@ def test_publish_only_and_verify_all_use_one_collection_id_scheme(
         }
 
     monkeypatch.setattr(
-        wandb, "init", lambda **kw: SimpleNamespace(finish=lambda: None)
+        wandb,
+        "init",
+        lambda **kw: SimpleNamespace(project=kw.get("project"), finish=lambda: None),
     )
     monkeypatch.setattr(
         publish,
@@ -507,7 +510,9 @@ def test_seed_reports_failed_and_exits_non_zero(
     import wandb
 
     monkeypatch.setattr(
-        wandb, "init", lambda **kw: SimpleNamespace(finish=lambda: None)
+        wandb,
+        "init",
+        lambda **kw: SimpleNamespace(project=kw.get("project"), finish=lambda: None),
     )
     monkeypatch.setattr(
         publish,
@@ -548,7 +553,9 @@ def test_seed_reports_stale_skips_and_exits_non_zero(
     import wandb
 
     monkeypatch.setattr(
-        wandb, "init", lambda **kw: SimpleNamespace(finish=lambda: None)
+        wandb,
+        "init",
+        lambda **kw: SimpleNamespace(project=kw.get("project"), finish=lambda: None),
     )
     monkeypatch.setattr(
         publish,
@@ -577,3 +584,92 @@ def test_seed_reports_stale_skips_and_exits_non_zero(
     )
     assert result.exit_code != 0
     assert "STALE metadata on already-seeded (1): ['soy-p']" in result.output
+
+
+def _execute_with_fake_run(
+    monkeypatch, tiny_matrix, stub_models_root, run_project=None
+):
+    """Run ``seed-registry --execute --yes`` against faked wandb; return the call log.
+
+    ``run_project`` is what the fake run reports as its project. ``None`` means "the
+    project it was asked for", which is what wandb does outside a sweep/launch context.
+    """
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    calls = {"finish": 0, "seed": 0}
+
+    def fake_init(job_type=None, config=None, project=None, entity=None, **kw):
+        calls["project"], calls["entity"] = project, entity
+
+        def finish():
+            calls["finish"] += 1
+
+        reported = project if run_project is None else run_project
+        return SimpleNamespace(project=reported, finish=finish)
+
+    def fake_seed(resolved, cfg, run, *, api=None, force=False):
+        calls["seed"] += 1
+        return {"published": [], "skipped": [], "failed": [], "stale": []}
+
+    monkeypatch.setattr(wandb, "init", fake_init)
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda cards, root, sums: [(c, root) for c in cards]
+    )
+    monkeypatch.setattr(publish, "seed_registry", fake_seed)
+    calls["result"] = _invoke(
+        [
+            "--selection-matrix",
+            str(tiny_matrix),
+            "--models-root",
+            str(stub_models_root),
+            "--execute",
+            "--yes",
+        ]
+    )
+    return calls
+
+
+def test_seed_run_uses_the_default_project(monkeypatch, tiny_matrix, stub_models_root):
+    monkeypatch.delenv("SLEAP_ROOTS_SEED_PROJECT", raising=False)
+    monkeypatch.delenv("WANDB_ENTITY", raising=False)
+    calls = _execute_with_fake_run(monkeypatch, tiny_matrix, stub_models_root)
+    assert calls["result"].exit_code == 0, calls["result"].output
+    assert calls["project"] == "sleap-roots-training"
+    assert calls["entity"] == "eberrigan-salk-institute-for-biological-studies"
+
+
+def test_seed_project_is_overridable(monkeypatch, tiny_matrix, stub_models_root):
+    monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", "other")
+    calls = _execute_with_fake_run(monkeypatch, tiny_matrix, stub_models_root)
+    assert calls["result"].exit_code == 0, calls["result"].output
+    assert calls["project"] == "other"
+
+
+def test_seed_project_does_not_depend_on_the_working_directory(
+    monkeypatch, tiny_matrix, stub_models_root, tmp_path
+):
+    # The bug being fixed: with no project=, wandb names the project after the cwd.
+    monkeypatch.delenv("SLEAP_ROOTS_SEED_PROJECT", raising=False)
+    projects = []
+    for name in ("a", "b"):
+        workdir = tmp_path / name
+        workdir.mkdir()
+        monkeypatch.chdir(workdir)
+        calls = _execute_with_fake_run(monkeypatch, tiny_matrix, stub_models_root)
+        assert calls["result"].exit_code == 0, calls["result"].output
+        projects.append(calls["project"])
+    assert projects == ["sleap-roots-training", "sleap-roots-training"]
+
+
+def test_a_dropped_project_aborts_the_seed(monkeypatch, tiny_matrix, stub_models_root):
+    # Inside a sweep/launch context wandb drops project= with only a printed warning.
+    monkeypatch.delenv("SLEAP_ROOTS_SEED_PROJECT", raising=False)
+    calls = _execute_with_fake_run(
+        monkeypatch, tiny_matrix, stub_models_root, run_project="some-cwd-name"
+    )
+    assert calls["result"].exit_code != 0
+    assert calls["seed"] == 0  # nothing published
+    assert calls["finish"] == 1  # the stray run is still closed
+    assert "some-cwd-name" in calls["result"].output
+    assert "sleap-roots-training" in calls["result"].output

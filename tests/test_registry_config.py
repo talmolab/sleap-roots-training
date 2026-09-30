@@ -6,6 +6,7 @@ _ENV_VARS = [
     "WANDB_ENTITY",
     "SLEAP_ROOTS_MODEL_REGISTRY",
     "SLEAP_ROOTS_MODEL_ALIAS",
+    "SLEAP_ROOTS_SEED_PROJECT",
     "WANDB_API_KEY",
 ]
 
@@ -36,6 +37,25 @@ def test_overrides_from_env(monkeypatch):
         "other-registry",
         "staging",
     )
+
+
+def test_seed_project_defaults_to_sleap_roots_training(monkeypatch):
+    _clear_env(monkeypatch)
+    assert config.resolve_registry_config().seed_project == "sleap-roots-training"
+
+
+def test_seed_project_overridable_from_env(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", "other")
+    assert config.resolve_registry_config().seed_project == "other"
+
+
+def test_empty_seed_project_falls_back_to_default(monkeypatch):
+    # An exported-but-empty variable must not produce wandb.init(project=""), which
+    # wandb would treat as unset and replace with a directory-derived name.
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", "")
+    assert config.resolve_registry_config().seed_project == "sleap-roots-training"
 
 
 def test_require_api_key_raises_when_unset(isolate_wandb_env):

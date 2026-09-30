@@ -15,6 +15,13 @@ Nothing in any group writes to W&B.
       - **re-diff** this delta's `Seed Run Lineage` base text against the promoted
         `openspec/specs/model-registry/spec.md`, since `validate` does not catch a stale but valid
         full-text copy.
+
+      **Exception, approved by Elizabeth on 2026-09-30:** group 3 and task 3.3 may land **before**
+      this gate. Together they are the protection: a pinned seed project, plus a README note that
+      the two existing source projects must not be deleted. They depend on nothing in the pending
+      change. They are code, config, tests and README only, and change no requirement that
+      `update-model-card-selectors` touches. Group 3 carries the two env-var isolation lines it needs
+      from 1.2. Every other group stays gated.
 - [x] 0.2 **Approval.** The proposal is reviewed (`/review-openspec`, three rounds) and approved by
       Elizabeth on 2026-09-29.
 - [x] 0.3 **Draft PR.** Opened as #69 (2026-09-29), proposal only. Its body notes that an
@@ -70,7 +77,11 @@ Nothing in any group writes to W&B.
 
 ## 3. `feat(registry): pin the seed run's wandb entity and project`
 
-- [ ] 3.1 **Red.**
+- [x] 3.1 **Red.** Done 2026-09-30: 7 new tests failed first as expected (no `seed_project`, no `project=` passed).
+      - **Isolation, moved up from 1.2.** Add `SLEAP_ROOTS_SEED_PROJECT` to
+        `tests/test_registry_config.py`'s `_ENV_VARS`. Add it and `WANDB_PROJECT` to
+        `tests/conftest.py`'s `_WANDB_ENV_VARS`, and update that fixture's docstring. Task 1.2 keeps
+        the rest.
       - Config tests: `seed_project` defaults to `sleap-roots-training`, `SLEAP_ROOTS_SEED_PROJECT`
         overrides it, and an empty value falls back to the default.
       - CLI tests, extending `fake_init` in `test_execute_yes_seeds_and_reports` to capture
@@ -79,13 +90,22 @@ Nothing in any group writes to W&B.
         directory` (`monkeypatch.chdir(tmp_path/"a")`, then `"b"`).
       - For `A dropped project aborts the seed`: a fake run whose `.project` differs. Assert that
         `seed_registry` is not called, that `run.finish()` is called, and that the exit is non-zero.
-      - **Existing test update.** `test_execute_yes_seeds_and_reports`'s `fake_init` returns a
-        `SimpleNamespace` with no `.project` (`tests/test_registry_cli.py` ~126-128). Make it return
-        `project=` the resolved seed project; otherwise the new check breaks it.
-- [ ] 3.2 **Green.** Add `seed_project` to `RegistryConfig` and `resolve_registry_config`. Call
+      - **Existing test update.** Four fake runs in `tests/test_registry_cli.py` return a
+        `SimpleNamespace` with no `.project`: `test_execute_yes_seeds_and_reports`'s `fake_init`,
+        plus three `lambda **kw` fakes. The review found only the first; implementation found the
+        other three. Each now reports the project it was started with; otherwise the new check
+        breaks them. The guard test pinning `_WANDB_ENV_VARS`
+        (`tests/test_conftest_fixtures.py`) gains the two new variables.
+- [x] 3.2 **Green.** Done 2026-09-30. Add `seed_project` to `RegistryConfig` and `resolve_registry_config`. Call
       `wandb.init(entity=cfg.entity, project=cfg.seed_project, ...)` and check `run.project` inside
       the existing `try/finally` (`cli.py` ~203-213), so the stray run is still finished. Add the
       variable to the `README.md` env-var table (~lines 43-48).
+- [x] 3.3 **README: protect the existing source projects.** Done 2026-09-30 (README "Do not delete these wandb projects"). In the "Seeding the production model
+      registry" section, state that the wandb projects `migrate-model-card-selectors` (sources of the
+      8 production links, verified live 2026-09-30) and `sleap-roots-training-talmolab` (sources of
+      the 13 retired flat collections, the rollback) hold live source artifacts. Deleting either
+      breaks production links or the rollback, so they must not be deleted or cleaned up. Task 9.1
+      later adds the restore instructions next to this note.
 
 ## 4. `feat(registry): not-found-only alias reads`
 
@@ -196,6 +216,7 @@ Nothing in any group writes to W&B.
 - [ ] 9.2 **`docs/CHANGELOG.md` `[Unreleased]`.**
       - **Added:** the `registry` group.
       - **Changed:** the seed run's pinned entity and project, and `SLEAP_ROOTS_SEED_PROJECT`.
+        *Landed early with group 3 (2026-09-30), since the behavior change shipped then.*
       - Follow the section's style: a bold lead phrase and issue numbers. Add a
         "**For registry operators:**" note saying new sources land in `sleap-roots-training` and
         existing sources are not moved.
