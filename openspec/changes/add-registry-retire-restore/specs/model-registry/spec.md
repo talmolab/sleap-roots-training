@@ -15,12 +15,21 @@ SHALL emit a warning (the recorded matrix content hash makes the exact inputs re
 Lineage SHALL NOT be written into per-artifact metadata (which stays exactly the selection keys).
 
 The seed run SHALL be created with an explicit wandb entity (the configured registry entity) and
-an explicit, **pinned project**. The project is resolved from `SLEAP_ROOTS_SEED_PROJECT`; when that
-is unset or empty, the default is `sleap-roots-training`. The project SHALL never be derived from
-the current working directory, because the seed run's project is where every published source
-artifact lives. If the started run's project differs from the resolved one, as when wandb drops it
-inside a sweep or launch context, the seed SHALL finish that run and exit non-zero before publishing
-anything. Existing source artifacts in other projects are not moved.
+an explicit, **pinned project**. The project is resolved from `SLEAP_ROOTS_SEED_PROJECT`, stripped
+of surrounding whitespace; when that is unset, empty or blank, the default is
+`sleap-roots-training`. The project SHALL never be derived from the working directory or the git
+checkout, because the seed run's project is where every published source artifact lives.
+Existing source artifacts in other projects are not moved.
+
+Inside a sweep or launch context, wandb drops both `entity=` and `project=`. So:
+
+- **Before creating any run**, the seed SHALL refuse, exiting non-zero and naming the variable,
+  when `WANDB_SWEEP_ID` or `WANDB_LAUNCH` is set (any value except empty, `0` or `false`).
+- **After the run starts**, as a backstop, if the run reports an entity or project other than the
+  resolved ones, the seed SHALL NOT publish anything. It SHALL close that run as failed
+  (`exit_code=1`) and exit non-zero with a message naming both targets. An error while closing
+  the run SHALL NOT mask that refusal. When wandb is disabled, the message SHALL say so rather
+  than blaming a sweep.
 
 `SLEAP_ROOTS_SEED_PROJECT` is specified here rather than under Environment-Driven Registry
 Configuration on purpose. That requirement describes the registry target, which must match what
@@ -41,24 +50,40 @@ the consumer reads. The seed project is producer-only provenance that the consum
 
 #### Scenario: Seed run uses the default project
 
-- **WHEN** `seed-registry --execute` starts its wandb run with `SLEAP_ROOTS_SEED_PROJECT` unset or
-  empty
+- **WHEN** `seed-registry --execute` starts its wandb run with `SLEAP_ROOTS_SEED_PROJECT` unset,
+  empty or blank
 - **THEN** the run is started with `project="sleap-roots-training"` and the configured entity
 
 #### Scenario: Seed project is overridable
 
-- **WHEN** `SLEAP_ROOTS_SEED_PROJECT=other` is set
-- **THEN** the run is started with `project="other"`
+- **WHEN** `SLEAP_ROOTS_SEED_PROJECT=other` and `WANDB_ENTITY=some-entity` are set
+- **THEN** the run is started with `project="other"` and `entity="some-entity"`
 
 #### Scenario: Seed project does not depend on the working directory
 
 - **WHEN** `seed-registry --execute` is started from two different working directories
 - **THEN** both runs are started with the same project
 
-#### Scenario: A dropped project aborts the seed
+#### Scenario: A sweep or launch context is refused before any run
 
-- **WHEN** the started run reports a project other than the resolved seed project
-- **THEN** the seed exits non-zero before publishing any card
+- **WHEN** `WANDB_SWEEP_ID` or `WANDB_LAUNCH` is set
+- **THEN** the seed exits non-zero naming the variable, without calling `wandb.init` or publishing
+
+#### Scenario: A dropped target aborts the seed
+
+- **WHEN** the started run reports an entity or project other than the resolved ones
+- **THEN** the seed exits non-zero before publishing any card, saying nothing was published
+- **AND** the run is closed with `exit_code=1`
+
+#### Scenario: A disabled run aborts with a disabled hint
+
+- **WHEN** wandb is disabled, so the run reports project `"dummy"`
+- **THEN** the seed exits non-zero with a message naming disabled mode, not a sweep
+
+#### Scenario: A failing teardown does not mask the refusal
+
+- **WHEN** closing the mismatched run raises
+- **THEN** the seed still exits non-zero with the refusal message
 
 ## ADDED Requirements
 

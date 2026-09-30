@@ -106,6 +106,20 @@ Nothing in any group writes to W&B.
       the 13 retired flat collections, the rollback) hold live source artifacts. Deleting either
       breaks production links or the rollback, so they must not be deleted or cleaned up. Task 9.1
       later adds the restore instructions next to this note.
+- [x] 3.4 **Review hardening, done in #70 (merged 2026-09-30 as `4825f8e`).** `/review-pr` findings
+      were fixed test-first, with 9 tests failing first:
+      - sweep and launch refused before `wandb.init`;
+      - entity compared as well as project;
+      - the stray run closed with `exit_code=1`;
+      - a closing error cannot mask the refusal;
+      - a disabled-mode message;
+      - the value stripped;
+      - docs corrected: wandb names an unpinned project after the git checkout's directory, and
+        the CHANGELOG notes the entity change and the expected `--force` version bump.
+
+      The spec delta and the proposal's "Why the seed-project guard grew during review" record
+      this. Group 3 and 3.3 were split out of this PR into #70 and merged there; this branch
+      merged `main` and carries only the change directory.
 
 ## 4. `feat(registry): not-found-only alias reads`
 

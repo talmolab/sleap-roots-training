@@ -29,6 +29,25 @@ today are named after the working directory.
 - **Supersedes** `docs/migration/2026-09-29-retire-flat-collections.py` as the documented rollback.
   The 13 retired links are committed once as a snapshot, which serves as the anchor.
 
+### Why the seed-project guard grew during review
+
+As approved, the guard checked only the run's project after `wandb.init`. `/review-pr` on #70
+found four gaps, and #70 fixed them test-first before merging (2026-09-30):
+
+- **Entity was unchecked.** A sweep or launch context drops `entity=` as well as `project=`, so the
+  guard now compares both.
+- **A stray run was left behind.** A sweep or launch context is detectable before `wandb.init`,
+  from `WANDB_SWEEP_ID` / `WANDB_LAUNCH`. Refusing up front creates no stray run, and the
+  post-start check remains as a backstop.
+- **The stray run looked like a real seed.** It was closed as successful, and an error while
+  closing it could mask the refusal. It is now closed with `exit_code=1`, and a closing error
+  cannot hide the refusal.
+- **The message was misleading under `WANDB_MODE=disabled`**, where the run reports project
+  `"dummy"`.
+
+The value is also stripped, so a blank value means the default. The `Seed Run Lineage` delta
+reflects all of this.
+
 ## Impact
 
 - **Affected specs:** `model-registry`, with 5 ADDED requirements and 1 MODIFIED
