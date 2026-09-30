@@ -200,12 +200,26 @@ def seed_registry_command(
             "WARNING: working tree is dirty; the recorded matrix content hash "
             "pins the exact inputs regardless."
         )
-    run = wandb.init(job_type="seed_registry", config=lineage_config)
+    # Pin entity and project: without them wandb names the project after the working
+    # directory, and that project is where every published source artifact lives.
+    run = wandb.init(
+        entity=cfg.entity,
+        project=cfg.seed_project,
+        job_type="seed_registry",
+        config=lineage_config,
+    )
     # `seed_registry` echoes each collection's outcome as it happens, so a failure
     # partway through still leaves the operator a local record of which collections
     # now carry `production` — the summary below is never reached if something
     # propagates out of the seed.
     try:
+        # Inside a sweep/launch context wandb drops `project=` with only a printed
+        # warning; refuse rather than publish sources into a project nobody chose.
+        if run.project != cfg.seed_project:
+            raise click.ClickException(
+                f"wandb started the seed run in project {run.project!r}, not "
+                f"{cfg.seed_project!r} (a sweep or launch context?); nothing published."
+            )
         report = publish.seed_registry(resolved, cfg, run, force=force)
     except ValueError as error:
         raise click.ClickException(str(error))

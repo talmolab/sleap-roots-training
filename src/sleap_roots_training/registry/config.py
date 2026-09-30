@@ -17,6 +17,10 @@ from pathlib import Path
 DEFAULT_ENTITY = "eberrigan-salk-institute-for-biological-studies"
 DEFAULT_REGISTRY = "sleap-roots-models"
 DEFAULT_ALIAS = "production"
+#: The wandb project the seed run (and so every published source artifact) lives in.
+#: Pinned because, without ``project=``, wandb names the project after the working
+#: directory -- which is how production sources ended up in ``migrate-model-card-selectors``.
+DEFAULT_SEED_PROJECT = "sleap-roots-training"
 
 
 @dataclass(frozen=True)
@@ -27,11 +31,14 @@ class RegistryConfig:
         entity: The wandb entity.
         registry: The models-registry name.
         alias: The alias marking a version as production.
+        seed_project: The wandb project the seed run is created in. Producer-only
+            provenance: the consumer reads the registry, never this project.
     """
 
     entity: str
     registry: str
     alias: str
+    seed_project: str = DEFAULT_SEED_PROJECT
 
     def registry_project(self) -> str:
         """Return the registry project string the consumer reads.
@@ -45,8 +52,9 @@ class RegistryConfig:
 def resolve_registry_config() -> RegistryConfig:
     """Resolve the registry target from the environment (with defaults).
 
-    Reads ``WANDB_ENTITY``, ``SLEAP_ROOTS_MODEL_REGISTRY``, and
-    ``SLEAP_ROOTS_MODEL_ALIAS``.
+    Reads ``WANDB_ENTITY``, ``SLEAP_ROOTS_MODEL_REGISTRY``, ``SLEAP_ROOTS_MODEL_ALIAS``,
+    and ``SLEAP_ROOTS_SEED_PROJECT`` (an empty value falls back to the default, since
+    ``wandb.init(project="")`` would silently fall back to a directory-derived name).
 
     Returns:
         The resolved :class:`RegistryConfig`.
@@ -55,6 +63,7 @@ def resolve_registry_config() -> RegistryConfig:
         entity=os.environ.get("WANDB_ENTITY", DEFAULT_ENTITY),
         registry=os.environ.get("SLEAP_ROOTS_MODEL_REGISTRY", DEFAULT_REGISTRY),
         alias=os.environ.get("SLEAP_ROOTS_MODEL_ALIAS", DEFAULT_ALIAS),
+        seed_project=os.environ.get("SLEAP_ROOTS_SEED_PROJECT") or DEFAULT_SEED_PROJECT,
     )
 
 

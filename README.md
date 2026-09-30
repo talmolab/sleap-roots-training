@@ -45,6 +45,7 @@ published once rather than once per species.
 | `WANDB_ENTITY` | wandb entity (also wandb-native — steers run placement) | `eberrigan-salk-institute-for-biological-studies` |
 | `SLEAP_ROOTS_MODEL_REGISTRY` | **models** registry name (a separate `sleap-roots-labels` registry also exists) | `sleap-roots-models` |
 | `SLEAP_ROOTS_MODEL_ALIAS` | alias marking a version production | `production` |
+| `SLEAP_ROOTS_SEED_PROJECT` | wandb project the seed run is created in, and so where every published **source** artifact lives (producer-only; the consumer reads the registry, never this project). Empty means the default. | `sleap-roots-training` |
 | `WANDB_API_KEY` | one way to authenticate wandb-contacting operations; a `wandb login` session (netrc entry for `api.wandb.ai`) also satisfies the guard | — |
 
 Defaults live in `registry/config.py`; the species/mode vocabulary lives in
@@ -56,6 +57,22 @@ default is shared with `SRP_WANDB_ENTITY` across both repos. The consumer **hard
 `production` alias, so `SLEAP_ROOTS_MODEL_ALIAS` must remain `production` (a non-default alias would
 be silently skipped by the consumer, and the producer's own `--verify` — which checks the same
 configured alias — could not detect the skew).
+
+### Do not delete these wandb projects
+
+A registry entry is a **link** to a source artifact, and the source lives in whichever wandb
+project the seed run used. Before `SLEAP_ROOTS_SEED_PROJECT` existed, wandb named that project
+after the working directory, so two folder-named projects under
+`eberrigan-salk-institute-for-biological-studies` now hold live sources:
+
+| Project | Holds | If deleted |
+|---|---|---|
+| `migrate-model-card-selectors` | the sources of all 8 `production` links (verified 2026-09-30) | every production link breaks, and prediction with it |
+| `sleap-roots-training-talmolab` | the sources of the 13 flat collections retired on 2026-09-29 (#68) | the rollback of that retirement becomes impossible |
+
+**Do not delete or "clean up" either project**, however disposable its name looks. New
+seeds go to `sleap-roots-training`. Existing sources are deliberately not moved: re-linking
+them could change registry versions, and so downstream idempotency keys.
 
 ### Usage
 
