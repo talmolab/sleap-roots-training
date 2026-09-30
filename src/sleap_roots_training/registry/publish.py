@@ -35,8 +35,11 @@ def publish_card(
     metadata is not part of the manifest digest, and ``log_artifact`` no-ops on an
     unchanged digest, so re-publishing byte-identical weights can leave the *previous*
     metadata live while the report says "published". ``--force`` does not close this —
-    it bypasses only the idempotency read, and cannot create a new version while the
-    digest is unchanged.
+    it bypasses only the idempotency read. Within the project that already holds the
+    source, it cannot create a new version while the digest is unchanged. From a
+    different seed project, such as the pinned default for collections seeded before
+    the pin, the artifact sequence is new, so a forced re-seed is expected to add a
+    registry version instead.
 
     The read-back needs no extra query: ``run.link_artifact`` already returns a
     membership-backed artifact carrying ``metadata`` and ``digest``, which this code

@@ -33,15 +33,22 @@ All notable changes to this project are documented here. The format is based on
   nowhere to record the answer: a person reads the output and decides.
 
 ### Changed
-- **`seed-registry` pins its wandb entity and project** (#69). The seed run used to pass no
-  `project=`, so wandb named the project after the working directory. That is how all 8
-  production sources came to live in a project called `migrate-model-card-selectors`. The run is
-  now created with the configured entity and `SLEAP_ROOTS_SEED_PROJECT` (default
-  `sleap-roots-training`; empty means default). If wandb reports a different project, as it does
-  when a sweep or launch context drops the argument, the seed finishes the run and exits non-zero
-  before publishing anything.
-  **For registry operators:** a re-seed that publishes a changed card now puts its new source in
-  `sleap-roots-training`; unchanged cards are skipped as before. Existing sources are **not**
+- **`seed-registry` pins its wandb entity and project** (#70, from #69). The seed run used to
+  pass no `project=`, so wandb named the project after the git checkout's directory. That is how
+  all 8 production sources came to live in the worktree-named `migrate-model-card-selectors`. The
+  run is now created with the configured entity and `SLEAP_ROOTS_SEED_PROJECT` (default
+  `sleap-roots-training`; empty or blank means default). A sweep or launch context
+  (`WANDB_SWEEP_ID` / `WANDB_LAUNCH`), where wandb drops both arguments, is refused before any run
+  is created. If a started run still reports a different entity or project, it is closed as
+  failed and the seed exits non-zero before publishing anything.
+  **For registry operators:**
+  - With `WANDB_ENTITY` unset, the run now goes to `eberrigan-salk-institute-for-biological-studies`
+    rather than your own default wandb entity. A key without access to it fails at `wandb.init`.
+  - A re-seed that publishes a changed card puts its new source in `sleap-roots-training`;
+    unchanged cards are skipped as before.
+  - **Do not `--force` an existing collection unless you intend a new version:** a forced re-seed
+    of unchanged weights is now expected to add a registry version (e.g. `v1`), which changes the
+    downstream idempotency key. This is inferred, not yet observed. Existing sources are **not**
   moved. Do not delete `migrate-model-card-selectors` or `sleap-roots-training-talmolab`: they
   hold the live production sources and the 2026-09-29 rollback sources (README, "Do not delete
   these wandb projects").
