@@ -44,13 +44,21 @@ Recorded here rather than left in the PR thread, per this repo's precedent for b
       judged too fragile: keep a tolerant read and have task 2.1 dedupe matches sharing a
       `weights_checksum` instead of raising. That is robust to deploy order but needs a change in two
       repos before the window and relaxes a guard worth keeping.
-- [ ] 0.8 **Own the deploy-order commitment** (assigned to me): this repo's re-seed must be live and
+- [x] 0.8 **Own the deploy-order commitment** (assigned to me): this repo's re-seed must be live and
       verified **before** the upgraded `sleap-roots-predict` is deployed. Predict may merge and pin at
       any time; only the deploy is ordered. This is the price of dropping the tolerant read and it is a
       coordination commitment rather than something the code enforces, which is why it stays open until
       the rollout is actually sequenced. If it slips, the upgraded consumer skips all 13 old collections,
       finds nothing, and cannot select a model — loud and immediate, destroys nothing, and undone by
       rolling back the deploy.
+      *Held, 2026-09-30.* The order ran as committed:
+      - **Re-seed first.** The re-seed was live and verified on 2026-09-24: the canary, then the
+        remaining 7 by about 22:22 UTC. A full `--verify` showed 8 present and 13 orphans (6.1,
+        6.2).
+      - **Deploy second.** The upgraded predict was deployed on 2026-09-25: srp#89 merged at
+        17:11 UTC, then was applied in-cluster and checked for drift. It was confirmed on runs
+        `6bhzn` and `fcdrk` (predict#34, "C2 done").
+      - **Retirement last.** It came after both (6.3, 2026-09-29).
 
 ## 1. Contracts (`sleap-roots-contracts`, separate repo — must land first)
 
@@ -665,7 +673,7 @@ which is why it stays gated on confirmed deployment.
       (`_is_selectors_shape`) only detects the *legacy flat* shape, so it could never have caught a
       stale-but-selector-shaped blob (e.g. a missing newly added selector); if the requirement is
       kept, the check should compare the read-back to the intended metadata, not its shape.
-- [ ] 6.6 In the archive PR, restore the requirement order in
+- [x] 6.6 In the archive PR, restore the requirement order in
       `openspec/specs/model-registry/spec.md`. Verified: because the expansion and publishing
       requirements are replaced (removed + re-added) rather than modified in place, the archiver
       appends them at the **end** of the file, so the spec reads matrix → metadata → resolution →
@@ -675,3 +683,7 @@ which is why it stays gated on confirmed deployment.
       This is the one task that cannot be ticked before `openspec archive` runs, because the file it
       edits does not contain those requirements until the archiver moves them: tick it in the archived
       copy of `tasks.md` immediately after the move, so the record is not left falsely incomplete.
+      *Done 2026-09-30, in the archive PR, immediately after `openspec archive` moved the two replaced
+      requirements to the end of the file.* Card Expansion now sits above `ModelCard Selection
+      Metadata`, and Publishing sits between `Legacy Model Directory Resolution` and `Seed Run
+      Lineage`. The blocks were moved verbatim. `openspec validate --all --strict` passes, 9 of 9.
