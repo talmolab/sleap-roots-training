@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from click.testing import CliRunner
 
 from sleap_roots_training import cli
@@ -123,10 +124,10 @@ def test_execute_yes_seeds_and_reports(monkeypatch, tiny_matrix, stub_models_roo
 
     init_calls = {}
 
-    def fake_init(job_type=None, config=None, project=None, **kw):
+    def fake_init(job_type=None, config=None, project=None, entity=None, **kw):
         init_calls["config"] = config
         # A real run reports the project it was started in; the seed checks it.
-        return SimpleNamespace(project=project, finish=lambda: None)
+        return SimpleNamespace(project=project, entity=entity, finish=lambda: None)
 
     resolve_calls = {}
 
@@ -410,7 +411,9 @@ def test_publish_only_and_verify_all_use_one_collection_id_scheme(
     monkeypatch.setattr(
         wandb,
         "init",
-        lambda **kw: SimpleNamespace(project=kw.get("project"), finish=lambda: None),
+        lambda **kw: SimpleNamespace(
+            project=kw.get("project"), entity=kw.get("entity"), finish=lambda: None
+        ),
     )
     monkeypatch.setattr(
         publish,
@@ -512,7 +515,9 @@ def test_seed_reports_failed_and_exits_non_zero(
     monkeypatch.setattr(
         wandb,
         "init",
-        lambda **kw: SimpleNamespace(project=kw.get("project"), finish=lambda: None),
+        lambda **kw: SimpleNamespace(
+            project=kw.get("project"), entity=kw.get("entity"), finish=lambda: None
+        ),
     )
     monkeypatch.setattr(
         publish,
@@ -555,7 +560,9 @@ def test_seed_reports_stale_skips_and_exits_non_zero(
     monkeypatch.setattr(
         wandb,
         "init",
-        lambda **kw: SimpleNamespace(project=kw.get("project"), finish=lambda: None),
+        lambda **kw: SimpleNamespace(
+            project=kw.get("project"), entity=kw.get("entity"), finish=lambda: None
+        ),
     )
     monkeypatch.setattr(
         publish,
@@ -587,26 +594,42 @@ def test_seed_reports_stale_skips_and_exits_non_zero(
 
 
 def _execute_with_fake_run(
-    monkeypatch, tiny_matrix, stub_models_root, run_project=None
+    monkeypatch,
+    tiny_matrix,
+    stub_models_root,
+    *,
+    run_project=None,
+    run_entity=None,
+    disabled=False,
+    finish_raises=False,
 ):
     """Run ``seed-registry --execute --yes`` against faked wandb; return the call log.
 
-    ``run_project`` is what the fake run reports as its project. ``None`` means "the
-    project it was asked for", which is what wandb does outside a sweep/launch context.
+    ``run_project`` / ``run_entity`` are what the fake run reports. ``None`` means "what
+    it was asked for", which is what wandb does outside a sweep/launch context.
+    Callers isolate the environment (``isolate_wandb_env``) first; this sets only the
+    API key the credential guard needs.
     """
     import wandb
 
     monkeypatch.setenv("WANDB_API_KEY", "secret")
-    calls = {"finish": 0, "seed": 0}
+    calls = {"init": 0, "finish": [], "seed": 0}
 
     def fake_init(job_type=None, config=None, project=None, entity=None, **kw):
+        calls["init"] += 1
         calls["project"], calls["entity"] = project, entity
 
-        def finish():
-            calls["finish"] += 1
+        def finish(exit_code=None):
+            calls["finish"].append(exit_code)
+            if finish_raises:
+                raise ConnectionError("teardown failed")
 
-        reported = project if run_project is None else run_project
-        return SimpleNamespace(project=reported, finish=finish)
+        return SimpleNamespace(
+            project=project if run_project is None else run_project,
+            entity=entity if run_entity is None else run_entity,
+            disabled=disabled,
+            finish=finish,
+        )
 
     def fake_seed(resolved, cfg, run, *, api=None, force=False):
         calls["seed"] += 1
@@ -630,27 +653,36 @@ def _execute_with_fake_run(
     return calls
 
 
-def test_seed_run_uses_the_default_project(monkeypatch, tiny_matrix, stub_models_root):
-    monkeypatch.delenv("SLEAP_ROOTS_SEED_PROJECT", raising=False)
-    monkeypatch.delenv("WANDB_ENTITY", raising=False)
+@pytest.mark.parametrize("seed_env", [None, "", "   "], ids=["unset", "empty", "blank"])
+def test_seed_run_uses_the_default_project(
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env, seed_env
+):
+    if seed_env is not None:
+        monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", seed_env)
     calls = _execute_with_fake_run(monkeypatch, tiny_matrix, stub_models_root)
     assert calls["result"].exit_code == 0, calls["result"].output
     assert calls["project"] == "sleap-roots-training"
     assert calls["entity"] == "eberrigan-salk-institute-for-biological-studies"
+    assert calls["finish"] == [None]  # a normal run is closed normally
 
 
-def test_seed_project_is_overridable(monkeypatch, tiny_matrix, stub_models_root):
+def test_seed_project_is_overridable(
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env
+):
     monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", "other")
+    monkeypatch.setenv("WANDB_ENTITY", "some-entity")
     calls = _execute_with_fake_run(monkeypatch, tiny_matrix, stub_models_root)
     assert calls["result"].exit_code == 0, calls["result"].output
-    assert calls["project"] == "other"
+    # The configured entity is passed, not a hard-coded default.
+    assert (calls["entity"], calls["project"]) == ("some-entity", "other")
 
 
 def test_seed_project_does_not_depend_on_the_working_directory(
-    monkeypatch, tiny_matrix, stub_models_root, tmp_path
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env, tmp_path
 ):
-    # The bug being fixed: with no project=, wandb names the project after the cwd.
-    monkeypatch.delenv("SLEAP_ROOTS_SEED_PROJECT", raising=False)
+    # Not redundant with the default test: it catches a default built from
+    # `Path.cwd().name`, which CI would mask because its checkout directory is itself
+    # named `sleap-roots-training`.
     projects = []
     for name in ("a", "b"):
         workdir = tmp_path / name
@@ -662,14 +694,67 @@ def test_seed_project_does_not_depend_on_the_working_directory(
     assert projects == ["sleap-roots-training", "sleap-roots-training"]
 
 
-def test_a_dropped_project_aborts_the_seed(monkeypatch, tiny_matrix, stub_models_root):
-    # Inside a sweep/launch context wandb drops project= with only a printed warning.
-    monkeypatch.delenv("SLEAP_ROOTS_SEED_PROJECT", raising=False)
+@pytest.mark.parametrize(
+    "reported",
+    [{"run_project": "some-cwd-name"}, {"run_entity": "someone-personal"}],
+    ids=["project", "entity"],
+)
+def test_a_dropped_target_aborts_the_seed(
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env, reported
+):
+    # Inside a sweep/launch context wandb drops project= AND entity= with only a
+    # printed warning.
     calls = _execute_with_fake_run(
-        monkeypatch, tiny_matrix, stub_models_root, run_project="some-cwd-name"
+        monkeypatch, tiny_matrix, stub_models_root, **reported
     )
+    output = calls["result"].output
     assert calls["result"].exit_code != 0
     assert calls["seed"] == 0  # nothing published
-    assert calls["finish"] == 1  # the stray run is still closed
-    assert "some-cwd-name" in calls["result"].output
-    assert "sleap-roots-training" in calls["result"].output
+    assert calls["finish"] == [1]  # the stray run is closed as FAILED, not finished
+    assert "nothing published" in output
+    assert list(reported.values())[0] in output
+    assert (
+        "eberrigan-salk-institute-for-biological-studies/sleap-roots-training" in output
+    )
+
+
+def test_a_disabled_run_aborts_with_a_disabled_hint(
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env
+):
+    # WANDB_MODE=disabled returns a no-op run whose project is hard-coded to "dummy".
+    calls = _execute_with_fake_run(
+        monkeypatch, tiny_matrix, stub_models_root, run_project="dummy", disabled=True
+    )
+    assert calls["result"].exit_code != 0
+    assert calls["seed"] == 0
+    assert "WANDB_MODE=disabled" in calls["result"].output
+    assert "sweep" not in calls["result"].output
+
+
+def test_a_failing_teardown_does_not_mask_the_refusal(
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env
+):
+    calls = _execute_with_fake_run(
+        monkeypatch,
+        tiny_matrix,
+        stub_models_root,
+        run_project="some-cwd-name",
+        finish_raises=True,
+    )
+    assert calls["result"].exit_code != 0
+    assert calls["seed"] == 0
+    assert "nothing published" in calls["result"].output
+    assert not isinstance(calls["result"].exception, ConnectionError)
+
+
+@pytest.mark.parametrize("var", ["WANDB_SWEEP_ID", "WANDB_LAUNCH"])
+def test_a_sweep_or_launch_context_is_refused_before_any_run(
+    monkeypatch, tiny_matrix, stub_models_root, isolate_wandb_env, var
+):
+    # Refusing up front leaves no stray run behind at all.
+    monkeypatch.setenv(var, "abc123" if var == "WANDB_SWEEP_ID" else "True")
+    calls = _execute_with_fake_run(monkeypatch, tiny_matrix, stub_models_root)
+    assert calls["result"].exit_code != 0
+    assert calls["init"] == 0
+    assert calls["seed"] == 0
+    assert var in calls["result"].output

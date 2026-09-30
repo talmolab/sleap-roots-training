@@ -62,7 +62,7 @@ configured alias — could not detect the skew).
 
 A registry entry is a **link** to a source artifact, and the source lives in whichever wandb
 project the seed run used. Before `SLEAP_ROOTS_SEED_PROJECT` existed, wandb named that project
-after the working directory, so two folder-named projects under
+after the git checkout's directory (a worktree name, here), so two folder-named projects under
 `eberrigan-salk-institute-for-biological-studies` now hold live sources:
 
 | Project | Holds | If deleted |
@@ -70,9 +70,19 @@ after the working directory, so two folder-named projects under
 | `migrate-model-card-selectors` | the sources of all 8 `production` links (verified 2026-09-30) | every production link breaks, and prediction with it |
 | `sleap-roots-training-talmolab` | the sources of the 13 flat collections retired on 2026-09-29 (#68) | the rollback of that retirement becomes impossible |
 
-**Do not delete or "clean up" either project**, however disposable its name looks. New
-seeds go to `sleap-roots-training`. Existing sources are deliberately not moved: re-linking
-them could change registry versions, and so downstream idempotency keys.
+**Do not delete or "clean up" either project**, however disposable its name looks. The same
+applies to the source artifact versions and seed runs inside them, and to the registry
+collections themselves: deleting a collection is not recoverable. (The 13 retired flat
+collections are now empty; a rollback re-links their sources into them.) New seeds go to
+`sleap-roots-training`. Existing sources are deliberately not moved: re-linking them could
+change registry versions, and the downstream idempotency key hashes
+`(registry_id, version, weights_checksum)`.
+
+**Do not `--force` an existing collection unless you intend a new version.** Because new seeds
+log into `sleap-roots-training`, not the project holding the current source, a forced re-seed of
+unchanged weights is expected to add a new registry version (for example `v1`) rather than being
+de-duplicated. That would change every scan's idempotency key and recompute it once. This is
+inferred from how wandb keys artifact sequences per project, not yet observed.
 
 ### Usage
 
