@@ -6,6 +6,7 @@ _ENV_VARS = [
     "WANDB_ENTITY",
     "SLEAP_ROOTS_MODEL_REGISTRY",
     "SLEAP_ROOTS_MODEL_ALIAS",
+    "SLEAP_ROOTS_SEED_PROJECT",
     "WANDB_API_KEY",
 ]
 
@@ -36,6 +37,32 @@ def test_overrides_from_env(monkeypatch):
         "other-registry",
         "staging",
     )
+
+
+def test_seed_project_defaults_to_sleap_roots_training(monkeypatch):
+    _clear_env(monkeypatch)
+    assert config.resolve_registry_config().seed_project == "sleap-roots-training"
+
+
+def test_seed_project_overridable_from_env(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", "other")
+    assert config.resolve_registry_config().seed_project == "other"
+
+
+@pytest.mark.parametrize("value", ["", "   "], ids=["empty", "blank"])
+def test_blank_seed_project_falls_back_to_default(monkeypatch, value):
+    # An exported-but-empty (or whitespace) value is not a usable project name, so it
+    # is treated as unset rather than passed to wandb.init.
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", value)
+    assert config.resolve_registry_config().seed_project == "sleap-roots-training"
+
+
+def test_seed_project_is_stripped(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_SEED_PROJECT", "  other  ")
+    assert config.resolve_registry_config().seed_project == "other"
 
 
 def test_require_api_key_raises_when_unset(isolate_wandb_env):

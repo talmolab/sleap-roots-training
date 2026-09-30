@@ -58,6 +58,10 @@ _WANDB_ENV_VARS = (
     "WANDB_ENTITY",
     "SLEAP_ROOTS_MODEL_REGISTRY",
     "SLEAP_ROOTS_MODEL_ALIAS",
+    "SLEAP_ROOTS_SEED_PROJECT",
+    "WANDB_PROJECT",
+    "WANDB_SWEEP_ID",
+    "WANDB_LAUNCH",
     "NETRC",
 )
 
@@ -127,9 +131,11 @@ def isolate_wandb_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Fully isolate wandb/registry credential resolution from the host environment.
 
     Clears every var in ``_WANDB_ENV_VARS`` (``WANDB_API_KEY``/``WANDB_ENTITY``/the two
-    ``SLEAP_ROOTS_MODEL_*`` vars/``NETRC``) and repoints ``HOME``/``USERPROFILE`` at an
-    empty temp dir, so neither an exported key, an ambient ``wandb login`` netrc, nor a
-    stray registry override leaks in — on any OS.
+    ``SLEAP_ROOTS_MODEL_*`` vars/``SLEAP_ROOTS_SEED_PROJECT``/``WANDB_PROJECT``/the
+    sweep and launch markers/``NETRC``)
+    and repoints ``HOME``/``USERPROFILE`` at an empty temp dir, so neither an exported
+    key, an ambient ``wandb login`` netrc, nor a stray registry/project override leaks
+    in — on any OS.
 
     Returns:
         The isolated home dir, so a test can write ``.netrc``/``_netrc`` into it to

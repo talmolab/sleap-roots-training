@@ -1,5 +1,6 @@
 """Command-line interface for ``sleap-roots-training``."""
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -200,7 +201,31 @@ def seed_registry_command(
             "WARNING: working tree is dirty; the recorded matrix content hash "
             "pins the exact inputs regardless."
         )
-    run = wandb.init(job_type="seed_registry", config=lineage_config)
+    # A sweep or launch context makes wandb drop `entity=`/`project=` (with only a
+    # printed warning). Refuse before `wandb.init`, so not even a stray run is created.
+    context = _sweep_or_launch_context()
+    if context:
+        raise click.ClickException(
+            f"{context} is set: wandb would ignore the pinned seed project inside a "
+            "sweep or launch context. Unset it and re-run; nothing published."
+        )
+    # Pin entity and project: without them wandb names the project after the git
+    # checkout's directory, and that project is where every published source lives.
+    run = wandb.init(
+        entity=cfg.entity,
+        project=cfg.seed_project,
+        job_type="seed_registry",
+        config=lineage_config,
+    )
+    # Backstop for anything the pre-check cannot see: refuse rather than publish
+    # sources into a place nobody chose.
+    mismatch = _seed_target_mismatch(run, cfg)
+    if mismatch:
+        try:
+            run.finish(exit_code=1)  # close the stray run as failed, not finished
+        except Exception as teardown:  # noqa: BLE001 - must not mask the refusal
+            click.echo(f"warning: closing the stray run failed: {teardown}", err=True)
+        raise click.ClickException(mismatch)
     # `seed_registry` echoes each collection's outcome as it happens, so a failure
     # partway through still leaves the operator a local record of which collections
     # now carry `production` — the summary below is never reached if something
@@ -221,6 +246,44 @@ def seed_registry_command(
         click.echo(f"FAILED ({len(report['failed'])}): {report['failed']}")
     if report["failed"] or report["stale"]:
         ctx.exit(1)
+
+
+#: Environment markers wandb reads to join a sweep or launch run, where it drops the
+#: explicit `entity=`/`project=` passed to `wandb.init`.
+_SWEEP_OR_LAUNCH_VARS = ("WANDB_SWEEP_ID", "WANDB_LAUNCH")
+
+
+def _sweep_or_launch_context() -> Optional[str]:
+    """Return the first set sweep/launch marker variable, or ``None``."""
+    for name in _SWEEP_OR_LAUNCH_VARS:
+        if os.environ.get(name, "").strip().lower() not in ("", "0", "false"):
+            return name
+    return None
+
+
+def _seed_target_mismatch(run, cfg: config.RegistryConfig) -> Optional[str]:
+    """Describe how the started run's entity/project differs from the pin, or ``None``.
+
+    Args:
+        run: The run ``wandb.init`` returned.
+        cfg: The resolved registry configuration.
+
+    Returns:
+        An operator-facing refusal message, or ``None`` when the run is where it was
+        asked to be.
+    """
+    got = (getattr(run, "entity", None), getattr(run, "project", None))
+    want = (cfg.entity, cfg.seed_project)
+    if got == want:
+        return None
+    if getattr(run, "disabled", False):
+        why = "wandb is disabled, e.g. WANDB_MODE=disabled"
+    else:
+        why = "a sweep or launch context, or a server-side rename"
+    return (
+        f"wandb started the seed run as {got[0]}/{got[1]}, not {want[0]}/{want[1]} "
+        f"({why}); nothing published."
+    )
 
 
 @main.group(name="inventory")

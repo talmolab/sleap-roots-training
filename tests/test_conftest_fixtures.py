@@ -49,6 +49,10 @@ def test_isolate_wandb_env_covers_the_documented_var_set():
         "WANDB_ENTITY",
         "SLEAP_ROOTS_MODEL_REGISTRY",
         "SLEAP_ROOTS_MODEL_ALIAS",
+        "SLEAP_ROOTS_SEED_PROJECT",
+        "WANDB_PROJECT",
+        "WANDB_SWEEP_ID",
+        "WANDB_LAUNCH",
         "NETRC",
     }
 
