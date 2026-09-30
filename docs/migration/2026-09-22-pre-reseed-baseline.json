@@ -1,0 +1,156 @@
+{
+  "captured_utc": "2026-09-22T22:46:36+00:00",
+  "registry": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
+  "alias": "production",
+  "count": 13,
+  "shape_counts": {
+    "flat": 13,
+    "selectors": 0,
+    "neither": 0
+  },
+  "collections": [
+    {
+      "collection": "arabidopsis-cylinder-lateral-age2-14",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "arabidopsis/lateral/240130_140452.multi_instance.n=337",
+      "root_type": "lateral"
+    },
+    {
+      "collection": "arabidopsis-cylinder-primary-age2-14",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743",
+      "root_type": "primary"
+    },
+    {
+      "collection": "arabidopsis-multiplant-cylinder-lateral-age2-14",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "arabidopsis/lateral/240130_140452.multi_instance.n=337",
+      "root_type": "lateral"
+    },
+    {
+      "collection": "arabidopsis-multiplant-cylinder-primary-age2-14",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743",
+      "root_type": "primary"
+    },
+    {
+      "collection": "canola-cylinder-lateral-age2-13",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "canola/lateral/240611_083419.multi_instance.n=631",
+      "root_type": "lateral"
+    },
+    {
+      "collection": "canola-cylinder-primary-age2-13",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743",
+      "root_type": "primary"
+    },
+    {
+      "collection": "pennycress-cylinder-lateral-age2-14",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "canola/lateral/240611_083419.multi_instance.n=631",
+      "root_type": "lateral"
+    },
+    {
+      "collection": "pennycress-cylinder-primary-age2-14",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743",
+      "root_type": "primary"
+    },
+    {
+      "collection": "rice-cylinder-crown-age2-5",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "rice/younger/crown/220821_163331.multi_instance.n=867",
+      "root_type": "crown"
+    },
+    {
+      "collection": "rice-cylinder-crown-age6-10",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "rice/older/crown/221208_113552.multi_instance.n=574",
+      "root_type": "crown"
+    },
+    {
+      "collection": "rice-cylinder-primary-age2-5",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "rice/younger/primary/230104_182346.multi_instance.n=720",
+      "root_type": "primary"
+    },
+    {
+      "collection": "soybean-cylinder-lateral-age2-8",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "soybean/lateral/lateral_root_221006_172103.multi_instance.n=482",
+      "root_type": "lateral"
+    },
+    {
+      "collection": "soybean-cylinder-primary-age2-8",
+      "version": "v0",
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "shape": "flat",
+      "source_model_id": "soybean/primary/221003_111420.multi_instance.n=1389",
+      "root_type": "primary"
+    }
+  ]
+}

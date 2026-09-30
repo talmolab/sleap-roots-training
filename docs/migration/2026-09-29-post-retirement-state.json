@@ -1,0 +1,227 @@
+{
+  "alias": "production",
+  "captured_utc": "2026-09-29T15:07:33+00:00",
+  "registry": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
+  "new_collections": {
+    "arabidopsis-lateral-240130_140452.multi_instance.n-337": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "329334a5d8897eebbbf8b169725c894f",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "canola-lateral-240611_083419.multi_instance.n-631": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "75e1b1e7671e0b0c01176165ed6f4076",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "canola_pennycress_arabidopsis-primary-240611_102513.multi_instance.n-743": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "a6b27968b01c7640335359d2539a8ae3",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "rice-older-crown-221208_113552.multi_instance.n-574": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "0e4d7d439513b6c3e60dd2b962efd6c8",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "rice-younger-crown-220821_163331.multi_instance.n-867": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "58af1578e4faddd6bdc1f21bccefc45c",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "rice-younger-primary-230104_182346.multi_instance.n-720": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "bb373c5c5ddd8d7711b8b5cf39c4d638",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "soybean-lateral-lateral_root_221006_172103.multi_instance.n-482": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "92b32e117d072ad69baa4d585af73b7d",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    },
+    "soybean-primary-221003_111420.multi_instance.n-1389": {
+      "aliases": [
+        "latest",
+        "production"
+      ],
+      "digest": "e2dec889eff6b4faa91c2d7ccdafbb99",
+      "is_link": true,
+      "selectors_shape": true,
+      "version": "v0",
+      "unchanged_since_2026_09_24": true
+    }
+  },
+  "retired_flat_collections": {
+    "arabidopsis-cylinder-lateral-age2-14": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/arabidopsis-cylinder-lateral-age2-14:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "329334a5d8897eebbbf8b169725c894f",
+      "source_digest_matches_record": true,
+      "source_model_id": "arabidopsis/lateral/240130_140452.multi_instance.n=337"
+    },
+    "arabidopsis-cylinder-primary-age2-14": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/arabidopsis-cylinder-primary-age2-14:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "a6b27968b01c7640335359d2539a8ae3",
+      "source_digest_matches_record": true,
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743"
+    },
+    "arabidopsis-multiplant-cylinder-lateral-age2-14": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/arabidopsis-multiplant-cylinder-lateral-age2-14:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "329334a5d8897eebbbf8b169725c894f",
+      "source_digest_matches_record": true,
+      "source_model_id": "arabidopsis/lateral/240130_140452.multi_instance.n=337"
+    },
+    "arabidopsis-multiplant-cylinder-primary-age2-14": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/arabidopsis-multiplant-cylinder-primary-age2-14:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "a6b27968b01c7640335359d2539a8ae3",
+      "source_digest_matches_record": true,
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743"
+    },
+    "canola-cylinder-lateral-age2-13": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/canola-cylinder-lateral-age2-13:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "75e1b1e7671e0b0c01176165ed6f4076",
+      "source_digest_matches_record": true,
+      "source_model_id": "canola/lateral/240611_083419.multi_instance.n=631"
+    },
+    "canola-cylinder-primary-age2-13": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/canola-cylinder-primary-age2-13:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "a6b27968b01c7640335359d2539a8ae3",
+      "source_digest_matches_record": true,
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743"
+    },
+    "pennycress-cylinder-lateral-age2-14": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/pennycress-cylinder-lateral-age2-14:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "75e1b1e7671e0b0c01176165ed6f4076",
+      "source_digest_matches_record": true,
+      "source_model_id": "canola/lateral/240611_083419.multi_instance.n=631"
+    },
+    "pennycress-cylinder-primary-age2-14": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/pennycress-cylinder-primary-age2-14:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "a6b27968b01c7640335359d2539a8ae3",
+      "source_digest_matches_record": true,
+      "source_model_id": "canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743"
+    },
+    "rice-cylinder-crown-age2-5": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/rice-cylinder-crown-age2-5:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "58af1578e4faddd6bdc1f21bccefc45c",
+      "source_digest_matches_record": true,
+      "source_model_id": "rice/younger/crown/220821_163331.multi_instance.n=867"
+    },
+    "rice-cylinder-crown-age6-10": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/rice-cylinder-crown-age6-10:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "0e4d7d439513b6c3e60dd2b962efd6c8",
+      "source_digest_matches_record": true,
+      "source_model_id": "rice/older/crown/221208_113552.multi_instance.n=574"
+    },
+    "rice-cylinder-primary-age2-5": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/rice-cylinder-primary-age2-5:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "bb373c5c5ddd8d7711b8b5cf39c4d638",
+      "source_digest_matches_record": true,
+      "source_model_id": "rice/younger/primary/230104_182346.multi_instance.n=720"
+    },
+    "soybean-cylinder-lateral-age2-8": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/soybean-cylinder-lateral-age2-8:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "92b32e117d072ad69baa4d585af73b7d",
+      "source_digest_matches_record": true,
+      "source_model_id": "soybean/lateral/lateral_root_221006_172103.multi_instance.n=482"
+    },
+    "soybean-cylinder-primary-age2-8": {
+      "collection_exists": true,
+      "registry_members": [],
+      "production_resolves": false,
+      "rollback_source": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training-talmolab/soybean-cylinder-primary-age2-8:v0",
+      "rollback_source_resolves": true,
+      "source_digest": "e2dec889eff6b4faa91c2d7ccdafbb99",
+      "source_digest_matches_record": true,
+      "source_model_id": "soybean/primary/221003_111420.multi_instance.n=1389"
+    }
+  }
+}
