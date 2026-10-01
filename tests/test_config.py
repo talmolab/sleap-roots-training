@@ -147,6 +147,28 @@ def test_to_sleap_nn_yaml_has_no_experiment(write_config):
     assert "data_config" in text
 
 
+def test_to_sleap_nn_yaml_leaves_interpolations_unresolved(write_config, monkeypatch):
+    """The emitted YAML carries ``${oc.env:...}`` itself, never the value it resolves to.
+
+    This is the whole reason `run` may write a config into a directory that
+    ``registry/publish.py`` uploads wholesale: nothing that lands on disk holds the resolved
+    value. The guarantee rests entirely on one defaulted keyword -- ``OmegaConf.to_yaml``'s
+    ``resolve=False`` -- so it is asserted with the variable **set**. With it unset,
+    ``resolve=True`` would raise and this test would pass for the wrong reason, which is
+    exactly how the guarantee went untested: every existing interpolation test uses an
+    *unresolvable* reference.
+    """
+    monkeypatch.setenv("SLEAP_ROOTS_TEST_SECRET", "supersecret")
+    path = write_config(
+        overrides={
+            "trainer_config": {"wandb": {"entity": "${oc.env:SLEAP_ROOTS_TEST_SECRET}"}}
+        }
+    )
+    text = config.to_sleap_nn_yaml(config.load_config(path))
+    assert "${oc.env:SLEAP_ROOTS_TEST_SECRET}" in text
+    assert "supersecret" not in text
+
+
 # --- W&B enablement pairing (Requirement 4) --------------------------------------------
 
 
