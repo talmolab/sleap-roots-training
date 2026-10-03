@@ -412,11 +412,23 @@ The assertions are unchanged, and they check exit 2, the flag name, and that not
 
 Results are recorded in the PR description.
 
-- [ ] 13.1 Design D7.1: stage the zips, and record the `sha256sum` of the staged copies.
-- [ ] 13.2 Design D7.2: dry run under `candidate`. The target line shows `alias 'candidate'`, and all
-      three entries are `[ok]`.
-- [ ] 13.3 Design D7.3: the credential-less guard checks, with the exact commands and expected
-      messages given there.
+- [x] 13.1 Design D7.1: stage the zips, and record the `sha256sum` of the staged copies.
+      *Done 2026-10-03:* staged under the session scratchpad, outside every worktree. The copies
+      hash to `650fe30b…a13f` (wheat), `7c2cd05d…7c07` (sorghum primary) and `f694d6da…0028`
+      (sorghum lateral), equal to the matrix.
+- [x] 13.2 Design D7.2: dry run under `candidate`. The target line shows `alias 'candidate'`, and all
+      three entries are `[ok]`. *Done 2026-10-03:* the target line reads `alias 'candidate' (from
+      SLEAP_ROOTS_MODEL_ALIAS)`. All three entries are `[ok]`, with selectors (wheat, cylinder, 5,
+      14) crown and (sorghum, cylinder, 3, 14) primary and lateral. None is `UNPINNED`.
+- [x] 13.3 Design D7.3: the credential-less guard checks, with the exact commands and expected
+      messages given there. *Done 2026-10-03:* both checks ran with `env -u WANDB_API_KEY
+      NETRC=/nonexistent` and an empty `--models-root`.
+      - `candidate --execute --yes` (no `--only`) exited 2 with "alias 'candidate' is not the
+        default … requires --only".
+      - Default alias `--execute --yes --promote` (no `--only`) exited 2 with "--promote requires
+        --only".
+
+      Neither reached the credential check.
 
 ## 14. Operator, after the squash-merge (ask the owner before each W&B or GitHub write)
 
