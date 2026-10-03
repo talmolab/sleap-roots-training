@@ -127,7 +127,9 @@ the three versions. It adds:
   order. A row backs a card when it contributes one of that card's selectors, that is, the row names
   the card's model in the card's root-type slot. `age` is the row's raw string.
 - `model_origins`: one `{model_id, snapshot, location, pinned_by}` per in-scope card's model, sorted
-  by `model_id`.
+  by `model_id`;
+- `registry_target`: `{entity, registry, alias}`. Added after the pre-PR review: without it a
+  candidate run and its later `--promote` run have the same shape, and aliases move.
 
 They are lists because model ids contain `/`, `=` and `.`, so ids stay values, not config keys. They
 are scoped to the invocation's scope, published or skipped, because a run under `--only` touches only
@@ -169,8 +171,9 @@ exits 1 with a `ClickException` naming them, and nothing is published.
 - **`--force`.** The pre-pass runs even though `--force` skips the idempotency read.
 - **API errors** in the pre-pass become a `ClickException` (fail closed, no traceback).
 - **`--promote` is valid only with `--execute`, under the default alias, and with `--only`.** It is
-  checked alongside guard 1, before the dry-run return and `_require_api_key()`. Misuse is therefore a
-  usage error (exit 2) in every mode, and a promotion always names its collections.
+  checked before the `--verify` branch and the dry-run return (so earlier than guard 1, which sits after
+  the dry-run return). Misuse is therefore a usage error (exit 2) in every mode, and a promotion always
+  names its collections.
 - **Re-seeds of already-`production` collections** are unaffected: the list is empty.
 - **Step 6** becomes `… --only <3 ids> --promote`.
   - Its "no new versions" outcome relies on `log_artifact` deduplicating to the candidate source
@@ -200,9 +203,10 @@ exits 1 with a `ClickException` naming them, and nothing is published.
 
 Every `seed-registry` invocation, `--verify` included, prints this as its first output once the alias
 resolves:
-`target: <entity>/<registry> alias <repr(alias)> (from SLEAP_ROOTS_MODEL_ALIAS | default) seed project <seed_project>`.
+`target: <entity>/<registry> alias <ascii(alias)> (from SLEAP_ROOTS_MODEL_ALIAS | default) seed project <seed_project>`.
 
-- `repr` shows hidden characters that `str.strip()` keeps (U+200B).
+- `ascii()` shows hidden characters that `str.strip()` keeps (U+200B). Unlike `repr()`, it also
+  escapes printable non-Latin text, which a cp1252 console cannot encode when output is redirected.
 - The seed project is shown because step 6's outcome depends on it.
 - `--verify` echoes too, because D7.6 reads verify output under two aliases.
 - `WANDB_API_KEY` is never on this path.

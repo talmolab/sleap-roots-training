@@ -22,8 +22,9 @@ All notable changes to this project are documented here. The format is based on
 - **The target line.** Every `seed-registry` run prints the entity, registry, alias (and whether
   it came from `SLEAP_ROOTS_MODEL_ALIAS` or the default) and seed project first, including under
   `--yes`.
-- **`row_sources` and `model_origins` in the seed run config**, read from the matrix and scoped to
-  the run's cards.
+- **`row_sources`, `model_origins` and `registry_target` in the seed run config.** The first two are
+  read from the matrix and scoped to the run's cards. `registry_target` records the entity, registry
+  and alias the run linked under, so a candidate publish and its later promotion can be told apart.
 - **`sleap-roots-training inventory labels <root>`** — a re-runnable enumeration of what labeled
   data actually exists. Nobody had ever run one: the registry holds 8 collections against an
   expected 25-30, and `skeletons.yaml` cannot express the corpus it claims to describe. The command
@@ -59,9 +60,10 @@ All notable changes to this project are documented here. The format is based on
   - the selection matrix requires a per-row `source` and a top-level `origins` map covering
     exactly the referenced models (`snapshot`, `location`, `pinned_by`); a custom
     `--selection-matrix` without them no longer loads;
-  - `lineage.build_lineage(matrix_sha256)` is now `build_lineage(matrix_sha256, cards, matrix)`;
+  - `lineage.build_lineage(matrix_sha256)` is now `build_lineage(matrix_sha256, cards, matrix, cfg)`;
   - the seed run config's `selection_matrix_source`, `selection_matrix_date` and
-    `models_snapshot` are replaced by `row_sources` and `model_origins` (past runs keep theirs);
+    `models_snapshot` are replaced by `row_sources`, `model_origins` and `registry_target` (past
+    runs keep theirs);
   - a first-time default-alias seed needs `--only … --promote`;
   - a set-but-blank `SLEAP_ROOTS_MODEL_ALIAS` is an error for `seed-registry` in every mode
     (other callers, such as `inventory labels`, are unaffected).

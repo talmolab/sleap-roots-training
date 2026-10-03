@@ -221,7 +221,9 @@ The seed SHALL record run-level lineage in the wandb run config for traceability
 `sleap-roots-training` git SHA, a dirty-working-tree flag, the **SHA256 content hash of the actually
 loaded `model_selection.yaml`** (so the exact matrix used is pinned independently of git cleanliness —
 the per-model SHA256 anchor now lives in that tracked file), the provenance of the run's in-scope cards
-(published or skipped), and the `sleap-roots-training` / `wandb` / `sleap-roots-contracts` versions.
+(published or skipped), the registry target the run links under (`registry_target`: entity, registry
+and alias — so a candidate publish and its later promotion are distinguishable after the fact), and
+the `sleap-roots-training` / `wandb` / `sleap-roots-contracts` versions.
 Provenance SHALL be read from the loaded matrix, never from constants in code, and SHALL be scoped to
 the run's in-scope cards (narrowed by `--only`), as two lists of records:
 
@@ -244,8 +246,8 @@ per-artifact metadata (which stays exactly the selection keys).
 
 - **WHEN** a real seed runs
 - **THEN** the run config records the git SHA (or a documented fallback sentinel), the dirty flag,
-  the loaded `model_selection.yaml` content hash, `row_sources`, `model_origins`, and the
-  tool/contract versions
+  the loaded `model_selection.yaml` content hash, `row_sources`, `model_origins`,
+  `registry_target` (entity, registry, alias), and the tool/contract versions
 - **AND** it records no `selection_matrix_source`, `selection_matrix_date` or `models_snapshot` key
 - **AND** no per-artifact metadata carries lineage keys
 
@@ -291,8 +293,9 @@ non-contiguous `age` window, missing or mistyped provenance — SHALL reach the 
 error carrying the loader's row- or model-naming message, not as an unhandled traceback.
 
 Every invocation SHALL print, as its first output once the alias resolves and before any wandb contact,
-prompt or publish, a target line naming the entity, the registry, the alias (quoted so hidden characters
-show), whether the alias came from `SLEAP_ROOTS_MODEL_ALIAS` or the default, and the seed project. A
+prompt or publish, a target line naming the entity, the registry, the alias (ASCII-escaped, so hidden
+characters show and any console can print it), whether the alias came from `SLEAP_ROOTS_MODEL_ALIAS` or
+the default, and the seed project. A
 `SLEAP_ROOTS_MODEL_ALIAS` that is set but blank (see Environment-Driven Registry Configuration) SHALL be
 a CLI error for `seed-registry` in every mode, before any wandb call; it SHALL NOT fall back to
 `production`.

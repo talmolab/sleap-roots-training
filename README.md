@@ -101,8 +101,9 @@ sleap-roots-training seed-registry --models-root <models-root> --execute
 sleap-roots-training seed-registry --verify
 ```
 
-Every run's first line is the target: entity, registry, alias, whether the alias came from
-`SLEAP_ROOTS_MODEL_ALIAS` or the default, and the seed project. Read it before trusting the rest.
+The command's first line of output is the target: entity, registry, alias, whether the alias came
+from `SLEAP_ROOTS_MODEL_ALIAS` or the default, and the seed project. Read it before trusting the rest.
+(Option-parsing errors and `uv`'s own warnings can print before it.)
 
 `--models-root` is a directory of `<source_model_id>.zip` archives — the models-downloader
 snapshot for most models, but any directory laid out that way works (the wheat model ships in no
@@ -154,6 +155,9 @@ awaiting parity and trait checks (#72) — publish under another alias:
 SLEAP_ROOTS_MODEL_ALIAS=candidate sleap-roots-training seed-registry \
   --models-root <models-root> --only <id> [--only <id> ...] --execute
 ```
+
+In PowerShell, set it for the session with `$env:SLEAP_ROOTS_MODEL_ALIAS = 'candidate'` and remove it
+afterwards with `Remove-Item Env:SLEAP_ROOTS_MODEL_ALIAS`. Check the target line either way.
 
 - **`--only` is required.** Under a non-default alias no card counts as seeded, so an unscoped
   `--execute` would re-publish every card in the matrix; it is refused (exit 2).

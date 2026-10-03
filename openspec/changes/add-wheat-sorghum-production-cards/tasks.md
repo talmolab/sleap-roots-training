@@ -376,7 +376,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 - [x] 12.1 The CI-equivalent checks (top of this file) and
       `openspec validate add-wheat-sorghum-production-cards --strict` all pass. Lint any touched file
-      under `scripts/` separately. *Done 2026-10-03:* 992 passed, 3 skipped; coverage 97.84%
+      under `scripts/` separately. *Done 2026-10-03:* 992 passed, 3 skipped; coverage 97.84% (after the pre-PR review fixes: 1004 passed, 97.88%)
       (gate 95%); black, ruff (`src/` and `scripts/regen_model_checksums.py`) and the strict
       validate are clean. Every commit is green on its own:
       `git rebase --keep-base --exec "…pytest…"` ran each of the 11 commits through the suite.
@@ -400,6 +400,29 @@ an injected artifact (`arts_by_name`) nor a listed collection. Existing publish 
 artifact for a name without listing its collection, and wandb would answer those reads. Raising
 there would have broken tests whose subject is not existence. The case the change cares about, an
 absent and unlisted collection, raises as wandb 0.28 does.
+
+### Why `build_lineage` takes `cfg` and records `registry_target`
+
+This was added after the pre-PR `/review-pr`, with no new owner decision. D3 recorded only row and
+model provenance, but a candidate publish and its later `--promote` run would then have the same
+run-config shape, and aliases move. The spec's *Seed Run Lineage* requirement and the CHANGELOG now
+include the key.
+
+### Other changes from the pre-PR review
+
+- **Bug:** a mixed-type set of stale `origins` keys raised `TypeError` from the sort. The sort now uses
+  `key=str`.
+- **Cross-platform:** the target line uses `ascii()`, not `repr()`. A non-Latin alias crashed the line
+  when output was redirected on Windows.
+- **Refactor:** `SelectionRow.model_ids()` is now the one root-type-to-slot mapping. It replaces four
+  copies.
+- **Wording:** the wheat row's `source` now says "crown only", records that EDPIE's primary and lateral
+  models were deliberately not registered, and discloses the wheat+rice training labels.
+- **Tests:**
+  - CLI tests are hermetic to an exported alias;
+  - the promotion stub records its calls;
+  - new tests cover candidate-only collections in a default `--verify`, whitespace-only
+    provenance, and slot-scoped lineage.
 
 ### Why four `--promote` usage tests were green before group 9's implementation
 

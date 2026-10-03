@@ -85,14 +85,17 @@ models:
     source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   # Wheat seminal roots are the team's "crown" (owner, 2026-10-02); RootType gains no
-  # member. talmolab/sleap-roots-training#72.
+  # member. talmolab/sleap-roots-training#72. The crown model was trained on mixed
+  # labels, `labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005` (wheat seminal + rice).
+  # CROWN ONLY: the EDPIE run also pinned a primary model (250328_103313, n=101) and
+  # later ran a separate lateral model; both are deliberately not registered (#118).
   - species: wheat
     mode: cylinder
     age: "5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
     primary_model_id: null
     lateral_model_id: null
     crown_model_id: 20250401_wheat_models/250328_095645.multi_instance.n=1658
-    source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118), matching past production runs"
+    source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): crown only, the model EDPIE pinned; its primary and lateral models deliberately not registered"
 
   # The joint sorghum+soybean pair every past sorghum production run pinned. NOT the
   # registry's older `sorghum-*` collections, which are different models.
@@ -102,7 +105,7 @@ models:
     primary_model_id: 20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689
     lateral_model_id: 20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590
     crown_model_id: null
-    source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118), matching past production runs"
+    source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): the pair five past sorghum production runs pinned"
 
 # SHA256 of each distinct source `<model_id>.zip`.
 checksums:
