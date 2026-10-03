@@ -119,10 +119,16 @@ def test_build_rejects_a_crop_the_skeleton_table_does_not_cover(tmp_path):
 
 def test_build_for_wheat_fails_at_the_skeleton_lookup_before_staging(tmp_path):
     """Wheat is in SPECIES_VOCAB for the model registry but has no skeleton row yet."""
-    result = invoke(["build", *build_args(tmp_path, **{"--species": "wheat"})])
+    # build_args ends with "--root-type primary --root-type lateral"; wheat is crown-only.
+    args = build_args(tmp_path, **{"--species": "wheat"})[:-4] + [
+        "--root-type",
+        "crown",
+    ]
+    result = invoke(["build", *args])
 
     assert result.exit_code != 0
     assert "No labeling skeleton" in result.output
+    assert "crown" in result.output
     assert not isinstance(result.exception, ValueError)
     assert not (tmp_path / "soybean-weep-labeling").exists()
 
