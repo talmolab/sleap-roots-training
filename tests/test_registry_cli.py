@@ -13,6 +13,30 @@ def _invoke(args, **kw):
     return CliRunner().invoke(cli.main, ["seed-registry", *args], **kw)
 
 
+#: Every ``wandb.Api()`` construction attempted by a CLI test, recorded by the backstop.
+API_CALLS: list = []
+
+
+@pytest.fixture(autouse=True)
+def _no_live_wandb_api(monkeypatch):
+    """Backstop: no CLI test may build a real ``wandb.Api``.
+
+    Constructing one validates the key over the network (wandb 0.28), so a test that
+    reaches it by accident would contact api.wandb.ai with a fake key. This spy records
+    the attempt and raises; a test that needs a registry patches ``wandb.Api`` with an
+    offline fake after this runs.
+    """
+    import wandb
+
+    API_CALLS.clear()
+
+    def spy(*a, **k):
+        API_CALLS.append("Api")
+        raise AssertionError("a CLI test built a real wandb.Api")
+
+    monkeypatch.setattr(wandb, "Api", spy)
+
+
 def _verify_report(
     present=(),
     missing=(),
@@ -87,7 +111,9 @@ def test_execute_without_api_key_fails_before_prompt(
     assert "WANDB_API_KEY" in result.output
 
 
-def test_execute_declined_publishes_nothing(monkeypatch, tiny_matrix, stub_models_root):
+def test_execute_declined_publishes_nothing(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     import wandb
 

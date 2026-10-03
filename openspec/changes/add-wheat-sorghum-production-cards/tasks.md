@@ -88,7 +88,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 4. Commit `test(registry): share the publish fakes and a matrix-writing helper`
 
-- [ ] 4.1 Move the whole fakes block from `tests/test_registry_publish.py` into
+- [x] 4.1 Move the whole fakes block from `tests/test_registry_publish.py` into
       `tests/registry_fakes.py`, and import it back. pytest won't collect the new file, since it
       doesn't match `test_*.py`. The block is:
       - `_FakeRun` with `_FakeLogged`;
@@ -98,11 +98,11 @@ Ids and strings are written once, in `design.md` (Context and D1).
       Make `_FakeApi.artifacts(type_name, name)` **raise `ValueError`** for a name with no collection,
       matching wandb 0.28 (`wandb/apis/public/artifacts.py:918-924`). Fix any existing test that
       relied on `[]`.
-- [ ] 4.2 Extend `_FakeRun` for CLI use:
+- [x] 4.2 Extend `_FakeRun` for CLI use:
       - `project` and `entity` attributes;
       - `finish(exit_code=None)`;
       - a **list** of `(target, aliases)` link calls, not only the last one.
-- [ ] 4.3 Add a conftest helper,
+- [x] 4.3 Add a conftest helper,
       `write_matrix(tmp_path, rows, *, checksums=None, origins=AUTO, drop=(), override=None)`:
       - by default, derive each row's `source` and an `origins` entry for every referenced id;
       - accept `drop`/`override` keyed per row (`("row", i, key)`) and per model
@@ -110,7 +110,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
       - support writing `origins` as absent, `null` or a list.
 
       Every new loader test uses it.
-- [ ] 4.4 In `tests/test_registry_cli.py`:
+- [x] 4.4 In `tests/test_registry_cli.py`:
       - Add an autouse fixture that replaces `wandb.Api` with a spy that records the call and raises.
         Then no CLI test can reach api.wandb.ai by accident. Tests that need a registry override it
         with `_FakeApi`.
