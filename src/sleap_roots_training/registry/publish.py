@@ -3,8 +3,8 @@
 This is the thin network layer. It publishes each card as a ``type="model"`` artifact
 with exactly the card's selection metadata, links it into a per-card collection under
 the configured registry with the configured alias (default ``production``), and can
-re-run the consumer read path to verify the alias landed. ``wandb`` is imported lazily so the pure-logic
-and dry-run paths never require it loaded.
+re-run the consumer read path to verify the alias landed. ``wandb`` is imported lazily
+so the pure-logic and dry-run paths never require it loaded.
 """
 
 from __future__ import annotations
@@ -134,6 +134,47 @@ def _existing_collections(api, project: str) -> dict[str, object]:
             project_name=project, type_name="model"
         )
     }
+
+
+def unpromoted_collections(
+    cfg: RegistryConfig, cards: Iterable[Card], api=None
+) -> list:
+    """Return the in-scope collections that do not yet carry ``cfg.alias``, sorted.
+
+    Under the default alias, linking ``production`` to such a collection makes it live for
+    the consumer at once, so ``seed-registry`` refuses it unless ``--promote`` is given.
+    Read-only.
+
+    A collection absent from the registry listing is unpromoted **without** reading its
+    versions: wandb 0.28 raises (``ValueError: Unable to parse 'Artifacts' response
+    data``) when asked for the versions of a collection that does not exist, so reading
+    first would make every first-time seed fail instead of being reported.
+
+    Args:
+        cfg: The resolved registry configuration.
+        cards: The invocation's in-scope cards.
+        api: A ``wandb.Api``, built lazily when ``None`` (constructing one validates the
+            key over the network, so callers on a refusal path never build it).
+
+    Returns:
+        The collection ids with no version carrying ``cfg.alias``.
+    """
+    if api is None:
+        import wandb
+
+        api = wandb.Api()
+
+    project = cfg.registry_project()
+    existing = _existing_collections(api, project)
+    unpromoted = set()
+    for card in cards:
+        collection = collection_id(card)
+        if (
+            collection not in existing
+            or _aliased_artifact(api, project, collection, cfg.alias) is None
+        ):
+            unpromoted.add(collection)
+    return sorted(unpromoted)
 
 
 def resolve_all(

@@ -737,3 +737,62 @@ def test_a_non_default_alias_skips_a_collection_already_carrying_it(tmp_path):
     report = publish.seed_registry([(card, tmp_path)], cfg, run, api=api)
     assert report["skipped"] == [collection]
     assert run.links == []
+
+
+# --- unpromoted_collections: the first-time-production-link check ---
+
+
+def _scoped_cards():
+    return [
+        _card("primary", "a/p/x", ("soybean", "cylinder", 2, 8)),
+        _card("lateral", "b/l/x", ("soybean", "cylinder", 2, 8)),
+        _card("crown", "c/c/x", ("rice", "cylinder", 2, 5)),
+    ]
+
+
+def test_unpromoted_lists_absent_and_candidate_only_collections_sorted():
+    cards_ = _scoped_cards()
+    absent, candidate_only, promoted = (collection_id(c) for c in cards_)
+    api = _FakeApi(
+        collections=[candidate_only, promoted],
+        arts_by_name={
+            f"{PROJECT}/{candidate_only}": [_FakeArt(["candidate", "latest"])],
+            f"{PROJECT}/{promoted}": [_FakeArt(["production", "candidate"])],
+        },
+    )
+    # `absent` is not in the listing: reading its versions would raise (the fake raises
+    # like wandb 0.28), so this passes only if existence is checked first.
+    assert publish.unpromoted_collections(CFG, cards_, api=api) == sorted(
+        [absent, candidate_only]
+    )
+
+
+def test_unpromoted_is_empty_when_every_collection_already_carries_the_alias():
+    cards_ = _scoped_cards()
+    ids = [collection_id(c) for c in cards_]
+    api = _FakeApi(
+        collections=ids,
+        arts_by_name={f"{PROJECT}/{i}": [_FakeArt(["production"])] for i in ids},
+    )
+    assert publish.unpromoted_collections(CFG, cards_, api=api) == []
+
+
+def test_unpromoted_propagates_a_listing_error():
+    with pytest.raises(ConnectionError):
+        publish.unpromoted_collections(CFG, _scoped_cards(), api=_FakeApi(fail=True))
+
+
+def test_unpromoted_builds_its_api_lazily(monkeypatch):
+    import wandb
+
+    built = []
+
+    def fake_api(*a, **k):
+        built.append("Api")
+        return _FakeApi()
+
+    monkeypatch.setattr(wandb, "Api", fake_api)
+    assert publish.unpromoted_collections(CFG, _scoped_cards()) == sorted(
+        collection_id(c) for c in _scoped_cards()
+    )
+    assert built == ["Api"]

@@ -73,6 +73,14 @@ def _require_api_key() -> None:
     ),
 )
 @click.option("--verify", is_flag=True, help="Read-only: check the live registry.")
+@click.option(
+    "--promote",
+    is_flag=True,
+    help=(
+        "Allow linking the default alias (production) to a collection for the first "
+        "time. Requires --execute and --only; refused under a non-default alias."
+    ),
+)
 @click.pass_context
 def seed_registry_command(
     ctx: click.Context,
@@ -83,6 +91,7 @@ def seed_registry_command(
     force: bool,
     only: tuple,
     verify: bool,
+    promote: bool,
 ) -> None:
     """Seed (or verify) the model registry under the configured alias.
 
@@ -91,6 +100,10 @@ def seed_registry_command(
     publish (which checks ``WANDB_API_KEY``, then confirms the target unless ``--yes``).
     ``--verify`` re-runs the consumer read path against the live registry. ``--only``
     scopes every mode to the named collection(s) for canary seeding.
+
+    Two guards keep a publish from going live by accident: under a non-default alias,
+    ``--execute`` requires ``--only``; under the default alias, linking ``production`` to
+    a collection for the first time requires ``--promote`` (which requires ``--only``).
     """
     cfg = config.resolve_registry_config()
     # First output, in every mode: which registry and alias this run acts on, and where
@@ -140,6 +153,20 @@ def seed_registry_command(
     if duplicates:
         raise click.UsageError(f"duplicate collection ids in the matrix: {duplicates}")
     expected = sorted(ids)
+
+    # `--promote` names a deliberate first-time production link, so it is only
+    # meaningful when publishing, under the default alias, with an explicit scope.
+    if promote and (not execute or verify):
+        raise click.UsageError("--promote applies only with --execute.")
+    if promote and not only:
+        raise click.UsageError(
+            "--promote requires --only, so a promotion names its collections."
+        )
+    if promote and cfg.alias != config.DEFAULT_ALIAS:
+        raise click.UsageError(
+            f"--promote applies only to the default alias "
+            f"({config.DEFAULT_ALIAS!r}), not {cfg.alias!r}."
+        )
 
     if verify:
         _require_api_key()
@@ -205,6 +232,25 @@ def seed_registry_command(
         )
 
     _require_api_key()  # fail fast before the confirmation prompt.
+
+    # Under the default alias, a collection with no `production` version goes live for
+    # the consumer the moment it is linked. Never as a side effect: not of a routine
+    # re-seed, a lost alias variable, or --force (which skips only the idempotency read).
+    # Checked before the prompt, model resolution and wandb.init, so a refusal mints no run.
+    if cfg.alias == config.DEFAULT_ALIAS:
+        try:
+            unpromoted = publish.unpromoted_collections(cfg, all_cards)
+        except Exception as error:  # noqa: BLE001 - fail closed, as a CLI error
+            raise click.ClickException(
+                f"could not check which collections already carry "
+                f"{cfg.alias!r} ({error}); nothing published."
+            )
+        if unpromoted and not promote:
+            raise click.ClickException(
+                f"{len(unpromoted)} collection(s) would be linked to {cfg.alias!r} for "
+                f"the first time, which makes them live for the consumer: {unpromoted}. "
+                "Pass --promote (with --only) to do that deliberately; nothing published."
+            )
     if not yes:
         click.confirm(
             f"Publish {len(all_cards)} cards to {cfg.entity} / {cfg.registry} "

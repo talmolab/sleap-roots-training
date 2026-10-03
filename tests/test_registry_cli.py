@@ -39,6 +39,21 @@ def _no_live_wandb_api(monkeypatch):
     monkeypatch.setattr(wandb, "Api", spy)
 
 
+#: The real pre-pass, kept so a test can opt back out of the module-wide stub below.
+_REAL_UNPROMOTED = getattr(publish, "unpromoted_collections", None)
+
+
+@pytest.fixture(autouse=True)
+def _promotion_check_passes(monkeypatch):
+    """Default: every in-scope collection already carries the alias.
+
+    The pre-pass reads the registry, so without this every default-alias --execute test
+    would reach the network. Guard-2 tests override it with ``_stub_promotion_check``
+    or restore ``_REAL_UNPROMOTED``.
+    """
+    _stub_promotion_check(monkeypatch)
+
+
 def _verify_report(
     present=(),
     missing=(),
@@ -151,6 +166,8 @@ def test_execute_declined_publishes_nothing(
         input="n\n",
     )
     assert result.exit_code != 0  # aborted
+    # It must be the DECLINE that stopped it, not some earlier refusal.
+    assert "Publish" in result.output
     assert calls == []  # nothing resolved, no run created, nothing published
 
 
@@ -1051,3 +1068,153 @@ def test_the_default_alias_without_only_is_not_refused_by_the_alias_guard(
     _stub_promotion_check(monkeypatch)
     result = _execute(tiny_matrix, stub_models_root, "--yes")
     assert result.exit_code == 0, result.output
+
+
+# --- guard 2: a first-time production link requires --promote ---
+
+
+@pytest.mark.parametrize(
+    "extra, kw",
+    [(["--yes"], {}), ([], {"input": "y\n"}), (["--yes", "--force"], {})],
+    ids=["--yes", "prompted", "--force"],
+)
+def test_a_first_time_production_link_without_promote_is_refused(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root, extra, kw
+):
+    calls = _spy_everything(monkeypatch)
+    checked = []
+
+    def unpromoted(cfg, cards_, api=None):
+        checked.append(cfg.alias)
+        return ["soy-p"]
+
+    monkeypatch.setattr(publish, "unpromoted_collections", unpromoted)
+    result = _execute(tiny_matrix, stub_models_root, "--only", "soy-p", *extra, **kw)
+    assert result.exit_code == 1, result.output  # a CLI error, not a usage error
+    assert "soy-p" in result.output
+    assert "--promote" in result.output
+    assert checked == ["production"]  # the check ran, --force or not
+    assert calls == ["credential"]  # no prompt, no resolve, no run
+
+
+def test_promote_lets_a_first_time_link_proceed(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    _stub_promotion_check(monkeypatch, unpromoted=["soy-p"])
+    seeded = []
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda project=None, entity=None, **kw: SimpleNamespace(
+            project=project, entity=entity, finish=lambda: None
+        ),
+    )
+    monkeypatch.setattr(publish, "resolve_all", lambda cs, root, sums: [])
+    monkeypatch.setattr(
+        publish,
+        "seed_registry",
+        lambda *a, **k: seeded.append(1)
+        or {"published": ["soy-p"], "skipped": [], "failed": [], "stale": []},
+    )
+    result = _execute(
+        tiny_matrix, stub_models_root, "--yes", "--only", "soy-p", "--promote"
+    )
+    assert result.exit_code == 0, result.output
+    assert seeded == [1]
+
+
+@pytest.mark.parametrize("promote", [[], ["--promote"]], ids=["plain", "--promote"])
+def test_an_already_promoted_scope_proceeds_with_or_without_promote(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root, promote
+):
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda project=None, entity=None, **kw: SimpleNamespace(
+            project=project, entity=entity, finish=lambda: None
+        ),
+    )
+    monkeypatch.setattr(publish, "resolve_all", lambda cs, root, sums: [])
+    monkeypatch.setattr(
+        publish,
+        "seed_registry",
+        lambda *a, **k: {
+            "published": [],
+            "skipped": ["soy-p"],
+            "failed": [],
+            "stale": [],
+        },
+    )
+    result = _execute(
+        tiny_matrix, stub_models_root, "--yes", "--only", "soy-p", *promote
+    )
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    "args, alias",
+    [
+        (["--execute", "--yes", "--promote"], None),  # no --only
+        (["--execute", "--yes", "--only", "soy-p", "--promote"], "candidate"),
+        (["--only", "soy-p", "--promote"], None),  # dry run
+        (["--verify", "--only", "soy-p", "--promote"], None),
+    ],
+    ids=["no --only", "non-default alias", "dry run", "verify"],
+)
+def test_promote_is_a_usage_error_where_it_does_not_apply(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root, args, alias
+):
+    if alias:
+        monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", alias)
+    calls = _spy_everything(monkeypatch)
+    monkeypatch.setattr(
+        publish, "verify_registry", lambda *a, **k: calls.append("verify")
+    )
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(tiny_matrix),
+            "--models-root",
+            str(stub_models_root),
+            *args,
+        ]
+    )
+    assert result.exit_code == 2, result.output
+    assert "--promote" in result.output
+    assert calls == [] and API_CALLS == []
+
+
+def test_a_promotion_check_error_fails_closed_without_a_traceback(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    calls = _spy_everything(monkeypatch)
+
+    def boom(*a, **k):
+        raise RuntimeError("registry unreachable")
+
+    monkeypatch.setattr(publish, "unpromoted_collections", boom)
+    result = _execute(tiny_matrix, stub_models_root, "--yes", "--only", "soy-p")
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "registry unreachable" in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "init" not in calls
+
+
+def test_a_padded_default_alias_is_the_default_and_gets_the_promotion_check(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", " production ")
+    calls = _spy_everything(monkeypatch)
+    _stub_promotion_check(monkeypatch, unpromoted=["soy-p"])
+    result = _execute(tiny_matrix, stub_models_root, "--yes")
+    # Not guard 1 (that would be exit 2 naming --only); guard 2 refuses it.
+    assert result.exit_code == 1, result.output
+    assert "--promote" in result.output
+    assert "init" not in calls

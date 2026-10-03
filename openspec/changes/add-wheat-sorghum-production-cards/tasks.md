@@ -238,7 +238,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 9. Commit `feat(cli): require --promote to link production to a collection for the first time`
 
-- [ ] 9.1 Unit tests for `publish.unpromoted_collections(cfg, cards, api)`, against `_FakeApi`.
+- [x] 9.1 Unit tests for `publish.unpromoted_collections(cfg, cards, api)`, against `_FakeApi`.
       *Red: the function doesn't exist.*
       - An absent collection is listed. This **fails without the existence check**, because the fake
         raises for absent names.
@@ -247,7 +247,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
       - The result is sorted.
       - A listing error propagates.
       - With `api=None`, it builds `wandb.Api()` lazily (spy).
-- [ ] 9.2 Add a `test_registry_cli.py` fixture, autouse for the module, that stubs
+- [x] 9.2 Add a `test_registry_cli.py` fixture, autouse for the module, that stubs
       `publish.unpromoted_collections` to return `[]`. Guard-2 tests opt out. This covers every
       default-alias `--execute` test, including:
       - `test_execute_yes_seeds_and_reports`;
@@ -258,7 +258,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
       In `test_execute_declined_publishes_nothing`, also assert that the prompt was reached
       (`"Publish"` or `"Aborted"` in the output). Otherwise it could pass on any early refusal.
-- [ ] 9.3 Guard-2 CLI tests (default alias, `isolate_wandb_env`, spies as in 8.1,
+- [x] 9.3 Guard-2 CLI tests (default alias, `isolate_wandb_env`, spies as in 8.1,
       `unpromoted_collections` faked per case). *Red: there is no check and no flag.*
       - (a) One unpromoted id with `--execute --yes --only <id>` and no `--promote` → `exit_code == 1`,
         with the id and `--promote` in the output. The confirm, `resolve_all` and `wandb.init` spies
@@ -276,7 +276,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
         called.
       - (h) `SLEAP_ROOTS_MODEL_ALIAS=" production "`, `--execute --yes`, no `--only`, one unpromoted id
         → not refused by guard 1 (no exit 2); refused by guard 2 (exit 1).
-- [ ] 9.4 Implement (design D5):
+- [x] 9.4 Implement (design D5):
       - `publish.unpromoted_collections`, with a lazy `api`, existence checked first, then
         `_aliased_artifact`;
       - the `--promote` flag. Its usage checks go with guard 1, before the dry-run return;
