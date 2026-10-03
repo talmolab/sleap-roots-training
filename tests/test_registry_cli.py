@@ -941,3 +941,113 @@ def test_execute_prints_the_target_line_first(
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[0].startswith("target: ")
     assert "alias 'production' (default)" in result.output.splitlines()[0]
+
+
+# --- guard 1: a non-default alias under --execute requires --only ---
+
+
+def _spy_everything(monkeypatch):
+    """Record (never raise in) every step past the guards. CliRunner swallows raises."""
+    import click
+    import wandb
+
+    from sleap_roots_training.registry import config as registry_config
+
+    calls = []
+    monkeypatch.setattr(
+        registry_config, "require_api_key", lambda: calls.append("credential")
+    )
+    monkeypatch.setattr(click, "confirm", lambda *a, **k: calls.append("confirm"))
+    monkeypatch.setattr(wandb, "init", lambda *a, **k: calls.append("init"))
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda *a, **k: calls.append("resolve_all") or []
+    )
+    return calls
+
+
+def _execute(matrix, root, *extra, **kw):
+    return _invoke(
+        [
+            "--selection-matrix",
+            str(matrix),
+            "--models-root",
+            str(root),
+            "--execute",
+            *extra,
+        ],
+        **kw,
+    )
+
+
+@pytest.mark.parametrize(
+    "extra, kw",
+    [
+        (["--yes"], {}),
+        ([], {"input": "y\n"}),
+        (["--yes", "--force"], {}),
+    ],
+    ids=["--yes", "prompted", "--force"],
+)
+def test_a_non_default_alias_without_only_is_refused_before_anything(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root, extra, kw
+):
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    calls = _spy_everything(monkeypatch)
+    result = _execute(tiny_matrix, stub_models_root, *extra, **kw)
+    assert result.exit_code == 2, result.output  # click usage error
+    assert "candidate" in result.output
+    assert "--only" in result.output
+    assert calls == [] and API_CALLS == []
+
+
+def test_a_non_default_alias_dry_run_without_only_is_allowed(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    _no_wandb(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    result = _invoke(
+        ["--selection-matrix", str(tiny_matrix), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_a_non_default_alias_verify_without_only_is_allowed(
+    monkeypatch, isolate_wandb_env, tiny_matrix
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    seen = {}
+
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+        seen["alias"] = cfg.alias
+        seen["expected"] = sorted(expected)
+        return _verify_report(present=expected)
+
+    monkeypatch.setattr(publish, "verify_registry", fake_verify)
+    result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
+    assert result.exit_code == 0, result.output
+    assert seen == {"alias": "candidate", "expected": ["soy-l", "soy-p"]}
+
+
+def test_the_default_alias_without_only_is_not_refused_by_the_alias_guard(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda project=None, entity=None, **kw: SimpleNamespace(
+            project=project, entity=entity, finish=lambda: None
+        ),
+    )
+    monkeypatch.setattr(publish, "resolve_all", lambda cs, root, sums: [])
+    monkeypatch.setattr(
+        publish,
+        "seed_registry",
+        lambda *a, **k: {"published": [], "skipped": [], "failed": [], "stale": []},
+    )
+    _stub_promotion_check(monkeypatch)
+    result = _execute(tiny_matrix, stub_models_root, "--yes")
+    assert result.exit_code == 0, result.output

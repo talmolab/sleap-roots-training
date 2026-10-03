@@ -216,7 +216,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 8. Commit `feat(cli): refuse --execute under a non-default alias without --only`
 
-- [ ] 8.1 Tests (`tests/test_registry_cli.py`, `isolate_wandb_env`). Use recording spies on
+- [x] 8.1 Tests (`tests/test_registry_cli.py`, `isolate_wandb_env`). Use recording spies on
       `sleap_roots_training.registry.config.require_api_key`, `click.confirm` and `wandb.init`, plus
       the autouse `wandb.Api` spy, and assert `calls == []`. Never raise inside the spies: CliRunner
       swallows the exception (see the note in `test_execute_declined_publishes_nothing`).
@@ -228,12 +228,12 @@ Ids and strings are written once, in `design.md` (Context and D1).
       - (d) *(guard)* A `candidate` dry run without `--only` → exit 0.
       - (e) *(guard)* `candidate` `--verify` without `--only` → the faked `verify_registry` receives
         `cfg.alias == "candidate"` and the full expected set.
-- [ ] 8.2 Test (`tests/test_registry_publish.py`). Call `seed_registry` with
+- [x] 8.2 Test (`tests/test_registry_publish.py`). Call `seed_registry` with
       `RegistryConfig("ent", "reg", "candidate")` against a `_FakeApi` collection carrying
       `production` but not `candidate` → it is re-published and linked `["candidate"]`. With
       `candidate` already present → skipped. *(guard)* This pins the per-alias behaviour that both
       guards exist for.
-- [ ] 8.3 Implement (design D4): the guard goes after the dry-run return and before
+- [x] 8.3 Implement (design D4): the guard goes after the dry-run return and before
       `_require_api_key()`.
 
 ## 9. Commit `feat(cli): require --promote to link production to a collection for the first time`

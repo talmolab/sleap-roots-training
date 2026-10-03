@@ -699,3 +699,41 @@ def test_a_raising_refresh_on_the_real_publish_path_lands_in_failed(
         _resolved([card], model_dir), CFG, run=run2, api=_ReReadApi(run2), force=True
     )
     assert report["failed"] == ["soy-p"] and report["published"] == []
+
+
+# --- the per-alias skip both seed-registry guards exist for ---
+
+
+def test_a_non_default_alias_republishes_a_collection_that_only_carries_production(
+    monkeypatch, tmp_path
+):
+    import wandb
+
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    cfg = RegistryConfig("ent", "reg", "candidate")
+    card = _card("primary", "soybean/primary/x", ("soybean", "cylinder", 2, 8))
+    collection = collection_id(card)
+    name = f"{cfg.registry_project()}/{collection}"
+    api = _FakeApi(
+        collections=[collection], arts_by_name={name: [_FakeArt(["production"])]}
+    )
+    run = _FakeRun()
+    report = publish.seed_registry([(card, tmp_path)], cfg, run, api=api)
+    # The skip is per alias: `production` on the collection does not count as seeded
+    # under `candidate`, so without --only every card would be re-published.
+    assert report["published"] == [collection]
+    assert run.links == [(name, ["candidate"])]
+
+
+def test_a_non_default_alias_skips_a_collection_already_carrying_it(tmp_path):
+    cfg = RegistryConfig("ent", "reg", "candidate")
+    card = _card("primary", "soybean/primary/x", ("soybean", "cylinder", 2, 8))
+    collection = collection_id(card)
+    name = f"{cfg.registry_project()}/{collection}"
+    api = _FakeApi(
+        collections=[collection], arts_by_name={name: [_FakeArt(["candidate"])]}
+    )
+    run = _FakeRun()
+    report = publish.seed_registry([(card, tmp_path)], cfg, run, api=api)
+    assert report["skipped"] == [collection]
+    assert run.links == []

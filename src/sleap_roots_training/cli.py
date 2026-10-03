@@ -194,6 +194,16 @@ def seed_registry_command(
             click.echo(f"{collection}  {cards.card_to_metadata(card)}  [{status}]")
         return
 
+    # The idempotency skip is per alias, so under a non-default alias no card counts as
+    # seeded: without --only, every card in the matrix would be re-published under it.
+    # Refused before the credential check, the prompt, or any wandb call.
+    if cfg.alias != config.DEFAULT_ALIAS and not only:
+        raise click.UsageError(
+            f"alias {cfg.alias!r} is not the default ({config.DEFAULT_ALIAS!r}); "
+            "--execute under a non-default alias requires --only, or every card in "
+            f"the matrix is re-published under {cfg.alias!r}. Nothing published."
+        )
+
     _require_api_key()  # fail fast before the confirmation prompt.
     if not yes:
         click.confirm(
