@@ -374,12 +374,39 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 12. Verification and reconciliation (before `/pre-merge-check`)
 
-- [ ] 12.1 The CI-equivalent checks (top of this file) and
+- [x] 12.1 The CI-equivalent checks (top of this file) and
       `openspec validate add-wheat-sorghum-production-cards --strict` all pass. Lint any touched file
-      under `scripts/` separately.
-- [ ] 12.2 Re-read proposal, design, spec and these tasks against the diff. Record any deviation here
+      under `scripts/` separately. *Done 2026-10-03:* 992 passed, 3 skipped; coverage 97.84%
+      (gate 95%); black, ruff (`src/` and `scripts/regen_model_checksums.py`) and the strict
+      validate are clean. Every commit is green on its own:
+      `git rebase --keep-base --exec "…pytest…"` ran each of the 11 commits through the suite.
+- [x] 12.2 Re-read proposal, design, spec and these tasks against the diff. Record any deviation here
       as a `### Why N instead of M?` note, and file an issue for any bug found. Commit as
       `docs(openspec): reconcile add-wheat-sorghum-production-cards with the implementation`.
+      *Done 2026-10-03.* No bug was found that needed a workaround, so no issue was filed. The
+      deviations are below.
+
+### Why the wheat labeling test was corrected after group 3
+
+Task 3.3 says `build --species wheat --root-type crown`. As first committed, the test inherited
+`build_args`' `--root-type primary --root-type lateral`. Both fail at the same skeleton lookup, so
+the test passed either way, but it did not test what the task names. Reconciliation found the gap,
+and a follow-up commit makes the test pass `crown` and assert that the error names it.
+
+### Why `_FakeApi.artifacts` raises only for an unknown, unlisted name
+
+Task 4.1 says the fake raises "for a name with no collection". It raises when the name is neither
+an injected artifact (`arts_by_name`) nor a listed collection. Existing publish tests inject an
+artifact for a name without listing its collection, and wandb would answer those reads. Raising
+there would have broken tests whose subject is not existence. The case the change cares about, an
+absent and unlisted collection, raises as wandb 0.28 does.
+
+### Why four `--promote` usage tests were green before group 9's implementation
+
+Task 9.3(e), (f) and (f2) are labelled red. Before the flag existed, click rejected `--promote` as
+an unknown option, which is also a usage error (exit 2) whose message names `--promote`. So those
+four cases passed vacuously in the red run. After implementation they pass for the right reason.
+The assertions are unchanged, and they check exit 2, the flag name, and that nothing was called.
 
 ## 13. Operator, before merge (on the branch; no writes, no lineage)
 
