@@ -1,10 +1,14 @@
 """Load and validate the committed production model selection matrix.
 
-The matrix is a committed, provenance-stamped YAML file mirroring the current
-``models-downloader`` ``model_chooser_table.xlsx``. It is read via OmegaConf (the
-repo's config idiom) into plain, typed records. The native ``age`` comma-list is
-preserved in the file and parsed here to a contiguous ``(age_min, age_max)`` window,
-so the file diffs row-for-row against the source xlsx and the parse is a tested step.
+The matrix is a committed YAML file read via OmegaConf (the repo's config idiom) into
+plain, typed records. It keeps the models-downloader chooser-table schema, and its native
+``age`` comma-list is parsed here to a contiguous ``(age_min, age_max)`` window.
+
+Its rows no longer come from one source table — some were transcribed from the 20250204
+``model_chooser_table.xlsx``, others set by an owner decision — so provenance is carried
+in the file and enforced here: every row has a ``source``, and an ``origins`` map records
+where each model's zip came from and what pinned it. A row cannot be added without
+saying so.
 """
 
 from __future__ import annotations
@@ -112,6 +116,24 @@ _DATA_RESOURCE = "data/model_selection.yaml"
 
 
 @dataclass(frozen=True)
+class ModelOrigin:
+    """Where one model's ``<model_id>.zip`` came from, and what pinned that exact file.
+
+    Attributes:
+        snapshot: The models-downloader snapshot the zip ships in (e.g. ``"20250204"``),
+            or ``None`` when it ships in none (an experiment run's own models).
+        location: The directory under which ``<model_id>.zip`` sits, relative to a run
+            or a snapshot — never a share path.
+        pinned_by: What selected that exact file (a chooser table, a run's
+            ``model_paths.csv``).
+    """
+
+    snapshot: Optional[str]
+    location: str
+    pinned_by: str
+
+
+@dataclass(frozen=True)
 class SelectionRow:
     """One row of the selection matrix (a species/mode/age combination).
 
@@ -122,6 +144,7 @@ class SelectionRow:
         primary_model_id: Relative primary-root model id, or ``None`` if absent.
         lateral_model_id: Relative lateral-root model id, or ``None`` if absent.
         crown_model_id: Relative crown-root model id, or ``None`` if absent.
+        source: Why the row exists with its window (a chooser table, an owner decision).
     """
 
     species: str
@@ -130,19 +153,23 @@ class SelectionRow:
     primary_model_id: Optional[str]
     lateral_model_id: Optional[str]
     crown_model_id: Optional[str]
+    source: str
 
 
 @dataclass(frozen=True)
 class SelectionMatrix:
-    """The parsed selection matrix: rows plus per-model source checksums.
+    """The parsed selection matrix: rows plus per-model checksums and origins.
 
     Attributes:
         rows: The selection rows, in file order.
         checksums: Map of ``model_id`` to the SHA256 of its source ``.zip``.
+        origins: Map of ``model_id`` to its :class:`ModelOrigin`, covering exactly the
+            models the rows reference.
     """
 
     rows: tuple[SelectionRow, ...]
     checksums: dict[str, str]
+    origins: dict[str, ModelOrigin]
 
 
 def parse_age_window(age: str) -> tuple[int, int]:
@@ -181,8 +208,9 @@ def load_selection_matrix(path: Optional[Path] = None) -> SelectionMatrix:
 
     Raises:
         ValueError: If the file cannot be read, is not valid YAML, does not parse to a
-            mapping, or a row's ``species`` or ``mode`` is not in the canonical
-            vocabulary. Read and parse failures are normalized to ``ValueError`` (from
+            mapping, a row's ``species`` or ``mode`` is not in the canonical
+            vocabulary, or the provenance (a row's ``source``, the ``origins`` map) is
+            missing, mistyped, or stale. Read and parse failures are normalized to ``ValueError`` (from
             ``OSError`` / a YAML parse error) so a caller has one type to handle.
     """
     if path is not None:
@@ -283,6 +311,15 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
                     f"{type(model_id).__name__} ({model_id!r})"
                 )
 
+        # After the vocabulary and model-id checks, so a row that is wrong in an older,
+        # more specific way keeps reporting that rather than its missing provenance.
+        source = raw.get("source")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError(
+                f"row {index}: `source` must be a non-empty string saying why the row "
+                f"exists, got {source!r}"
+            )
+
         rows.append(
             SelectionRow(
                 species=species,
@@ -291,8 +328,76 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
                 primary_model_id=model_ids["primary_model_id"],
                 lateral_model_id=model_ids["lateral_model_id"],
                 crown_model_id=model_ids["crown_model_id"],
+                source=source,
             )
         )
 
     checksums = dict(data.get("checksums", {}))
-    return SelectionMatrix(rows=tuple(rows), checksums=checksums)
+    origins = _parse_origins(data.get("origins"), rows)
+    return SelectionMatrix(rows=tuple(rows), checksums=checksums, origins=origins)
+
+
+def _parse_origins(raw, rows: list[SelectionRow]) -> dict[str, ModelOrigin]:
+    """Validate that ``origins`` covers exactly the rows' models, and parse it.
+
+    Runs only after every row is read, so a later row's per-row error is reported before
+    an earlier row's missing origin. Strict in both directions — unlike ``checksums`` —
+    because an origin for a model no row references is a stale claim about provenance.
+    """
+    referenced: list[str] = []
+    for row in rows:
+        for model_id in (
+            row.primary_model_id,
+            row.lateral_model_id,
+            row.crown_model_id,
+        ):
+            if model_id is not None and model_id not in referenced:
+                referenced.append(model_id)
+
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"`origins` must be a mapping of model id to its origin, got a "
+            f"{type(raw).__name__}"
+        )
+
+    origins: dict[str, ModelOrigin] = {}
+    for model_id in referenced:
+        if model_id not in raw:
+            raise ValueError(
+                f"{model_id}: no `origins` entry (where its zip came from)"
+            )
+        entry = raw[model_id]
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{model_id}: its `origins` entry must be a mapping with `snapshot`, "
+                f"`location` and `pinned_by`, got {entry!r}"
+            )
+        for key in ("location", "pinned_by"):
+            value = entry.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"{model_id}: origin `{key}` must be a non-empty string, got {value!r}"
+                )
+        # Required, with `null` explicit: an omitted key read as None would silently
+        # claim the zip ships in no snapshot.
+        if "snapshot" not in entry:
+            raise ValueError(
+                f"{model_id}: origin has no `snapshot` key (use null if the zip ships "
+                f"in no models-downloader snapshot)"
+            )
+        snapshot = entry["snapshot"]
+        if snapshot is not None and not isinstance(snapshot, str):
+            raise ValueError(
+                f"{model_id}: origin `snapshot` must be a quoted string or null, got "
+                f"{type(snapshot).__name__} ({snapshot!r})"
+            )
+        origins[model_id] = ModelOrigin(
+            snapshot=snapshot, location=entry["location"], pinned_by=entry["pinned_by"]
+        )
+
+    stale = sorted(set(raw) - set(referenced))
+    if stale:
+        raise ValueError(f"stale `origins` for models no row references: {stale}")
+    return origins

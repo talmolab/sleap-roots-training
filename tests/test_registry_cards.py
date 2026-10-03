@@ -15,7 +15,7 @@ ARABIDOPSIS_LATERAL = "arabidopsis/lateral/240130_140452.multi_instance.n=337"
 
 
 def _row(species, mode, age, primary=None, lateral=None, crown=None):
-    return SelectionRow(species, mode, age, primary, lateral, crown)
+    return SelectionRow(species, mode, age, primary, lateral, crown, source="test row")
 
 
 def _sel(card):

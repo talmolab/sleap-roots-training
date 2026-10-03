@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import pytest
 from click.testing import CliRunner
 
+from conftest import write_matrix
+
 from sleap_roots_training import cli
 from sleap_roots_training.registry import publish
 
@@ -297,9 +299,13 @@ def test_dry_run_resolves_real_zip(monkeypatch, tmp_path):
         "    primary_model_id: soy/p\n"
         "    lateral_model_id: soy/l\n"
         "    crown_model_id: null\n"
+        '    source: "test row"\n'
         "checksums:\n"
         f"  soy/p: {sha_p}\n"
         f"  soy/l: {sha_l}\n"
+        "origins:\n"
+        '  soy/p: {snapshot: null, location: "test location", pinned_by: "test pin"}\n'
+        '  soy/l: {snapshot: null, location: "test location", pinned_by: "test pin"}\n'
     )
     result = _invoke(["--selection-matrix", str(matrix), "--models-root", str(root)])
     assert result.exit_code == 0, result.output
@@ -337,6 +343,32 @@ def test_off_vocabulary_mode_is_a_clean_error_not_a_traceback(
     assert "Error:" in result.output
     assert "teacup" in result.output
     assert "row 0" in result.output
+    assert not isinstance(result.exception, ValueError)
+
+
+@pytest.mark.parametrize(
+    "kw, needles",
+    [
+        ({"drop": [("row", 0, "source")]}, ("row 0", "source")),
+        ({"drop": [("origin", "x/p/1")]}, ("x/p/1",)),
+    ],
+    ids=["no source", "no origin"],
+)
+def test_missing_provenance_is_a_clean_error_not_a_traceback(
+    monkeypatch, tmp_path, stub_models_root, kw, needles
+):
+    _no_wandb(monkeypatch)
+    row = {"species": "soybean", "mode": "cylinder", "age": "2, 3"}
+    bad = write_matrix(
+        tmp_path / "bad.yaml", [{**row, "primary_model_id": "x/p/1"}], **kw
+    )
+    result = _invoke(
+        ["--selection-matrix", str(bad), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    for needle in needles:
+        assert needle in result.output
     assert not isinstance(result.exception, ValueError)
 
 

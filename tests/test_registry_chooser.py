@@ -1,5 +1,6 @@
 import pytest
 
+from conftest import write_matrix
 from sleap_roots_training.registry import chooser
 
 
@@ -230,10 +231,15 @@ def test_a_matrix_with_wheat_and_sorghum_rows_loads(tmp_path):
         "    mode: cylinder\n"
         '    age: "5, 6"\n'
         "    crown_model_id: w/c/1\n"
+        '    source: "test row"\n'
         "  - species: sorghum\n"
         "    mode: cylinder\n"
         '    age: "3, 4"\n'
         "    primary_model_id: s/p/1\n"
+        '    source: "test row"\n'
+        "origins:\n"
+        '  w/c/1: {snapshot: null, location: "test location", pinned_by: "test pin"}\n'
+        '  s/p/1: {snapshot: null, location: "test location", pinned_by: "test pin"}\n'
     )
     matrix = chooser.load_selection_matrix(path)
     assert [row.species for row in matrix.rows] == ["wheat", "sorghum"]
@@ -457,10 +463,162 @@ def test_a_string_model_id_and_an_absent_one_are_both_accepted(tmp_path):
         '    age: "2, 3"\n'
         "    primary_model_id: soybean/primary/221003_111420.multi_instance.n=1389\n"
         "    lateral_model_id: null\n"
-        "    crown_model_id: null\n",
+        "    crown_model_id: null\n"
+        '    source: "test row"\n'
+        "origins:\n"
+        "  soybean/primary/221003_111420.multi_instance.n=1389:\n"
+        '    {snapshot: null, location: "test location", pinned_by: "test pin"}\n',
         encoding="utf-8",
     )
     matrix = chooser.load_selection_matrix(path)
     assert len(matrix.rows) == 1
     assert matrix.rows[0].primary_model_id.endswith("n=1389")
     assert matrix.rows[0].lateral_model_id is None
+
+
+# --- Selection Matrix Provenance (add-wheat-sorghum-production-cards) ---
+
+_ROW = {
+    "species": "soybean",
+    "mode": "cylinder",
+    "age": "2, 3",
+    "primary_model_id": "m/p",
+}
+_ROW_2 = {"species": "rice", "mode": "cylinder", "age": "2", "crown_model_id": "m/c"}
+
+
+def _load(tmp_path, rows=(_ROW,), **kw):
+    return chooser.load_selection_matrix(
+        write_matrix(tmp_path / "m.yaml", list(rows), **kw)
+    )
+
+
+@pytest.mark.parametrize(
+    "case, kw",
+    [
+        ("missing", {"drop": [("row", 0, "source")]}),
+        ("empty", {"override": {("row", 0, "source"): ""}}),
+        ("not a string", {"override": {("row", 0, "source"): 5}}),
+    ],
+)
+def test_a_row_without_a_valid_source_is_rejected(tmp_path, case, kw):
+    with pytest.raises(ValueError, match=r"row 0.*source"):
+        _load(tmp_path, **kw)
+
+
+@pytest.mark.parametrize(
+    "case, kw, needle",
+    [
+        ("no entry", {"drop": [("origin", "m/p")]}, "m/p"),
+        ("no location", {"drop": [("origin", "m/p", "location")]}, "location"),
+        (
+            "empty location",
+            {"override": {("origin", "m/p", "location"): ""}},
+            "location",
+        ),
+        ("no pinned_by", {"drop": [("origin", "m/p", "pinned_by")]}, "pinned_by"),
+        (
+            "int pinned_by",
+            {"override": {("origin", "m/p", "pinned_by"): 5}},
+            "pinned_by",
+        ),
+        # An unquoted `snapshot: 20250204` parses as an int, not the string it means.
+        (
+            "int snapshot",
+            {"override": {("origin", "m/p", "snapshot"): 20250204}},
+            "snapshot",
+        ),
+        # An omitted key would otherwise read as None -- a silent "ships in no snapshot".
+        ("no snapshot key", {"drop": [("origin", "m/p", "snapshot")]}, "snapshot"),
+        ("scalar entry", {"origins": {"m/p": "somewhere"}}, "m/p"),
+    ],
+)
+def test_a_referenced_model_with_a_missing_or_mistyped_origin_is_rejected(
+    tmp_path, case, kw, needle
+):
+    with pytest.raises(ValueError) as excinfo:
+        _load(tmp_path, **kw)
+    assert "m/p" in str(excinfo.value)
+    assert needle in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "kw", [{"drop": [("origins",)]}, {"origins": None}], ids=["absent", "null"]
+)
+def test_no_origins_map_reports_the_first_uncovered_model(tmp_path, kw):
+    with pytest.raises(ValueError, match="m/p"):
+        _load(tmp_path, **kw)
+
+
+def test_an_origins_list_is_rejected_naming_origins(tmp_path):
+    with pytest.raises(ValueError, match="origins"):
+        _load(tmp_path, origins=["m/p"])
+
+
+def test_an_origin_for_an_unreferenced_model_is_rejected_as_stale(tmp_path):
+    stale = {"snapshot": None, "location": "x", "pinned_by": "y"}
+    with pytest.raises(ValueError, match=r"(?i)stale.*gone/model|gone/model.*stale"):
+        _load(
+            tmp_path,
+            override={("origin", "gone/model", k): v for k, v in stale.items()},
+        )
+
+
+def test_coverage_is_checked_only_after_every_row(tmp_path):
+    # Row 0's model has no origin AND row 1 has no source: the per-row check on row 1
+    # must win, because origin coverage runs only once every row is read.
+    with pytest.raises(ValueError, match=r"row 1.*source"):
+        _load(
+            tmp_path,
+            rows=(_ROW, _ROW_2),
+            drop=[("origin", "m/p"), ("row", 1, "source")],
+        )
+
+
+@pytest.mark.parametrize(
+    "override, needle",
+    [
+        ({("row", 0, "species"): "alfalfa"}, "alfalfa"),
+        ({("row", 0, "primary_model_id"): 5}, "primary_model_id"),
+    ],
+    ids=["vocabulary", "model-id type"],
+)
+def test_earlier_row_checks_report_before_the_source_check(tmp_path, override, needle):
+    with pytest.raises(ValueError, match=needle):
+        _load(tmp_path, override=override, drop=[("row", 0, "source")], origins={})
+
+
+def test_origins_parse_into_records(tmp_path):
+    matrix = _load(
+        tmp_path,
+        rows=(_ROW, _ROW_2),
+        override={("origin", "m/c", "snapshot"): "20250204"},
+    )
+    assert matrix.rows[0].source == "test row 0"
+    assert matrix.origins["m/p"] == chooser.ModelOrigin(
+        snapshot=None, location="test location", pinned_by="test pin"
+    )
+    assert matrix.origins["m/c"].snapshot == "20250204"
+
+
+def test_every_committed_row_has_a_source_and_origins_cover_exactly_its_models():
+    matrix = chooser.load_selection_matrix()
+    assert all(isinstance(r.source, str) and r.source for r in matrix.rows)
+    referenced = {
+        model_id
+        for row in matrix.rows
+        for model_id in (row.primary_model_id, row.lateral_model_id, row.crown_model_id)
+        if model_id is not None
+    }
+    assert set(matrix.origins) == referenced
+
+
+def test_committed_origins_name_no_share_path():
+    # This repo is public: a location is relative to a run or a snapshot, never a share
+    # path naming a machine or its owner.
+    backslash = chr(92)
+    for model_id, origin in chooser.load_selection_matrix().origins.items():
+        location = origin.location
+        assert not location.startswith("/"), model_id
+        for banned in (":" + backslash, backslash * 2, "hpi", "users/"):
+            assert banned not in location, (model_id, banned)

@@ -74,9 +74,13 @@ models:
     primary_model_id: soy/p
     lateral_model_id: soy/l
     crown_model_id: null
+    source: "test row"
 checksums:
   soy/p: {sha}
   soy/l: {sha}
+origins:
+  soy/p: {{snapshot: null, location: "test location", pinned_by: "test pin"}}
+  soy/l: {{snapshot: null, location: "test location", pinned_by: "test pin"}}
 """.format(sha="0" * 64)
 
 

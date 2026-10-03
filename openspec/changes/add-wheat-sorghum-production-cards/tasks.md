@@ -118,7 +118,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 5. Commit `feat(registry)!: require per-row source and per-model origins in the selection matrix`
 
-- [ ] 5.1 Data first. These stay green on today's loader, because `_parse_matrix` reads only
+- [x] 5.1 Data first. These stay green on today's loader, because `_parse_matrix` reads only
       `species`/`mode`/`age`, the three id slots and `checksums`:
       - `model_selection.yaml`:
         - add `source` to the 7 rows and an `origins` entry for each of the 8 models (design D1
@@ -131,7 +131,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
       - Leave alone the matrices that assert an earlier failure (missing age, `turnip`, `teacup`,
         malformed, non-string model id, the CLI teacup/malformed cases), and the lineage
         `b"models: []"` hashes.
-- [ ] 5.2 Loader tests (`tests/test_registry_chooser.py`, via `write_matrix`). Each expects a
+- [x] 5.2 Loader tests (`tests/test_registry_chooser.py`, via `write_matrix`). Each expects a
       `ValueError` naming the row or model and the key. *Red: the loader ignores both keys.*
       - `source`: (a) missing; (b) `""`; (c) `5`.
       - (d) A referenced id with no origin.
@@ -148,15 +148,15 @@ Ids and strings are written once, in `design.md` (Context and D1).
       - (n) *(guard)* An out-of-vocabulary row with no `source` reports the vocabulary error. A
         non-string `primary_model_id` with no `source` reports the `primary_model_id` error.
       - (i) A valid matrix parses `origins` into `ModelOrigin` records, including `snapshot=None`.
-- [ ] 5.3 Committed-file tests. *Red until 5.1; write them first if running strictly red-first.*
+- [x] 5.3 Committed-file tests. *Red until 5.1; write them first if running strictly red-first.*
       - Every row's `source` is a non-empty `str`.
       - The `origins` keys are exactly the referenced ids.
       - No `location` starts with `/`, or contains `:\`, `\\`, `hpi` or `users/`.
-- [ ] 5.4 CLI test (`tests/test_registry_cli.py`, `_no_wandb`). Run it once with a row missing
+- [x] 5.4 CLI test (`tests/test_registry_cli.py`, `_no_wandb`). Run it once with a row missing
       `source` and once with a referenced id missing from `origins`. Each run exits non-zero, with
       `Error:` in the output, `row 0`/`source` or the model id in the output, and
       `not isinstance(result.exception, ValueError)`. *Red.*
-- [ ] 5.5 Implement (design D2):
+- [x] 5.5 Implement (design D2):
       - add `ModelOrigin`, `SelectionRow.source` (no default) and `SelectionMatrix.origins`;
       - order the checks in `_parse_matrix`: required keys → vocabulary → model-id types → `source` →
         (after all rows) `origins`;
