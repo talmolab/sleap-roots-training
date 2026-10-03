@@ -216,6 +216,48 @@ def test_species_vocab_stays_local():
     assert "species" not in ModelCard.model_fields
 
 
+def test_wheat_and_sorghum_are_in_the_species_vocabulary():
+    # talmolab/sleap-roots-training#72: the consumer receives Bloom's common name
+    # lowercased by bloomctl, so these are the exact strings predict will match.
+    assert {"wheat", "sorghum"} <= chooser.SPECIES_VOCAB
+
+
+def test_a_matrix_with_wheat_and_sorghum_rows_loads(tmp_path):
+    path = tmp_path / "m.yaml"
+    path.write_text(
+        "models:\n"
+        "  - species: wheat\n"
+        "    mode: cylinder\n"
+        '    age: "5, 6"\n'
+        "    crown_model_id: w/c/1\n"
+        "  - species: sorghum\n"
+        "    mode: cylinder\n"
+        '    age: "3, 4"\n'
+        "    primary_model_id: s/p/1\n"
+    )
+    matrix = chooser.load_selection_matrix(path)
+    assert [row.species for row in matrix.rows] == ["wheat", "sorghum"]
+
+
+def test_every_species_is_a_lowercase_common_name():
+    # Predict and the traits chooser compare species by plain string equality against
+    # a lowercased Bloom common name, so a capitalized member would never match.
+    assert all(species == species.lower() for species in chooser.SPECIES_VOCAB)
+
+
+def test_an_unlisted_crop_is_still_rejected(tmp_path):
+    path = tmp_path / "m.yaml"
+    path.write_text(
+        "models:\n"
+        "  - species: alfalfa\n"
+        "    mode: cylinder\n"
+        '    age: "3"\n'
+        "    primary_model_id: a/p/1\n"
+    )
+    with pytest.raises(ValueError, match="row 0: unknown species 'alfalfa'"):
+        chooser.load_selection_matrix(path)
+
+
 def test_every_committed_matrix_mode_is_contract_valid():
     """The spec scenario, asserted against the committed file rather than the loader.
 

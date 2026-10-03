@@ -72,12 +72,18 @@ def _vocab_from_contract_literal(
     return frozenset(args)
 
 
-#: Canonical ``models-downloader`` species vocabulary the consumer selects on. Owned
-#: here, not by the contract: a ``Selector``'s ``species`` is a free ``str``, so there
-#: is no contract-side vocabulary to defer to. (The card itself no longer carries
-#: ``species`` at all — it lives one level down, on each selector.)
+#: Canonical species vocabulary the consumer selects on. Owned here, not by the
+#: contract: a ``Selector``'s ``species`` is a free ``str``, so there is no
+#: contract-side vocabulary to defer to. (The card itself no longer carries ``species``
+#: at all — it lives one level down, on each selector.)
+#:
+#: Members are lowercase common names because that is exactly what the consumer
+#: compares against: Bloom stores ``species.common_name`` capitalized ("Wheat"),
+#: bloomctl's ``resolve_params`` lowercases it, and predict and the traits chooser then
+#: match by plain string equality (verified in code for
+#: talmolab/sleap-roots-training#72). A capitalized member would never match a scan.
 SPECIES_VOCAB: frozenset[str] = frozenset(
-    {"soybean", "canola", "pennycress", "arabidopsis", "rice"}
+    {"soybean", "canola", "pennycress", "arabidopsis", "rice", "wheat", "sorghum"}
 )
 #: Canonical mode vocabulary the consumer selects on, derived from the contract-owned
 #: ``sleap_roots_contracts.Mode`` rather than restated here. ``ModelCard.mode`` matches

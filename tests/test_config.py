@@ -37,6 +37,16 @@ def test_valid_config_loads_and_validates(write_config):
     assert isinstance(notes, list)
 
 
+@pytest.mark.parametrize("species", ["wheat", "sorghum"])
+def test_wheat_and_sorghum_configs_validate(write_config, species):
+    # SPECIES_VOCAB is shared with the model registry, so widening it for the wheat and
+    # sorghum cards (talmolab/sleap-roots-training#72) widens training configs too.
+    path = write_config(overrides={"experiment": {"species": species}})
+    cfg = config.load_config(path)
+    config.validate_config(cfg)
+    assert cfg.experiment.species == species
+
+
 @pytest.mark.parametrize(
     "field, value",
     [("species", "banana"), ("mode", "spinny"), ("root_type", "tuber")],

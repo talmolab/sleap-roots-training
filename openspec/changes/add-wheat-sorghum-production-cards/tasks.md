@@ -68,18 +68,18 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 3. Commit `feat(vocab): add wheat and sorghum to SPECIES_VOCAB`
 
-- [ ] 3.1 Tests (`tests/test_registry_chooser.py`):
+- [x] 3.1 Tests (`tests/test_registry_chooser.py`):
       - `{"wheat", "sorghum"} <= chooser.SPECIES_VOCAB`. *Red: both are absent.*
       - An inline matrix with a `wheat` row and a `sorghum` row loads. *Red.*
       - Every member equals `.lower()`. *(guard)*
       - A row with `species: alfalfa` is still rejected, with the row-numbered message. *(guard)*
-- [ ] 3.2 Test (`tests/test_config.py`): an experiment config with `species: wheat` validates, and one
+- [x] 3.2 Test (`tests/test_config.py`): an experiment config with `species: wheat` validates, and one
       with `species: sorghum` does too. *Red.*
-- [ ] 3.3 Test (`tests/test_labeling_cli.py`, mirroring the pennycress test):
+- [x] 3.3 Test (`tests/test_labeling_cli.py`, mirroring the pennycress test):
       `build --species wheat --root-type crown` exits non-zero, with `No labeling skeleton` in the
       output, no traceback, and no output directory created. *Red: today it fails at the metadata
       vocabulary check instead.*
-- [ ] 3.4 Implement:
+- [x] 3.4 Implement:
       - add both species to `SPECIES_VOCAB`;
       - in its comment, drop "models-downloader" and state the lowercase common-name rule
         (design Context);
