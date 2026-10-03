@@ -59,7 +59,9 @@ def _require_api_key() -> None:
     "--yes", is_flag=True, help="Skip the confirmation prompt under --execute."
 )
 @click.option(
-    "--force", is_flag=True, help="Re-publish and re-point the production alias."
+    "--force",
+    is_flag=True,
+    help="Re-publish and re-point the configured alias (default production).",
 )
 @click.option(
     "--only",
@@ -82,7 +84,7 @@ def seed_registry_command(
     only: tuple,
     verify: bool,
 ) -> None:
-    """Seed (or verify) the production model registry from the selection matrix.
+    """Seed (or verify) the model registry under the configured alias.
 
     By default this is a dry run: it prints the planned collections + metadata and
     resolves every model directory without contacting wandb. Pass ``--execute`` to
@@ -91,6 +93,20 @@ def seed_registry_command(
     scopes every mode to the named collection(s) for canary seeding.
     """
     cfg = config.resolve_registry_config()
+    # First output, in every mode: which registry and alias this run acts on, and where
+    # the alias came from. `--yes` skips the only prompt that names the alias, so without
+    # this an operator's record cannot show a lost alias variable. repr() exposes hidden
+    # characters that str.strip() keeps.
+    source = "from " + config.ALIAS_ENV if config.ALIAS_ENV in os.environ else "default"
+    click.echo(
+        f"target: {cfg.entity}/{cfg.registry} alias {cfg.alias!r} ({source}) "
+        f"seed project {cfg.seed_project}"
+    )
+    if not cfg.alias:
+        raise click.ClickException(
+            f"{config.ALIAS_ENV} is set but blank. Unset it to use the default "
+            f"'{config.DEFAULT_ALIAS}', or set the alias you mean; nothing done."
+        )
     # The loader's messages are carefully row-numbered ("row 0: unknown mode 'teacup'
     # (expected one of [...])") and the spec promises them to operators — but raw they
     # reach the terminal as an unhandled traceback with the message buried in it. Wrap
@@ -141,7 +157,7 @@ def seed_registry_command(
             )
         for collection in report["orphans"]:
             click.echo(
-                f"orphan: {collection} (production-aliased, no longer in the matrix)"
+                f"orphan: {collection} ({cfg.alias}-aliased, no longer in the matrix)"
             )
         for collection in report["indeterminate"]:
             click.echo(f"indeterminate: {collection} (could not read its aliases)")

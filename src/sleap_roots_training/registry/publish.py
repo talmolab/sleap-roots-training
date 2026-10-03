@@ -1,9 +1,9 @@
-"""Publish, link, and verify production model artifacts in the wandb registry.
+"""Publish, link, and verify model artifacts in the wandb registry.
 
 This is the thin network layer. It publishes each card as a ``type="model"`` artifact
 with exactly the card's selection metadata, links it into a per-card collection under
-the configured registry with the ``production`` alias, and can re-run the consumer
-read path to verify the alias landed. ``wandb`` is imported lazily so the pure-logic
+the configured registry with the configured alias (default ``production``), and can
+re-run the consumer read path to verify the alias landed. ``wandb`` is imported lazily so the pure-logic
 and dry-run paths never require it loaded.
 """
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 def publish_card(
     run, card: Card, model_dir: Path, cfg: RegistryConfig, *, api=None
 ) -> str:
-    """Publish one card as a ``type="model"`` artifact linked as production.
+    """Publish one card as a ``type="model"`` artifact linked under the configured alias.
 
     After linking, this reads back **the server's own view** of the metadata and
     refreshes it in place if it is stale. That check is not belt-and-braces: artifact
@@ -120,7 +120,7 @@ def _existing_collections(api, project: str) -> dict[str, object]:
     Listing existing collections up front lets the idempotency check distinguish
     "collection absent" (expected on a first seed) from a real API/network error
     without swallowing the latter — a swallowed read error would be treated as
-    "not yet production" and wrongly re-publish, moving the ``production`` alias.
+    "not yet aliased" and wrongly re-publish, moving the configured alias.
 
     The collection **objects** are kept rather than reduced to a set of names, because
     orphan reporting needs ``ArtifactCollection.aliases`` — one lightweight query per
@@ -173,7 +173,7 @@ def seed_registry(
 ) -> dict:
     """Publish already-resolved cards to the registry, idempotently.
 
-    Skips collections that already carry the production alias unless ``force`` is set
+    Skips collections that already carry the configured alias unless ``force`` is set
     (so a re-run is a no-op and resumes after a partial failure); a real API error
     during the idempotency read propagates (fail closed) rather than causing a
     duplicate publish.

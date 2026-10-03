@@ -188,7 +188,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 7. Commit `feat(registry): normalize the model alias and always print the target`
 
-- [ ] 7.1 Tests. *Red: there is no strip, no blank check and no echo.*
+- [x] 7.1 Tests. *Red: there is no strip, no blank check and no echo.*
       - `tests/test_registry_config.py`:
         - `" production "` resolves to `"production"`;
         - unset resolves to `"production"`;
@@ -204,7 +204,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
         - `--verify` prints the target line.
         - `--execute --yes --only <tiny id>` (faked, with the unit-9 stub not yet needed) prints it
           before anything else.
-- [ ] 7.2 Implement (design D6) in `registry/config.py` and `cli.py`. Fix the docstrings that say "the
+- [x] 7.2 Implement (design D6) in `registry/config.py` and `cli.py`. Fix the docstrings that say "the
       production alias" when they mean the configured alias:
       - `registry/config.py`, module docstring;
       - `registry/publish.py`, module docstring, plus `publish_card`, `_existing_collections` and

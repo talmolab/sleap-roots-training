@@ -132,3 +132,23 @@ def test_registry_project_string(monkeypatch):
         cfg.registry_project() == "eberrigan-salk-institute-for-biological-studies-org"
         "/wandb-registry-sleap-roots-models"
     )
+
+
+# --- alias normalization (add-wheat-sorghum-production-cards) ---
+
+
+def test_a_padded_alias_is_stripped(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", " production ")
+    assert config.resolve_registry_config().alias == "production"
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_a_blank_alias_resolves_to_empty_never_to_the_default(monkeypatch, value):
+    # PowerShell's `$env:X=""` deletes the variable, but a POSIX `X=` leaves it set and
+    # empty. Falling back to `production` would silently turn a meant-to-be-candidate
+    # publish into a production one, so blank stays blank -- and resolving must not
+    # raise, because entity-only callers (the labels inventory) share this function.
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", value)
+    assert config.resolve_registry_config().alias == ""
