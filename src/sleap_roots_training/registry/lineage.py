@@ -19,13 +19,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from sleap_roots_training.registry.cards import Card
     from sleap_roots_training.registry.chooser import SelectionMatrix
-
-#: Which `SelectionRow` slot holds a card's model, by the card's root type.
-_SLOT_BY_ROOT_TYPE = {
-    "primary": "primary_model_id",
-    "lateral": "lateral_model_id",
-    "crown": "crown_model_id",
-}
+    from sleap_roots_training.registry.config import RegistryConfig
 
 _GIT_SHA_ENV = "SLEAP_ROOTS_TRAINING_GIT_SHA"
 
@@ -95,7 +89,10 @@ def resolve_git_sha() -> str:
 
 
 def build_lineage(
-    matrix_sha256: str, cards: Iterable["Card"], matrix: "SelectionMatrix"
+    matrix_sha256: str,
+    cards: Iterable[Card],
+    matrix: SelectionMatrix,
+    cfg: RegistryConfig,
 ) -> dict:
     """Build the run-config lineage record for a seed.
 
@@ -110,12 +107,16 @@ def build_lineage(
             inputs are pinned independently of git cleanliness.
         cards: The run's in-scope cards.
         matrix: The loaded selection matrix the cards were expanded from.
+        cfg: The registry target the run links under. Recorded because a candidate
+            publish and its later promotion are otherwise the same shape: the alias a
+            run linked is what says which one made the cards live.
 
     Returns:
         A lineage mapping suitable for ``wandb.init(config=...)``: ``row_sources`` (one
         ``{species, mode, age, source}`` per row backing an in-scope card, in file order)
         and ``model_origins`` (one ``{model_id, snapshot, location, pinned_by}`` per
-        in-scope model, sorted by id), alongside the git and version keys.
+        in-scope model, sorted by id) and ``registry_target`` (entity, registry and
+        alias), alongside the git and version keys.
     """
     in_scope = {(card.source_model_id, card.root_type) for card in cards}
     # A row backs a card when it names the card's model in the card's root-type slot.
@@ -123,8 +124,7 @@ def build_lineage(
         {"species": row.species, "mode": row.mode, "age": row.age, "source": row.source}
         for row in matrix.rows
         if any(
-            getattr(row, _SLOT_BY_ROOT_TYPE[root_type]) == model_id
-            for model_id, root_type in in_scope
+            row.model_ids()[root_type] == model_id for model_id, root_type in in_scope
         )
     ]
     model_origins = [
@@ -143,6 +143,11 @@ def build_lineage(
         "matrix_content_sha256": matrix_sha256,
         "row_sources": row_sources,
         "model_origins": model_origins,
+        "registry_target": {
+            "entity": cfg.entity,
+            "registry": cfg.registry,
+            "alias": cfg.alias,
+        },
         "sleap_roots_training_version": _pkg_version("sleap-roots-training"),
         "wandb_version": _pkg_version("wandb"),
         "sleap_roots_contracts_version": _pkg_version("sleap-roots-contracts"),

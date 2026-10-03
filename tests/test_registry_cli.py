@@ -40,18 +40,34 @@ def _no_live_wandb_api(monkeypatch):
 
 
 #: The real pre-pass, kept so a test can opt back out of the module-wide stub below.
-_REAL_UNPROMOTED = getattr(publish, "unpromoted_collections", None)
+_REAL_UNPROMOTED = publish.unpromoted_collections
+
+#: Every call the module-wide promotion stub received, so a test can assert the pre-pass
+#: did NOT run (dry run, --verify, a non-default alias).
+PROMOTION_CHECKS: list = []
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_alias(monkeypatch):
+    """An alias exported in the operator's shell must not steer these tests."""
+    monkeypatch.delenv("SLEAP_ROOTS_MODEL_ALIAS", raising=False)
 
 
 @pytest.fixture(autouse=True)
 def _promotion_check_passes(monkeypatch):
-    """Default: every in-scope collection already carries the alias.
+    """Default: every in-scope collection already carries the alias, and record the call.
 
     The pre-pass reads the registry, so without this every default-alias --execute test
     would reach the network. Guard-2 tests override it with ``_stub_promotion_check``
     or restore ``_REAL_UNPROMOTED``.
     """
-    _stub_promotion_check(monkeypatch)
+    PROMOTION_CHECKS.clear()
+
+    def passes(cfg, cards_, api=None):
+        PROMOTION_CHECKS.append(cfg.alias)
+        return []
+
+    monkeypatch.setattr(publish, "unpromoted_collections", passes)
 
 
 def _verify_report(
@@ -86,10 +102,7 @@ def _no_wandb(monkeypatch):
 def _stub_promotion_check(monkeypatch, unpromoted=()):
     """Stub the default-alias promotion pre-pass to report ``unpromoted``."""
     monkeypatch.setattr(
-        publish,
-        "unpromoted_collections",
-        lambda *a, **k: sorted(unpromoted),
-        raising=False,
+        publish, "unpromoted_collections", lambda *a, **k: sorted(unpromoted)
     )
 
 
@@ -1091,6 +1104,7 @@ def test_a_first_time_production_link_without_promote_is_refused(
     monkeypatch.setattr(publish, "unpromoted_collections", unpromoted)
     result = _execute(tiny_matrix, stub_models_root, "--only", "soy-p", *extra, **kw)
     assert result.exit_code == 1, result.output  # a CLI error, not a usage error
+    assert result.exception is None or isinstance(result.exception, SystemExit)
     assert "soy-p" in result.output
     assert "--promote" in result.output
     assert checked == ["production"]  # the check ran, --force or not
@@ -1216,6 +1230,7 @@ def test_a_padded_default_alias_is_the_default_and_gets_the_promotion_check(
     result = _execute(tiny_matrix, stub_models_root, "--yes")
     # Not guard 1 (that would be exit 2 naming --only); guard 2 refuses it.
     assert result.exit_code == 1, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
     assert "--promote" in result.output
     assert "init" not in calls
 
@@ -1272,6 +1287,7 @@ def test_the_candidate_publish_links_exactly_the_three_new_cards_as_candidate(
         "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
     }
     assert [r["species"] for r in lineage_config["row_sources"]] == ["wheat", "sorghum"]
+    assert lineage_config["registry_target"]["alias"] == "candidate"
     for key in ("selection_matrix_source", "selection_matrix_date", "models_snapshot"):
         assert key not in lineage_config
 
@@ -1294,7 +1310,94 @@ def test_the_candidate_command_without_its_alias_variable_cannot_reach_productio
         ["--models-root", str(tmp_path), "--execute", "--yes", *_only_new()]
     )
     assert result.exit_code == 1, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
     assert "--promote" in result.output
     for cid in NEW_IDS:
         assert cid in result.output
     assert inits == [] and run.links == []
+
+
+# --- pre-PR review fixes ---
+
+
+def test_the_promotion_check_never_runs_in_a_dry_run_verify_or_non_default_alias(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    _no_wandb(monkeypatch)
+    monkeypatch.setattr(
+        publish,
+        "verify_registry",
+        lambda cfg, expected, api=None, *, report_orphans=True: _verify_report(
+            present=expected
+        ),
+    )
+    base = [
+        "--selection-matrix",
+        str(tiny_matrix),
+        "--models-root",
+        str(stub_models_root),
+    ]
+    assert _invoke(base).exit_code == 0
+    assert _invoke(["--selection-matrix", str(tiny_matrix), "--verify"]).exit_code == 0
+    # Under a non-default alias a first-time link cannot take --promote, so a pre-pass
+    # there would make every candidate publish impossible.
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda project=None, entity=None, **kw: SimpleNamespace(
+            project=project, entity=entity, finish=lambda: None
+        ),
+    )
+    monkeypatch.setattr(publish, "resolve_all", lambda cs, root, sums: [])
+    monkeypatch.setattr(
+        publish,
+        "seed_registry",
+        lambda *a, **k: {"published": [], "skipped": [], "failed": [], "stale": []},
+    )
+    assert _invoke([*base, "--execute", "--yes", "--only", "soy-p"]).exit_code == 0
+    assert PROMOTION_CHECKS == []
+
+
+def test_a_whitespace_only_alias_is_refused_at_the_cli(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    _no_wandb(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "   ")
+    result = _invoke(
+        ["--selection-matrix", str(tiny_matrix), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code != 0
+    assert "SLEAP_ROOTS_MODEL_ALIAS" in result.output
+    # The target line still comes first, so the record shows what was set.
+    assert result.output.splitlines()[0].startswith("target: ")
+
+
+def test_a_padded_default_alias_is_labelled_as_set_from_the_variable(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    _no_wandb(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", " production ")
+    result = _invoke(
+        ["--selection-matrix", str(tiny_matrix), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "alias 'production' (from SLEAP_ROOTS_MODEL_ALIAS)" in result.output
+
+
+def test_the_target_line_escapes_non_ascii_so_any_console_can_print_it(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    # repr() leaves printable non-Latin text as-is, which a cp1252 log redirect cannot
+    # encode; ascii() shows a hidden zero-width space too.
+    _no_wandb(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "prod\u200b\u751f")
+    result = _invoke(
+        ["--selection-matrix", str(tiny_matrix), "--models-root", str(stub_models_root)]
+    )
+    first = result.output.splitlines()[0]
+    assert first.isascii()
+    assert "\\u200b" in first and "\\u751f" in first

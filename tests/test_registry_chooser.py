@@ -650,3 +650,41 @@ def test_wheat_ships_in_no_snapshot_and_sorghum_in_the_20250204_one():
     assert origins[WHEAT_CROWN].snapshot is None
     assert origins[SORGHUM_PRIMARY].snapshot == "20250204"
     assert origins[SORGHUM_LATERAL].snapshot == "20250204"
+
+
+# --- pre-PR review fixes ---
+
+
+def test_stale_origins_of_mixed_key_types_are_a_valueerror_not_a_typeerror(tmp_path):
+    # An unquoted numeric key next to a string key used to make the stale-key sort
+    # raise TypeError, which the CLI does not wrap: a traceback instead of an error.
+    stale = {"snapshot": None, "location": "x", "pinned_by": "y"}
+    with pytest.raises(ValueError, match="stale"):
+        _load(
+            tmp_path,
+            override={
+                **{("origin", 123, k): v for k, v in stale.items()},
+                **{("origin", "zzz", k): v for k, v in stale.items()},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "kw, needle",
+    [
+        ({"override": {("row", 0, "source"): "   "}}, "source"),
+        ({"override": {("origin", "m/p", "location"): "  "}}, "location"),
+        ({"override": {("origin", "m/p", "pinned_by"): "\t"}}, "pinned_by"),
+    ],
+    ids=["source", "location", "pinned_by"],
+)
+def test_whitespace_only_provenance_is_rejected(tmp_path, kw, needle):
+    with pytest.raises(ValueError, match=needle):
+        _load(tmp_path, **kw)
+
+
+def test_row_model_ids_maps_each_root_type_to_its_slot():
+    row = chooser.SelectionRow(
+        "rice", "cylinder", "2", "p/1", None, "c/1", source="test row"
+    )
+    assert row.model_ids() == {"primary": "p/1", "lateral": None, "crown": "c/1"}

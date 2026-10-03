@@ -155,6 +155,21 @@ class SelectionRow:
     crown_model_id: Optional[str]
     source: str
 
+    def model_ids(self) -> dict[str, Optional[str]]:
+        """Return this row's model id in each root-type slot, keyed by root type.
+
+        The one place the root-type-to-slot mapping lives, so card expansion, lineage
+        and the ``origins`` coverage check cannot drift apart when a slot is added.
+
+        Returns:
+            ``{"primary": ..., "lateral": ..., "crown": ...}``; ``None`` where absent.
+        """
+        return {
+            "primary": self.primary_model_id,
+            "lateral": self.lateral_model_id,
+            "crown": self.crown_model_id,
+        }
+
 
 @dataclass(frozen=True)
 class SelectionMatrix:
@@ -337,22 +352,22 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
     return SelectionMatrix(rows=tuple(rows), checksums=checksums, origins=origins)
 
 
-def _parse_origins(raw, rows: list[SelectionRow]) -> dict[str, ModelOrigin]:
+def _parse_origins(raw: object, rows: list[SelectionRow]) -> dict[str, ModelOrigin]:
     """Validate that ``origins`` covers exactly the rows' models, and parse it.
 
     Runs only after every row is read, so a later row's per-row error is reported before
     an earlier row's missing origin. Strict in both directions — unlike ``checksums`` —
     because an origin for a model no row references is a stale claim about provenance.
     """
-    referenced: list[str] = []
-    for row in rows:
-        for model_id in (
-            row.primary_model_id,
-            row.lateral_model_id,
-            row.crown_model_id,
-        ):
-            if model_id is not None and model_id not in referenced:
-                referenced.append(model_id)
+    # dict.fromkeys de-duplicates in first-seen order, as cards.py does.
+    referenced = list(
+        dict.fromkeys(
+            model_id
+            for row in rows
+            for model_id in row.model_ids().values()
+            if model_id is not None
+        )
+    )
 
     if raw is None:
         raw = {}
@@ -397,7 +412,9 @@ def _parse_origins(raw, rows: list[SelectionRow]) -> dict[str, ModelOrigin]:
             snapshot=snapshot, location=entry["location"], pinned_by=entry["pinned_by"]
         )
 
-    stale = sorted(set(raw) - set(referenced))
+    # key=str: a stale key may be an unquoted number next to a string, and a mixed-type
+    # sort would raise TypeError -- a traceback where the operator is promised an error.
+    stale = sorted(set(raw) - set(referenced), key=str)
     if stale:
         raise ValueError(f"stale `origins` for models no row references: {stale}")
     return origins

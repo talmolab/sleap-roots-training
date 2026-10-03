@@ -108,11 +108,12 @@ def seed_registry_command(
     cfg = config.resolve_registry_config()
     # First output, in every mode: which registry and alias this run acts on, and where
     # the alias came from. `--yes` skips the only prompt that names the alias, so without
-    # this an operator's record cannot show a lost alias variable. repr() exposes hidden
-    # characters that str.strip() keeps.
+    # this an operator's record cannot show a lost alias variable. ascii() exposes hidden
+    # characters that str.strip() keeps (a zero-width space), and unlike repr() it cannot
+    # fail to encode when the output is redirected to a log on a cp1252 console.
     source = "from " + config.ALIAS_ENV if config.ALIAS_ENV in os.environ else "default"
     click.echo(
-        f"target: {cfg.entity}/{cfg.registry} alias {cfg.alias!r} ({source}) "
+        f"target: {cfg.entity}/{cfg.registry} alias {ascii(cfg.alias)} ({source}) "
         f"seed project {cfg.seed_project}"
     )
     if not cfg.alias:
@@ -157,7 +158,9 @@ def seed_registry_command(
     # `--promote` names a deliberate first-time production link, so it is only
     # meaningful when publishing, under the default alias, with an explicit scope.
     if promote and (not execute or verify):
-        raise click.UsageError("--promote applies only with --execute.")
+        raise click.UsageError(
+            "--promote applies only with --execute (not a dry run or --verify)."
+        )
     if promote and not only:
         raise click.UsageError(
             "--promote requires --only, so a promotion names its collections."
@@ -165,7 +168,7 @@ def seed_registry_command(
     if promote and cfg.alias != config.DEFAULT_ALIAS:
         raise click.UsageError(
             f"--promote applies only to the default alias "
-            f"({config.DEFAULT_ALIAS!r}), not {cfg.alias!r}."
+            f"({config.DEFAULT_ALIAS!r}), not {ascii(cfg.alias)}."
         )
 
     if verify:
@@ -226,9 +229,9 @@ def seed_registry_command(
     # Refused before the credential check, the prompt, or any wandb call.
     if cfg.alias != config.DEFAULT_ALIAS and not only:
         raise click.UsageError(
-            f"alias {cfg.alias!r} is not the default ({config.DEFAULT_ALIAS!r}); "
+            f"alias {ascii(cfg.alias)} is not the default ({config.DEFAULT_ALIAS!r}); "
             "--execute under a non-default alias requires --only, or every card in "
-            f"the matrix is re-published under {cfg.alias!r}. Nothing published."
+            f"the matrix is re-published under {ascii(cfg.alias)}. Nothing published."
         )
 
     _require_api_key()  # fail fast before the confirmation prompt.
@@ -243,18 +246,18 @@ def seed_registry_command(
         except Exception as error:  # noqa: BLE001 - fail closed, as a CLI error
             raise click.ClickException(
                 f"could not check which collections already carry "
-                f"{cfg.alias!r} ({error}); nothing published."
+                f"{ascii(cfg.alias)} ({error}); nothing published."
             )
         if unpromoted and not promote:
             raise click.ClickException(
-                f"{len(unpromoted)} collection(s) would be linked to {cfg.alias!r} for "
+                f"{len(unpromoted)} collection(s) would be linked to {ascii(cfg.alias)} for "
                 f"the first time, which makes them live for the consumer: {unpromoted}. "
                 "Pass --promote (with --only) to do that deliberately; nothing published."
             )
     if not yes:
         click.confirm(
             f"Publish {len(all_cards)} cards to {cfg.entity} / {cfg.registry} "
-            f"(alias '{cfg.alias}')?",
+            f"(alias {ascii(cfg.alias)})?",
             abort=True,
         )
 
@@ -268,7 +271,7 @@ def seed_registry_command(
     import wandb
 
     lineage_config = lineage.build_lineage(
-        chooser.matrix_sha256(selection_matrix), all_cards, matrix
+        chooser.matrix_sha256(selection_matrix), all_cards, matrix, cfg
     )
     if lineage_config["git_dirty"]:
         click.echo(
@@ -302,7 +305,7 @@ def seed_registry_command(
         raise click.ClickException(mismatch)
     # `seed_registry` echoes each collection's outcome as it happens, so a failure
     # partway through still leaves the operator a local record of which collections
-    # now carry `production` — the summary below is never reached if something
+    # now carry the alias — the summary below is never reached if something
     # propagates out of the seed.
     try:
         report = publish.seed_registry(resolved, cfg, run, force=force)

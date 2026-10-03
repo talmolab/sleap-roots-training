@@ -138,7 +138,7 @@ def _existing_collections(api, project: str) -> dict[str, object]:
 
 def unpromoted_collections(
     cfg: RegistryConfig, cards: Iterable[Card], api=None
-) -> list:
+) -> list[str]:
     """Return the in-scope collections that do not yet carry ``cfg.alias``, sorted.
 
     Under the default alias, linking ``production`` to such a collection makes it live for
@@ -166,6 +166,9 @@ def unpromoted_collections(
 
     project = cfg.registry_project()
     existing = _existing_collections(api, project)
+    # Deliberately the same per-version read the idempotency skip in `seed_registry`
+    # uses, not the cheaper `ArtifactCollection.aliases`: the guard and the skip then
+    # agree on what "already carries the alias" means.
     unpromoted = set()
     for card in cards:
         collection = collection_id(card)
@@ -213,6 +216,11 @@ def seed_registry(
     force: bool = False,
 ) -> dict:
     """Publish already-resolved cards to the registry, idempotently.
+
+    This function performs **no** promotion check: called directly under the default
+    alias it links ``production`` to a never-production collection. ``seed-registry``
+    refuses that first, with :func:`unpromoted_collections`; a caller that bypasses the
+    CLI must do the same (design D5's accepted residual risk).
 
     Skips collections that already carry the configured alias unless ``force`` is set
     (so a re-run is a no-op and resumes after a partial failure); a real API error
@@ -264,13 +272,13 @@ def seed_registry(
     # Echo per collection as it happens. `logger.info` alone is invisible (nothing in
     # the package configures logging) and the caller's final echo is never reached if
     # something propagates -- after a failure at card 5 of 8 the operator would have no
-    # local record of which collections now carry `production`.
+    # local record of which collections now carry the alias.
     def _emit(outcome: str, collection: str) -> None:
         print(f"{outcome}: {collection}", flush=True)
 
     for card, model_dir in resolved:
         collection = collection_id(card)
-        # ONE read answers both questions: is this already production, and is what is
+        # ONE read answers both questions: is this already aliased, and is what is
         # there still readable by an upgraded consumer. Querying twice was redundant,
         # and the second query's fail-soft branch was unreachable anyway -- this read
         # fails closed, so a transient error raises here rather than being mistaken
@@ -281,7 +289,7 @@ def seed_registry(
             else None
         )
         if aliased is not None:
-            logger.info("skip %s (already production)", collection)
+            logger.info("skip %s (already %s)", collection, cfg.alias)
             skipped.append(collection)
             # The skip path is the DEFAULT on every re-run, so a half-migrated
             # collection would otherwise sit here undetected: a check scoped to

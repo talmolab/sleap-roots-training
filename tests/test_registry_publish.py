@@ -796,3 +796,22 @@ def test_unpromoted_builds_its_api_lazily(monkeypatch):
         collection_id(c) for c in _scoped_cards()
     )
     assert built == ["Api"]
+
+
+def test_default_verify_reports_candidate_only_collections_as_missing():
+    # The expected state between a candidate publish and its promotion.
+    candidate_only = "wheat-crown-x"
+    promoted = "soy-p-x"
+    api = _FakeApi(
+        collections=[candidate_only, promoted],
+        arts_by_name={
+            f"{PROJECT}/{candidate_only}": [_FakeArt(["candidate", "latest"])],
+            f"{PROJECT}/{promoted}": [_FakeArt(["production"])],
+        },
+        aliases_by_collection={candidate_only: ["candidate"], promoted: ["production"]},
+    )
+    report = publish.verify_registry(CFG, [candidate_only, promoted], api)
+    assert report["missing"] == [candidate_only]
+    assert report["present"] == [promoted]
+    assert report["orphans"] == []
+    assert publish.verify_failed(report)
