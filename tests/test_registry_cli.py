@@ -1218,3 +1218,83 @@ def test_a_padded_default_alias_is_the_default_and_gets_the_promotion_check(
     assert result.exit_code == 1, result.output
     assert "--promote" in result.output
     assert "init" not in calls
+
+
+# --- the wheat and sorghum candidate publish (talmolab/sleap-roots-training#72) ---
+
+NEW_IDS = [
+    "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+    "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+    "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+]
+
+
+def _only_new():
+    return [arg for cid in NEW_IDS for arg in ("--only", cid)]
+
+
+def test_the_candidate_publish_links_exactly_the_three_new_cards_as_candidate(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    import wandb
+
+    from registry_fakes import _FakeApi, _FakeArtifact, _FakeRun
+    from sleap_roots_training.registry import config as registry_config
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    cfg = registry_config.resolve_registry_config()
+    run = _FakeRun(entity=cfg.entity, project=cfg.seed_project)
+    configs = []
+
+    def fake_init(config=None, **kw):
+        configs.append(config)
+        return run
+
+    monkeypatch.setattr(wandb, "init", fake_init)
+    monkeypatch.setattr(wandb, "Api", lambda *a, **k: _FakeApi(collections=[]))
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda cs, root, sums: [(c, tmp_path) for c in cs]
+    )
+    result = _invoke(
+        ["--models-root", str(tmp_path), "--execute", "--yes", *_only_new()]
+    )
+    assert result.exit_code == 0, result.output
+    project = cfg.registry_project()
+    assert sorted(run.links) == sorted(
+        (f"{project}/{cid}", ["candidate"]) for cid in NEW_IDS
+    )
+    lineage_config = configs[0]
+    assert {o["model_id"] for o in lineage_config["model_origins"]} == {
+        "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+        "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+        "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+    }
+    assert [r["species"] for r in lineage_config["row_sources"]] == ["wheat", "sorghum"]
+    for key in ("selection_matrix_source", "selection_matrix_date", "models_snapshot"):
+        assert key not in lineage_config
+
+
+def test_the_candidate_command_without_its_alias_variable_cannot_reach_production(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    # The real pre-pass over a registry where none of the three exists yet.
+    import wandb
+
+    from registry_fakes import _FakeApi, _FakeRun
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setattr(publish, "unpromoted_collections", _REAL_UNPROMOTED)
+    monkeypatch.setattr(wandb, "Api", lambda *a, **k: _FakeApi(collections=[]))
+    run = _FakeRun()
+    inits = []
+    monkeypatch.setattr(wandb, "init", lambda *a, **k: inits.append(1) or run)
+    result = _invoke(
+        ["--models-root", str(tmp_path), "--execute", "--yes", *_only_new()]
+    )
+    assert result.exit_code == 1, result.output
+    assert "--promote" in result.output
+    for cid in NEW_IDS:
+        assert cid in result.output
+    assert inits == [] and run.links == []

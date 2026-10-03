@@ -4,10 +4,10 @@ from conftest import write_matrix
 from sleap_roots_training.registry import chooser
 
 
-def test_load_selection_matrix_has_seven_rows():
+def test_load_selection_matrix_has_nine_rows():
     matrix = chooser.load_selection_matrix()
-    # 7 selection rows over 8 distinct model ids -> 13 cards (plate row omitted).
-    assert len(matrix.rows) == 7
+    # 9 selection rows over 11 distinct model ids -> 11 cards (plate row omitted).
+    assert len(matrix.rows) == 9
     # spot-check the shared primary + a crown-only row.
     by_species_mode = {(r.species, r.mode): r for r in matrix.rows}
     canola = by_species_mode[("canola", "cylinder")]
@@ -18,8 +18,8 @@ def test_load_selection_matrix_has_seven_rows():
     assert canola.crown_model_id is None
     rice_old = by_species_mode[("rice", "cylinder")]  # last rice row wins in dict
     assert rice_old.primary_model_id is None and rice_old.lateral_model_id is None
-    # 8 distinct checksums, all 64-hex.
-    assert len(matrix.checksums) == 8
+    # 11 distinct checksums, all 64-hex.
+    assert len(matrix.checksums) == 11
 
 
 def test_parse_age_window_range():
@@ -622,3 +622,31 @@ def test_committed_origins_name_no_share_path():
         assert not location.startswith("/"), model_id
         for banned in (":" + backslash, backslash * 2, "hpi", "users/"):
             assert banned not in location, (model_id, banned)
+
+
+# --- the wheat and sorghum rows (talmolab/sleap-roots-training#72) ---
+
+WHEAT_CROWN = "20250401_wheat_models/250328_095645.multi_instance.n=1658"
+SORGHUM_PRIMARY = "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689"
+SORGHUM_LATERAL = "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590"
+
+
+def test_the_wheat_and_sorghum_source_zips_are_pinned_to_their_measured_digests():
+    # Recomputed from the zips on hpi_dev on 2026-10-03; they match training#72.
+    checksums = chooser.load_selection_matrix().checksums
+    assert checksums[WHEAT_CROWN] == (
+        "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f"
+    )
+    assert checksums[SORGHUM_PRIMARY] == (
+        "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07"
+    )
+    assert checksums[SORGHUM_LATERAL] == (
+        "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028"
+    )
+
+
+def test_wheat_ships_in_no_snapshot_and_sorghum_in_the_20250204_one():
+    origins = chooser.load_selection_matrix().origins
+    assert origins[WHEAT_CROWN].snapshot is None
+    assert origins[SORGHUM_PRIMARY].snapshot == "20250204"
+    assert origins[SORGHUM_LATERAL].snapshot == "20250204"

@@ -285,7 +285,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 10. Commit `feat(registry): add the wheat crown and sorghum primary/lateral selection rows`
 
-- [ ] 10.1 Tests. *Red: the rows don't exist.*
+- [x] 10.1 Tests. *Red: the rows don't exist.*
       - `tests/test_registry_chooser.py`:
         - 9 rows and 11 checksums. Rename the `..._seven_rows` test and fix its stale "13 cards"
           comment;
@@ -318,7 +318,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
         command **without** the alias variable, against the real `unpromoted_collections` over
         `_FakeApi(collections=[])` → exit 1, naming all 3. `wandb.init` and `link_artifact` are never
         called.
-- [ ] 10.2 Implement: the two rows verbatim from training#72, 3 checksums, 2 `source` strings and 3
+- [x] 10.2 Implement: the two rows verbatim from training#72, 3 checksums, 2 `source` strings and 3
       origins (design D1). The header says 11 models.
 
 ## 11. Commit `docs: candidate publishing, the alias guards, and --promote`

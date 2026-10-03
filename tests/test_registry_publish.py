@@ -120,7 +120,7 @@ def test_seed_publishes_all_distinct(monkeypatch, tmp_path):
     report = publish.seed_registry(
         _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api
     )
-    assert len(calls) == 8 and len(set(calls)) == 8  # one per physical model
+    assert len(calls) == 11 and len(set(calls)) == 11  # one per physical model
     assert sorted(report["published"]) == sorted(calls) and report["skipped"] == []
 
 
@@ -149,13 +149,13 @@ def test_seed_duplicate_collection_aborts(monkeypatch, tmp_path):
     assert "x/y" in message and "x=y" in message
 
 
-def test_the_eight_committed_model_ids_slug_to_eight_distinct_collections():
+def test_the_committed_model_ids_slug_to_distinct_collections():
     # The sibling of the above: the lossy slug is a real hazard in principle, but it
     # does not bite the committed matrix. Asserted so a future matrix edit that DOES
     # collide fails here rather than at `--execute` time.
     all_cards = _all_cards()
-    assert len(all_cards) == 8
-    assert len({collection_id(c) for c in all_cards}) == 8
+    assert len(all_cards) == 11
+    assert len({collection_id(c) for c in all_cards}) == 11
 
 
 def test_seed_idempotent_skip_and_force(monkeypatch, tmp_path):

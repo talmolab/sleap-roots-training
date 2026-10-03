@@ -190,3 +190,25 @@ def test_records_carry_the_raw_age_and_source_and_origins_are_sorted():
 def test_lineage_round_trips_through_json():
     lin = _lineage_for()
     assert json.loads(json.dumps(lin)) == lin
+
+
+def test_lineage_for_the_three_new_cards_names_only_their_origins_and_rows():
+    lin = _lineage_for(
+        "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+        "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+        "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+    )
+    origins = {o["model_id"]: o for o in lin["model_origins"]}
+    assert set(origins) == {
+        "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+        "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+        "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+    }
+    assert (
+        origins["20250401_wheat_models/250328_095645.multi_instance.n=1658"]["snapshot"]
+        is None
+    )
+    assert [(r["species"], r["mode"]) for r in lin["row_sources"]] == [
+        ("wheat", "cylinder"),
+        ("sorghum", "cylinder"),
+    ]
