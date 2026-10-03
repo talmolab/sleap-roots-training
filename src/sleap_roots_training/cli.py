@@ -195,7 +195,9 @@ def seed_registry_command(
 
     import wandb
 
-    lineage_config = lineage.build_lineage(chooser.matrix_sha256(selection_matrix))
+    lineage_config = lineage.build_lineage(
+        chooser.matrix_sha256(selection_matrix), all_cards, matrix
+    )
     if lineage_config["git_dirty"]:
         click.echo(
             "WARNING: working tree is dirty; the recorded matrix content hash "

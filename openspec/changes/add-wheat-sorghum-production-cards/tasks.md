@@ -166,7 +166,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 6. Commit `feat(registry)!: record row_sources and model_origins in seed lineage`
 
-- [ ] 6.1 Tests (`tests/test_registry_lineage.py`). *Red: the signature and keys are new.*
+- [x] 6.1 Tests (`tests/test_registry_lineage.py`). *Red: the signature and keys are new.*
       - `build_lineage(sha, cards, matrix)` returns exactly these keys: `git_sha`, `git_dirty`,
         `matrix_content_sha256`, `row_sources`, `model_origins`, `sleap_roots_training_version`,
         `wandb_version` and `sleap_roots_contracts_version`.
@@ -181,7 +181,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
         string.
       - JSON round-trip.
       - The real-TF-run-config disjointness test is kept, under the new signature.
-- [ ] 6.2 Implement (design D3):
+- [x] 6.2 Implement (design D3):
       - delete the three constants;
       - rewrite the module docstring (it says "six selection keys");
       - make the `build_lineage` call site in `cli.py` pass the in-scope `all_cards` and the `matrix`.
