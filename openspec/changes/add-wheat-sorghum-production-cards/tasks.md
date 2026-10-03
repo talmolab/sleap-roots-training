@@ -51,11 +51,11 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 1. Commit `docs(openspec): propose add-wheat-sorghum-production-cards`
 
-- [ ] 1.1 Commit the change directory alone. It triggers no CI.
+- [x] 1.1 Commit the change directory alone. It triggers no CI.
 
 ## 2. Commit `test(labeling): use alfalfa, not wheat, as the out-of-vocabulary crop`
 
-- [ ] 2.1 Change `wheat` to `alfalfa` in three tests, and in the `match=` of the third:
+- [x] 2.1 Change `wheat` to `alfalfa` in three tests, and in the `match=` of the third:
       - the species-rejection test in `tests/test_labeling_cli.py`;
       - the one in `tests/test_labeling_metadata.py`;
       - the one in `tests/test_labeling_skeletons.py`.

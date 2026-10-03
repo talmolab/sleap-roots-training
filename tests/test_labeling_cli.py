@@ -94,7 +94,7 @@ def test_build_failure_is_a_clean_error_and_writes_nothing(tmp_path):
 
 
 def test_build_rejects_an_out_of_vocabulary_species_by_name(tmp_path):
-    result = invoke(["build", *build_args(tmp_path, **{"--species": "wheat"})])
+    result = invoke(["build", *build_args(tmp_path, **{"--species": "alfalfa"})])
 
     assert result.exit_code != 0
     assert "species" in result.output

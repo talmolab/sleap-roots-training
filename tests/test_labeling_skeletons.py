@@ -360,8 +360,8 @@ def test_a_missing_key_is_reported_with_its_row_number(tmp_path):
 
 
 def test_an_unknown_species_is_reported_with_its_row_number(tmp_path):
-    body = "skeletons:\n  - species: wheat\n    root_type: primary\n    mode: cylinder\n    node_count: 6\n"
-    with pytest.raises(ValueError, match="row 0: unknown species 'wheat'"):
+    body = "skeletons:\n  - species: alfalfa\n    root_type: primary\n    mode: cylinder\n    node_count: 6\n"
+    with pytest.raises(ValueError, match="row 0: unknown species 'alfalfa'"):
         load_skeleton_table(write_table(tmp_path, body))
 
 
