@@ -7,6 +7,23 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Wheat and sorghum selection rows** (#72, step 1 of talmolab/sleap-roots-pipeline#118). The
+  matrix now carries a wheat crown model (cylinder, 5–14; wheat seminal roots are the team's
+  "crown") and the sorghum primary + lateral pair every past sorghum production run used
+  (cylinder, 3–14), with SHA256 checksums recomputed from the source zips. They are committed to
+  be published under the `candidate` alias, **not** `production`, so production predict does not
+  see them until their parity and trait checks pass and they are deliberately promoted.
+- **`seed-registry --execute` refuses a non-default alias without `--only`.** The skip is per
+  alias, so under, say, `candidate` no card counts as seeded and an unscoped run would re-publish
+  every card in the matrix. Refused as a usage error before the credential check.
+- **`seed-registry --promote`.** Under the default alias, `--execute` now refuses (exit 1) to link
+  `production` to a collection that has never carried it, unless `--promote` is given with
+  `--only`. A routine re-seed, a lost alias variable, or `--force` can no longer make a card live.
+- **The target line.** Every `seed-registry` run prints the entity, registry, alias (and whether
+  it came from `SLEAP_ROOTS_MODEL_ALIAS` or the default) and seed project first, including under
+  `--yes`.
+- **`row_sources` and `model_origins` in the seed run config**, read from the matrix and scoped to
+  the run's cards.
 - **`sleap-roots-training inventory labels <root>`** — a re-runnable enumeration of what labeled
   data actually exists. Nobody had ever run one: the registry holds 8 collections against an
   expected 25-30, and `skeletons.yaml` cannot express the corpus it claims to describe. The command
@@ -33,6 +50,21 @@ All notable changes to this project are documented here. The format is based on
   nowhere to record the answer: a person reads the output and decides.
 
 ### Changed
+- **`SPECIES_VOCAB` gains `wheat` and `sorghum`.** It is shared, so training `validate` and
+  labeling metadata accept them too; a wheat labeling package still fails at the skeleton lookup,
+  since `skeletons.yaml` has no wheat row.
+- **`SLEAP_ROOTS_MODEL_ALIAS` is stripped**, and a set-but-blank value no longer passes through
+  as an empty alias.
+- **Breaking:**
+  - the selection matrix requires a per-row `source` and a top-level `origins` map covering
+    exactly the referenced models (`snapshot`, `location`, `pinned_by`); a custom
+    `--selection-matrix` without them no longer loads;
+  - `lineage.build_lineage(matrix_sha256)` is now `build_lineage(matrix_sha256, cards, matrix)`;
+  - the seed run config's `selection_matrix_source`, `selection_matrix_date` and
+    `models_snapshot` are replaced by `row_sources` and `model_origins` (past runs keep theirs);
+  - a first-time default-alias seed needs `--only … --promote`;
+  - a set-but-blank `SLEAP_ROOTS_MODEL_ALIAS` is an error for `seed-registry` in every mode
+    (other callers, such as `inventory labels`, are unaffected).
 - **`seed-registry` pins its wandb entity and project** (#70, from #69). The seed run used to
   pass no `project=`, so wandb named the project after the git checkout's directory. That is how
   all 8 production sources came to live in the worktree-named `migrate-model-card-selectors`. The
@@ -190,6 +222,12 @@ All notable changes to this project are documented here. The format is based on
   credential is resolvable anywhere; a malformed netrc — or a netrc entry with a blank/absent
   password — is treated as "no credential" (mirroring wandb's own resolver), so a stale login fails
   before the confirmation prompt rather than deep inside `wandb.init()`.
+
+### Removed
+- `lineage.SELECTION_MATRIX_SOURCE`, `lineage.SELECTION_MATRIX_DATE` and
+  `lineage.MODELS_SNAPSHOT`. They stamped every card with the 20250204 models-downloader snapshot,
+  which is false for the wheat card (in no snapshot) and both sorghum cards (in no chooser table);
+  provenance now comes from the matrix.
 
 ### Added
 - Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)

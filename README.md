@@ -29,11 +29,11 @@ a model, reading results), see [docs/training.md](docs/training.md).
 
 ## Seeding the production model registry
 
-`sleap-roots-training seed-registry` publishes the current legacy root models (from the
-committed `src/sleap_roots_training/registry/data/model_selection.yaml`) into a Weights &
-Biases registry as `type="model"` artifacts, each stamped with `ModelCard` selection
-metadata and the `production` alias — the exact surface the `sleap-roots-predict` warm
-worker reads. **One card describes one physical model**: a card carries a scalar
+`sleap-roots-training seed-registry` publishes the root models named in the committed
+`src/sleap_roots_training/registry/data/model_selection.yaml` into a Weights & Biases
+registry as `type="model"` artifacts, each stamped with `ModelCard` selection metadata and
+linked under the configured alias (default `production` — the exact surface the
+`sleap-roots-predict` warm worker reads). **One card describes one physical model**: a card carries a scalar
 `root_type` plus a `selectors` list, one entry per `(species, mode, age_min, age_max)`
 combination that model was validated for, so a model trained across several species is
 published once rather than once per species.
@@ -44,7 +44,7 @@ published once rather than once per species.
 |---|---|---|
 | `WANDB_ENTITY` | wandb entity (also wandb-native — steers run placement) | `eberrigan-salk-institute-for-biological-studies` |
 | `SLEAP_ROOTS_MODEL_REGISTRY` | **models** registry name (a separate `sleap-roots-labels` registry also exists) | `sleap-roots-models` |
-| `SLEAP_ROOTS_MODEL_ALIAS` | alias marking a version production | `production` |
+| `SLEAP_ROOTS_MODEL_ALIAS` | the alias the seed links each card under. Stripped. Set but **blank is an error** for `seed-registry`, never the default (unlike the seed project below). | `production` |
 | `SLEAP_ROOTS_SEED_PROJECT` | wandb project the seed run is created in, and so where every published **source** artifact lives (producer-only; the consumer reads the registry, never this project). Empty means the default. | `sleap-roots-training` |
 | `WANDB_API_KEY` | one way to authenticate wandb-contacting operations; a `wandb login` session (netrc entry for `api.wandb.ai`) also satisfies the guard | — |
 
@@ -53,10 +53,12 @@ Defaults live in `registry/config.py`; the species/mode vocabulary lives in
 
 **Cross-repo invariant:** `SLEAP_ROOTS_MODEL_REGISTRY` here must equal the consumer's
 `SRP_WANDB_REGISTRY` (which has **no default** — the operator must set it), and the entity
-default is shared with `SRP_WANDB_ENTITY` across both repos. The consumer **hardcodes** the
-`production` alias, so `SLEAP_ROOTS_MODEL_ALIAS` must remain `production` (a non-default alias would
-be silently skipped by the consumer, and the producer's own `--verify` — which checks the same
-configured alias — could not detect the skew).
+default is shared with `SRP_WANDB_ENTITY` across both repos. The consumer reads its alias from
+`SRP_WANDB_MODEL_ALIAS`, default `production` (`sleap_roots_predict/model_registry.py`), and no
+deployment sets it — so production predict sees only `production`-aliased cards. Cards published
+here under another alias (for example `candidate`) are invisible to production predict; parity and
+trait checks read them by setting `SRP_WANDB_MODEL_ALIAS` to match. See
+[Publishing under a non-default alias](#publishing-under-a-non-default-alias).
 
 ### Do not delete these wandb projects
 
@@ -69,6 +71,7 @@ after the git checkout's directory (a worktree name, here), so two folder-named 
 |---|---|---|
 | `migrate-model-card-selectors` | the sources of all 8 `production` links (verified 2026-09-30) | every production link breaks, and prediction with it |
 | `sleap-roots-training-talmolab` | the sources of the 13 flat collections retired on 2026-09-29 (#68) | the rollback of that retirement becomes impossible |
+| `sleap-roots-training` | every seed since the pin, including the wheat and sorghum `candidate` sources (#72), which become `production` sources when promoted | their candidate links break now, and their production links after promotion |
 
 **Do not delete or "clean up" either project**, however disposable its name looks. The same
 applies to the source artifact versions and seed runs inside them, and to the registry
@@ -88,25 +91,40 @@ inferred from how wandb keys artifact sequences per project, not yet observed.
 
 ```bash
 # Dry run (default): print the plan + resolve every model, no wandb.
-sleap-roots-training seed-registry --models-root <snapshot-dir>
+sleap-roots-training seed-registry --models-root <models-root>
 
-# Publish (checks WANDB_API_KEY, then confirms the target unless --yes).
-sleap-roots-training seed-registry --models-root <snapshot-dir> --execute
+# Publish (checks WANDB_API_KEY, then confirms the target unless --yes). A collection that
+# has never carried `production` needs --only <id> --promote (see Rerun contract).
+sleap-roots-training seed-registry --models-root <models-root> --execute
 
 # Verify the live registry (read-only; no --models-root needed).
 sleap-roots-training seed-registry --verify
 ```
 
-`--models-root` holds the `models-downloader` snapshot as `<model_id>.zip` archives; each is
-SHA256-verified against the matrix, then extracted (OS-junk filtered) so the published
-`weights_checksum` is deterministic for the snapshot.
+Every run's first line is the target: entity, registry, alias, whether the alias came from
+`SLEAP_ROOTS_MODEL_ALIAS` or the default, and the seed project. Read it before trusting the rest.
+
+`--models-root` is a directory of `<source_model_id>.zip` archives — the models-downloader
+snapshot for most models, but any directory laid out that way works (the wheat model ships in no
+snapshot). Each archive is SHA256-verified against the matrix's `checksums`, then extracted
+(OS-junk filtered) so the published `weights_checksum` is deterministic.
 
 ### Rerun contract
 
-Re-running is safe: a card whose collection already carries the `production` alias is
-**skipped** (so a re-run resumes after a partial failure). Moving the alias to a new version
-requires `--force`. **Caution:** `--execute --yes` publishes non-interactively — do not bake
-it into shared automation.
+Re-running is safe: a card whose collection already carries the **configured** alias is
+**skipped** (so a re-run resumes after a partial failure). The skip is per alias: a collection
+carrying only `candidate` is *not* skipped by a `production` run. Moving the alias to a new
+version requires `--force`. **Caution:** `--execute --yes` publishes non-interactively — do not
+bake it into shared automation.
+
+**A first-time `production` link needs `--promote`.** Under the default alias, `--execute` first
+checks, read-only, which in-scope collections have never carried `production`, and refuses them
+(exit 1) unless `--promote` is given. `--promote` requires `--only`, so a promotion always names
+its collections. This holds under `--force` too. Consequences:
+
+- While any matrix card is unpromoted (for example a `candidate` card awaiting its gates), a full
+  default-alias `--execute` is refused. Re-seed the promoted ones with `--only <their ids>`.
+- A re-run after a partial promotion repeats the same `--only … --promote`.
 
 **`--force` is not evidence that metadata was refreshed.** Artifact metadata is not part of
 the manifest digest, so re-logging byte-identical weights creates no new version and can
@@ -119,12 +137,35 @@ whether a collection is migrated.
 ### Rollout (canary-first)
 
 The consumer reads with an older wandb than the producer writes with, so seed **canary-first**:
-`--only <collection_id>` publishes a single card, run the consumer's `pytest -m wandb` on it,
-then a full `--execute` seeds the remaining 7 of 8 (skipping the canary).
+`--only <collection_id> --promote` publishes a single card, run the consumer's `pytest -m wandb`
+on it, then `--only <canary> --only <each remaining id> --promote` seeds the rest (skipping the
+canary).
 
 `--only` scopes the expected set before it is computed, so **`--verify --only <id>` suppresses
 orphan reporting** and says so in its output — every collection outside the scope would
 otherwise be reported as orphaned. Run a full `--verify` (no `--only`) for the orphan report.
+
+### Publishing under a non-default alias
+
+To put cards in the registry without making them live — for example the wheat and sorghum cards
+awaiting parity and trait checks (#72) — publish under another alias:
+
+```bash
+SLEAP_ROOTS_MODEL_ALIAS=candidate sleap-roots-training seed-registry \
+  --models-root <models-root> --only <id> [--only <id> ...] --execute
+```
+
+- **`--only` is required.** Under a non-default alias no card counts as seeded, so an unscoped
+  `--execute` would re-publish every card in the matrix; it is refused (exit 2).
+- **Verify under the same alias:** `SLEAP_ROOTS_MODEL_ALIAS=candidate … --verify --only <ids>`.
+- **A default `--verify` reports those cards `missing` and exits 1** until they are promoted. That
+  is the expected state — read the missing list, do not ignore the exit code.
+- **If the alias variable is lost,** the same command runs under `production` and the promotion
+  check refuses it (those collections have never carried `production`).
+- **Promote** later with the default alias: `--only <ids> --promote --execute`, from the same seed
+  project and the same staged archives, then confirm on read-back that no new version was made.
+- **Roll back** a card by fetching its registry link, asserting `is_link`, and calling `unlink()`.
+  Never `save()` the source artifact: it reports success and leaves the alias live.
 
 ### W&B compatibility
 

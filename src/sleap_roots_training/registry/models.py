@@ -1,11 +1,11 @@
-"""Resolve a card's model id to a usable, snapshot-pinned model directory.
+"""Resolve a card's model id to a usable, checksum-pinned model directory.
 
-The canonical ``models-downloader`` snapshot ships each model as ``<model_id>.zip``.
-The production path verifies the archive against the SHA256 recorded in the committed
-matrix, then extracts it (OS-junk filtered) into a fresh temp/cache directory with a
-canonical layout — pinning the snapshot so the published ``weights_checksum`` is
-deterministic. An already-unzipped directory is accepted only as a dev/dry-run
-convenience (it is not snapshot-pinned).
+Each model is staged as ``<model_id>.zip`` — from a models-downloader snapshot or, like
+the wheat crown model, from an experiment run's own models. The production path verifies
+the archive against the SHA256 recorded in the committed matrix, then extracts it
+(OS-junk filtered) into a fresh temp/cache directory with a canonical layout, so the
+published ``weights_checksum`` is deterministic. An already-unzipped directory is
+accepted only as a dev/dry-run convenience (it is not checksum-pinned).
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def resolve_model_dir(
         if require_pinned:
             raise ValueError(
                 f"{model_id}: resolved as an already-unzipped directory, which is "
-                f"NOT snapshot-pinned; provide the <model_id>.zip archive for --execute"
+                f"NOT checksum-pinned; provide the <model_id>.zip archive for --execute"
             )
         model_dir = _locate_model_root(dir_path)
         _verify_essentials(model_dir, model_id)

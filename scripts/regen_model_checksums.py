@@ -1,12 +1,15 @@
 """Regenerate the ``checksums:`` block of ``model_selection.yaml``.
 
 Prints the SHA256 of each ``<model_id>.zip`` referenced by the committed selection
-matrix, as a YAML mapping ready to paste into the matrix on a snapshot update.
+matrix, as a YAML mapping ready to paste into the matrix.
 
 Usage:
     uv run python scripts/regen_model_checksums.py <models-root>
 
-where ``<models-root>`` holds the snapshot as ``<species>/<root>/<id>.zip``.
+where ``<models-root>`` holds every referenced model as ``<model_id>.zip`` (the model id is
+a relative path, e.g. ``20250401_wheat_models/250328_095645.multi_instance.n=1658``). Not
+every model ships in a models-downloader snapshot, so stage all of them under one root; a
+partial root reports the absent ones as MISSING.
 """
 
 import sys

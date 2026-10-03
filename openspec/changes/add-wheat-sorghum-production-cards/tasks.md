@@ -323,7 +323,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
 
 ## 11. Commit `docs: candidate publishing, the alias guards, and --promote`
 
-- [ ] 11.1 README section "Seeding the production model registry". It is the canonical, generic
+- [x] 11.1 README section "Seeding the production model registry". It is the canonical, generic
       runbook.
       - **Cross-repo invariant paragraph.** Rewrite it: predict reads `SRP_WANDB_MODEL_ALIAS`
         (default `production`), and no deployment sets it.
@@ -344,7 +344,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
         - roll back by unlink, never `save()`.
       - **"Do not delete these wandb projects".** Add `sleap-roots-training`, which holds the candidate
         sources.
-- [ ] 11.2 Other stale prose:
+- [x] 11.2 Other stale prose:
       - `registry/models.py`: in the module docstring and the rejection message, "snapshot-pinned"
         becomes "checksum-pinned". The models test matches `(?i)pin`, so it is unaffected.
       - `scripts/regen_model_checksums.py` docstring:
@@ -352,7 +352,7 @@ Ids and strings are written once, in `design.md` (Context and D1).
         - "holds the snapshot as `<species>/<root>/<id>.zip`" becomes "`<model_id>.zip` under any
           root".
       - `docs/roadmap.md` registry section: add a one-line pointer to #72/#118.
-- [ ] 11.3 `docs/CHANGELOG.md` `[Unreleased]`. Use the **first** `### Added` and the first
+- [x] 11.3 `docs/CHANGELOG.md` `[Unreleased]`. Use the **first** `### Added` and the first
       `### Changed`, and add `### Removed` after Changed. Describe the guards by behaviour, not as
       "guard 1/2".
       - **Added:**
