@@ -1,0 +1,192 @@
+{
+  "description": "add-wheat-sorghum-production-cards group 14 (talmolab/sleap-roots-training#72, talmolab/sleap-roots-pipeline#118 step 1): the three wheat/sorghum cards published under the `candidate` alias only. Read-only snapshot.",
+  "captured_utc": "2026-10-04T17:22:59+00:00",
+  "registry": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
+  "seed_run": {
+    "path": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/4ihxu1mg",
+    "url": "https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-training/runs/4ihxu1mg",
+    "config": {
+      "git_dirty": false,
+      "git_sha": "06f8bb4d4fea7ac28856cea5a98e735d3521fcc6",
+      "invocation": {
+        "only": [
+          "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+          "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+          "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+        ],
+        "force": false,
+        "promote": false,
+        "alias_source": "SLEAP_ROOTS_MODEL_ALIAS",
+        "first_production_links": null
+      },
+      "matrix_content_sha256": "a000bb3a197ea8f3dec6916ec983e24255f385fb6207c34983a94e3f8581e6dc",
+      "model_origins": [
+        {
+          "location": "models-downloader 20250204_models/",
+          "model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+          "snapshot": "20250204",
+          "pinned_by": "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
+        },
+        {
+          "location": "models-downloader 20250204_models/",
+          "model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+          "snapshot": "20250204",
+          "pinned_by": "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
+        },
+        {
+          "location": "EDPIE Feb 2025 run directory",
+          "model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+          "snapshot": null,
+          "pinned_by": "EDPIE Feb 2025 run: models_downloader_output/model_paths.csv, which pins the bare 250328_095645.multi_instance.n=1658.zip; the 20250401_wheat_models/ prefix is the run subdirectory holding it"
+        }
+      ],
+      "registry_target": {
+        "alias": "candidate",
+        "entity": "eberrigan-salk-institute-for-biological-studies",
+        "registry": "sleap-roots-models"
+      },
+      "row_sources": [
+        {
+          "age": "5, 6, 7, 8, 9, 10, 11, 12, 13, 14",
+          "mode": "cylinder",
+          "source": "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): crown only, the model EDPIE pinned; its primary and lateral models deliberately not registered",
+          "species": "wheat"
+        },
+        {
+          "age": "3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14",
+          "mode": "cylinder",
+          "source": "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): the pair five past sorghum production runs pinned",
+          "species": "sorghum"
+        }
+      ],
+      "sleap_roots_contracts_version": "0.1.0a8",
+      "sleap_roots_training_version": "0.0.1a0"
+    },
+    "rawconfig_only": {
+      "wandb_version": "0.28.0"
+    },
+    "summary": {
+      "published": [
+        "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+        "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+        "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+      ],
+      "skipped": [],
+      "failed": [],
+      "stale": []
+    }
+  },
+  "collections": [
+    {
+      "collection": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+      "source_model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+      "source_zip_sha256": "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250401_wheat_models-250328_095645.multi_instance.n-1658:v0",
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "c600f25e7ed81482020ede734ba1ac4c",
+          "aliases": [
+            "candidate",
+            "latest"
+          ],
+          "metadata_equals_card": true,
+          "metadata": {
+            "root_type": "crown",
+            "selectors": [
+              {
+                "mode": "cylinder",
+                "age_max": 14,
+                "age_min": 5,
+                "species": "wheat"
+              }
+            ],
+            "source_model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658"
+          }
+        }
+      ]
+    },
+    {
+      "collection": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+      "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+      "source_zip_sha256": "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689:v0",
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "56817fe98fb639c0fdffbe37495f5c34",
+          "aliases": [
+            "candidate",
+            "latest"
+          ],
+          "metadata_equals_card": true,
+          "metadata": {
+            "root_type": "primary",
+            "selectors": [
+              {
+                "mode": "cylinder",
+                "age_max": 14,
+                "age_min": 3,
+                "species": "sorghum"
+              }
+            ],
+            "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689"
+          }
+        }
+      ]
+    },
+    {
+      "collection": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+      "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+      "source_zip_sha256": "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590:v0",
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "891a4ef59da6c116e557fab1aa8d54a7",
+          "aliases": [
+            "candidate",
+            "latest"
+          ],
+          "metadata_equals_card": true,
+          "metadata": {
+            "root_type": "lateral",
+            "selectors": [
+              {
+                "mode": "cylinder",
+                "age_max": 14,
+                "age_min": 3,
+                "species": "sorghum"
+              }
+            ],
+            "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590"
+          }
+        }
+      ]
+    }
+  ],
+  "registry_state": {
+    "pre_publish_model_collections": 108,
+    "model_collections": 111,
+    "production": [
+      "arabidopsis-lateral-240130_140452.multi_instance.n-337",
+      "canola-lateral-240611_083419.multi_instance.n-631",
+      "canola_pennycress_arabidopsis-primary-240611_102513.multi_instance.n-743",
+      "rice-older-crown-221208_113552.multi_instance.n-574",
+      "rice-younger-crown-220821_163331.multi_instance.n-867",
+      "rice-younger-primary-230104_182346.multi_instance.n-720",
+      "soybean-lateral-lateral_root_221006_172103.multi_instance.n-482",
+      "soybean-primary-221003_111420.multi_instance.n-1389"
+    ],
+    "candidate": [
+      "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+      "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+      "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+    ]
+  },
+  "notes": [
+    "`wandb_version` is stored on the run, but the public API lists it under `run.rawconfig`, not `run.config`, because wandb 0.28 treats it as an internal key (`WANDB_INTERNAL_KEYS` in wandb/apis/public/runs.py). Hence `seed_run.rawconfig_only`.",
+    "`source_zip_sha256` is the matrix-pinned value. The publish refused to proceed unless each staged zip hashed to it (resolve_model_dir with require_pinned=True). The zips themselves are not in W&B: the artifacts hold their extracted contents, so this is re-checkable only against the original archives.",
+    "The run was invoked as `seed-registry --models-root <temporary local copy of the three pinned zips> --only <3 ids> --execute --yes` under SLEAP_ROOTS_MODEL_ALIAS=candidate. The models-root path is deliberately not recorded (public repo). `pre_publish_model_collections` is the read-only probe's count just before the publish."
+  ]
+}
