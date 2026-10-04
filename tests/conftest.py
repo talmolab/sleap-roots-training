@@ -74,9 +74,13 @@ models:
     primary_model_id: soy/p
     lateral_model_id: soy/l
     crown_model_id: null
+    source: "test row"
 checksums:
   soy/p: {sha}
   soy/l: {sha}
+origins:
+  soy/p: {{snapshot: null, location: "test location", pinned_by: "test pin"}}
+  soy/l: {{snapshot: null, location: "test location", pinned_by: "test pin"}}
 """.format(sha="0" * 64)
 
 
@@ -103,6 +107,81 @@ def write_jpeg(path: Path) -> Path:
     """Write :data:`TINY_JPEG` to ``path``, creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(TINY_JPEG)
+    return path
+
+
+#: Sentinel: derive an ``origins`` entry for every referenced model id.
+AUTO = object()
+
+_ID_SLOTS = ("primary_model_id", "lateral_model_id", "crown_model_id")
+
+
+def write_matrix(
+    path: Path,
+    rows: list[dict],
+    *,
+    checksums: dict | None = None,
+    origins=AUTO,
+    drop=(),
+    override: dict | None = None,
+) -> Path:
+    """Write a selection matrix that is valid by default, with knobs to break it.
+
+    Each row gets ``source: "test row <i>"``; every referenced model id gets a zero
+    checksum and an origin (``snapshot: null``). ``drop`` and ``override`` take keys
+    ``("row", i, key)`` or ``("origin", model_id, key)``; ``("origins",)`` in ``drop``
+    removes the whole map. ``origins`` may be passed as ``None`` or a list to write those
+    shapes verbatim.
+
+    Args:
+        path: Where to write the YAML.
+        rows: Row mappings (``species``/``mode``/``age`` plus any id slots).
+        checksums: Explicit checksums; defaults to a zero digest per referenced id.
+        origins: ``AUTO`` to derive, or an explicit value written as-is.
+        drop: Keys to remove after deriving.
+        override: Keys to set after deriving.
+
+    Returns:
+        ``path``.
+    """
+    override = override or {}
+    drop = set(drop)
+    built_rows = []
+    referenced: list[str] = []
+    for index, row in enumerate(rows):
+        built = {"source": f"test row {index}", **row}
+        for slot in _ID_SLOTS:
+            model_id = built.get(slot)
+            if isinstance(model_id, str) and model_id not in referenced:
+                referenced.append(model_id)
+        built_rows.append(built)
+    data: dict = {"models": built_rows}
+    data["checksums"] = (
+        checksums if checksums is not None else {m: "0" * 64 for m in referenced}
+    )
+    if origins is AUTO:
+        data["origins"] = {
+            m: {"snapshot": None, "location": "test location", "pinned_by": "test pin"}
+            for m in referenced
+        }
+    else:
+        data["origins"] = origins
+    for key, value in override.items():
+        if key[0] == "row":
+            data["models"][key[1]][key[2]] = value
+        else:
+            data["origins"].setdefault(key[1], {})
+            data["origins"][key[1]][key[2]] = value
+    for key in drop:
+        if key == ("origins",):
+            data.pop("origins", None)
+        elif key[0] == "row":
+            data["models"][key[1]].pop(key[2], None)
+        elif len(key) == 2:
+            data["origins"].pop(key[1], None)
+        else:
+            data["origins"][key[1]].pop(key[2], None)
+    OmegaConf.save(OmegaConf.create(data), path)
     return path
 
 

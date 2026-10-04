@@ -55,7 +55,7 @@ def test_an_empty_required_field_is_named(field):
 def test_an_unknown_species_is_rejected_against_the_repo_vocabulary():
     """The same ``SPECIES_VOCAB`` the training config validates against, not a new one."""
     with pytest.raises(ValueError, match="species"):
-        metadata(species="wheat")
+        metadata(species="alfalfa")
 
 
 def test_an_unknown_capture_mode_is_rejected():

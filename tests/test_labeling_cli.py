@@ -94,7 +94,7 @@ def test_build_failure_is_a_clean_error_and_writes_nothing(tmp_path):
 
 
 def test_build_rejects_an_out_of_vocabulary_species_by_name(tmp_path):
-    result = invoke(["build", *build_args(tmp_path, **{"--species": "wheat"})])
+    result = invoke(["build", *build_args(tmp_path, **{"--species": "alfalfa"})])
 
     assert result.exit_code != 0
     assert "species" in result.output
@@ -115,6 +115,22 @@ def test_build_rejects_a_crop_the_skeleton_table_does_not_cover(tmp_path):
     assert result.exit_code != 0
     assert "pennycress" in result.output
     assert not isinstance(result.exception, ValueError)
+
+
+def test_build_for_wheat_fails_at_the_skeleton_lookup_before_staging(tmp_path):
+    """Wheat is in SPECIES_VOCAB for the model registry but has no skeleton row yet."""
+    # build_args ends with "--root-type primary --root-type lateral"; wheat is crown-only.
+    args = build_args(tmp_path, **{"--species": "wheat"})[:-4] + [
+        "--root-type",
+        "crown",
+    ]
+    result = invoke(["build", *args])
+
+    assert result.exit_code != 0
+    assert "No labeling skeleton" in result.output
+    assert "crown" in result.output
+    assert not isinstance(result.exception, ValueError)
+    assert not (tmp_path / "soybean-weep-labeling").exists()
 
 
 def test_build_refuses_an_existing_output_directory(tmp_path):

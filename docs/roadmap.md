@@ -101,6 +101,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
 - **Why later tiers care:** seeding fixed the **publishing surface** — the `ModelCard` metadata
   schema, the `production` alias, and the registry path — that this repo's future `sleap-nn`-trained
   models will reuse, whether the weights are legacy or native.
+- **Wheat and sorghum (#72, step 1 of talmolab/sleap-roots-pipeline#118; PR #73):** the matrix carries a
+  wheat crown and a sorghum primary + lateral row (11 physical models), with per-row and per-model
+  provenance. They are published under the `candidate` alias only; linking `production` is a
+  separate, gated step that `seed-registry` refuses without `--only … --promote`.
 - **Open follow-ups:** #3 (seed the deferred arabidopsis plate models — one card per physical plate
   model, not one per matrix row), #7 (accept a
   `wandb login` session, not just `WANDB_API_KEY`; mirrors to `talmolab/sleap-roots-predict`).

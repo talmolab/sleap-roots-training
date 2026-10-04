@@ -1,10 +1,10 @@
-"""Publish, link, and verify production model artifacts in the wandb registry.
+"""Publish, link, and verify model artifacts in the wandb registry.
 
 This is the thin network layer. It publishes each card as a ``type="model"`` artifact
 with exactly the card's selection metadata, links it into a per-card collection under
-the configured registry with the ``production`` alias, and can re-run the consumer
-read path to verify the alias landed. ``wandb`` is imported lazily so the pure-logic
-and dry-run paths never require it loaded.
+the configured registry with the configured alias (default ``production``), and can
+re-run the consumer read path to verify the alias landed. ``wandb`` is imported lazily
+so the pure-logic and dry-run paths never require it loaded.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 def publish_card(
     run, card: Card, model_dir: Path, cfg: RegistryConfig, *, api=None
 ) -> str:
-    """Publish one card as a ``type="model"`` artifact linked as production.
+    """Publish one card as a ``type="model"`` artifact linked under the configured alias.
 
     After linking, this reads back **the server's own view** of the metadata and
     refreshes it in place if it is stale. That check is not belt-and-braces: artifact
@@ -120,7 +120,7 @@ def _existing_collections(api, project: str) -> dict[str, object]:
     Listing existing collections up front lets the idempotency check distinguish
     "collection absent" (expected on a first seed) from a real API/network error
     without swallowing the latter — a swallowed read error would be treated as
-    "not yet production" and wrongly re-publish, moving the ``production`` alias.
+    "not yet aliased" and wrongly re-publish, moving the configured alias.
 
     The collection **objects** are kept rather than reduced to a set of names, because
     orphan reporting needs ``ArtifactCollection.aliases`` — one lightweight query per
@@ -134,6 +134,50 @@ def _existing_collections(api, project: str) -> dict[str, object]:
             project_name=project, type_name="model"
         )
     }
+
+
+def unpromoted_collections(
+    cfg: RegistryConfig, cards: Iterable[Card], api=None
+) -> list[str]:
+    """Return the in-scope collections that do not yet carry ``cfg.alias``, sorted.
+
+    Under the default alias, linking ``production`` to such a collection makes it live for
+    the consumer at once, so ``seed-registry`` refuses it unless ``--promote`` is given.
+    Read-only.
+
+    A collection absent from the registry listing is unpromoted **without** reading its
+    versions: wandb 0.28 raises (``ValueError: Unable to parse 'Artifacts' response
+    data``) when asked for the versions of a collection that does not exist, so reading
+    first would make every first-time seed fail instead of being reported.
+
+    Args:
+        cfg: The resolved registry configuration.
+        cards: The invocation's in-scope cards.
+        api: A ``wandb.Api``, built lazily when ``None`` (constructing one validates the
+            key over the network, so callers on a refusal path never build it).
+
+    Returns:
+        The collection ids with no version carrying ``cfg.alias``.
+    """
+    if api is None:
+        import wandb
+
+        api = wandb.Api()
+
+    project = cfg.registry_project()
+    existing = _existing_collections(api, project)
+    # Deliberately the same per-version read the idempotency skip in `seed_registry`
+    # uses, not the cheaper `ArtifactCollection.aliases`: the guard and the skip then
+    # agree on what "already carries the alias" means.
+    unpromoted = set()
+    for card in cards:
+        collection = collection_id(card)
+        if (
+            collection not in existing
+            or _aliased_artifact(api, project, collection, cfg.alias) is None
+        ):
+            unpromoted.add(collection)
+    return sorted(unpromoted)
 
 
 def resolve_all(
@@ -173,7 +217,12 @@ def seed_registry(
 ) -> dict:
     """Publish already-resolved cards to the registry, idempotently.
 
-    Skips collections that already carry the production alias unless ``force`` is set
+    This function performs **no** promotion check: called directly under the default
+    alias it links ``production`` to a never-production collection. ``seed-registry``
+    refuses that first, with :func:`unpromoted_collections`; a caller that bypasses the
+    CLI must do the same (design D5's accepted residual risk).
+
+    Skips collections that already carry the configured alias unless ``force`` is set
     (so a re-run is a no-op and resumes after a partial failure); a real API error
     during the idempotency read propagates (fail closed) rather than causing a
     duplicate publish.
@@ -223,13 +272,13 @@ def seed_registry(
     # Echo per collection as it happens. `logger.info` alone is invisible (nothing in
     # the package configures logging) and the caller's final echo is never reached if
     # something propagates -- after a failure at card 5 of 8 the operator would have no
-    # local record of which collections now carry `production`.
+    # local record of which collections now carry the alias.
     def _emit(outcome: str, collection: str) -> None:
         print(f"{outcome}: {collection}", flush=True)
 
     for card, model_dir in resolved:
         collection = collection_id(card)
-        # ONE read answers both questions: is this already production, and is what is
+        # ONE read answers both questions: is this already aliased, and is what is
         # there still readable by an upgraded consumer. Querying twice was redundant,
         # and the second query's fail-soft branch was unreachable anyway -- this read
         # fails closed, so a transient error raises here rather than being mistaken
@@ -240,7 +289,7 @@ def seed_registry(
             else None
         )
         if aliased is not None:
-            logger.info("skip %s (already production)", collection)
+            logger.info("skip %s (already %s)", collection, cfg.alias)
             skipped.append(collection)
             # The skip path is the DEFAULT on every re-run, so a half-migrated
             # collection would otherwise sit here undetected: a check scoped to

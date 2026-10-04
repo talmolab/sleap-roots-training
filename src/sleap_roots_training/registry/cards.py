@@ -86,11 +86,7 @@ def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
         selector = Selector(
             species=row.species, mode=row.mode, age_min=age_min, age_max=age_max
         )
-        model_ids = {
-            "primary": row.primary_model_id,
-            "lateral": row.lateral_model_id,
-            "crown": row.crown_model_id,
-        }
+        model_ids = row.model_ids()
         for root_type in _ROOT_SLOTS:
             model_id = model_ids[root_type]
             if model_id is None:

@@ -1,16 +1,31 @@
-# Production model selection matrix for the sleap-roots pipeline.
+# Production model selection matrix for the sleap-roots pipeline: 9 rows over 11
+# physical models.
 #
-# Source of truth: models-downloader `model_chooser_table.xlsx` (snapshot 20250204).
-#   Repo:  https://gitlab.com/salk-tm/models-downloader
-#   Table: tests/data/models_downloader_input/20250204_models/model_chooser_table.xlsx
-# Verified against the live xlsx on 2026-07-04.
+# Each row selects models for one (species, mode, age window). Rows come from more than
+# one place, so provenance is recorded per row and per model rather than claimed once
+# for the whole file (talmolab/sleap-roots-training#72):
+#
+#   - `source` on every row says why the row exists with its window: transcribed from the
+#     models-downloader chooser table, or an owner decision with its issue.
+#   - `origins` (keyed by model id, like `checksums`) says where each `<model_id>.zip`
+#     came from (`snapshot`, `location`) and what pinned that exact file (`pinned_by`).
+#     `location` is relative to a run or a snapshot, never a share path: this repo is
+#     public. `snapshot: null` means the zip ships in no models-downloader snapshot.
+#
+# The models-downloader rows were transcribed from `model_chooser_table.xlsx` in the
+# 20250204 snapshot of https://gitlab.com/salk-tm/models-downloader
+# (tests/data/models_downloader_input/20250204_models/model_chooser_table.xlsx).
 #
 # `age` is the native chooser comma-list; chooser.py parses it to age_min/age_max
-# (a contiguous window). Absent root-type slots are `null`.
+# (a contiguous window). Absent root-type slots are `null`. Windows are inclusive. A
+# scan OLDER than its species' highest age_max is matched at that maximum by predict
+# (with a warning), and one YOUNGER than the window gets no model; both are the owner's
+# decision of 2026-10-02 (bloom#971 phase 1, bloom#994). Past sorghum runs include 17
+# DAG scans, which therefore select the 3-14 pair, as they did in production.
 #
-# `checksums` pins each source `<model_id>.zip` by SHA256 so the published
-# `weights_checksum` (the whole-artifact digest) is deterministic for this snapshot.
-# Regenerate with the documented sha256 helper on a snapshot update.
+# `checksums` pins each source `<model_id>.zip` by SHA256, so the published
+# `weights_checksum` (the whole-artifact digest) is deterministic. Regenerate with
+# scripts/regen_model_checksums.py against a root holding every `<model_id>.zip`.
 #
 # The arabidopsis `plate` row (arabidopsis_plates/primary + /lateral) is OMITTED:
 # those models are absent from the snapshot and have no concrete `.n=` id.
@@ -23,6 +38,7 @@ models:
     primary_model_id: soybean/primary/221003_111420.multi_instance.n=1389
     lateral_model_id: soybean/lateral/lateral_root_221006_172103.multi_instance.n=482
     crown_model_id: null
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   - species: canola
     mode: cylinder
@@ -30,6 +46,7 @@ models:
     primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
     lateral_model_id: canola/lateral/240611_083419.multi_instance.n=631
     crown_model_id: null
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   - species: pennycress
     mode: cylinder
@@ -37,6 +54,7 @@ models:
     primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
     lateral_model_id: canola/lateral/240611_083419.multi_instance.n=631
     crown_model_id: null
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   - species: arabidopsis
     mode: multiplant cylinder
@@ -44,6 +62,7 @@ models:
     primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
     lateral_model_id: arabidopsis/lateral/240130_140452.multi_instance.n=337
     crown_model_id: null
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   - species: arabidopsis
     mode: cylinder
@@ -51,6 +70,7 @@ models:
     primary_model_id: canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743
     lateral_model_id: arabidopsis/lateral/240130_140452.multi_instance.n=337
     crown_model_id: null
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   - species: rice
     mode: cylinder
@@ -58,6 +78,7 @@ models:
     primary_model_id: rice/younger/primary/230104_182346.multi_instance.n=720
     lateral_model_id: null
     crown_model_id: rice/younger/crown/220821_163331.multi_instance.n=867
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
   - species: rice
     mode: cylinder
@@ -65,8 +86,32 @@ models:
     primary_model_id: null
     lateral_model_id: null
     crown_model_id: rice/older/crown/221208_113552.multi_instance.n=574
+    source: "models-downloader model_chooser_table.xlsx, snapshot 20250204 (verified 2026-07-04)"
 
-# SHA256 of each distinct source `<model_id>.zip` (8 physical models).
+  # Wheat seminal roots are the team's "crown" (owner, 2026-10-02); RootType gains no
+  # member. talmolab/sleap-roots-training#72. The crown model was trained on mixed
+  # labels, `labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005` (wheat seminal + rice).
+  # CROWN ONLY: the EDPIE run also pinned a primary model (250328_103313, n=101) and
+  # later ran a separate lateral model; both are deliberately not registered (#118).
+  - species: wheat
+    mode: cylinder
+    age: "5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    primary_model_id: null
+    lateral_model_id: null
+    crown_model_id: 20250401_wheat_models/250328_095645.multi_instance.n=1658
+    source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): crown only, the model EDPIE pinned; its primary and lateral models deliberately not registered"
+
+  # The joint sorghum+soybean pair every past sorghum production run pinned. NOT the
+  # registry's older `sorghum-*` collections, which are different models.
+  - species: sorghum
+    mode: cylinder
+    age: "3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+    primary_model_id: 20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689
+    lateral_model_id: 20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590
+    crown_model_id: null
+    source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): the pair five past sorghum production runs pinned"
+
+# SHA256 of each distinct source `<model_id>.zip`.
 checksums:
   soybean/primary/221003_111420.multi_instance.n=1389: 13c9a4f23234297473ae683d876bbda7af298b0c04bfd462772198020bbdb668
   soybean/lateral/lateral_root_221006_172103.multi_instance.n=482: 291450a3f5b327c7cfab659961adef00d9aa690f835235ea98c5f4561c760838
@@ -76,3 +121,53 @@ checksums:
   rice/younger/primary/230104_182346.multi_instance.n=720: 7288e4f39027476e71b7bc8f239ae36d5ced376d136d5e3553cc9aec0da4f386
   rice/younger/crown/220821_163331.multi_instance.n=867: cda5131b4ae76c8b434eb53d294ff1401edf3323bfec85073e6fb85790c5da3d
   rice/older/crown/221208_113552.multi_instance.n=574: bfa49bac7a25d78e02f9874867b8d4bf3e96646f08ba195ddcdbb4273eab3e2a
+  20250401_wheat_models/250328_095645.multi_instance.n=1658: 650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f
+  20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689: 7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07
+  20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590: f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028
+
+# Where each `<model_id>.zip` came from, and what pinned that exact file.
+origins:
+  soybean/primary/221003_111420.multi_instance.n=1389:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  soybean/lateral/lateral_root_221006_172103.multi_instance.n=482:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  canola/lateral/240611_083419.multi_instance.n=631:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  arabidopsis/lateral/240130_140452.multi_instance.n=337:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  rice/younger/primary/230104_182346.multi_instance.n=720:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  rice/younger/crown/220821_163331.multi_instance.n=867:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  rice/older/crown/221208_113552.multi_instance.n=574:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "model_chooser_table.xlsx (snapshot 20250204)"
+  20250401_wheat_models/250328_095645.multi_instance.n=1658:
+    snapshot: null
+    location: "EDPIE Feb 2025 run directory"
+    pinned_by: "EDPIE Feb 2025 run: models_downloader_output/model_paths.csv, which pins the bare 250328_095645.multi_instance.n=1658.zip; the 20250401_wheat_models/ prefix is the run subdirectory holding it"
+  20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
+  20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590:
+    snapshot: "20250204"
+    location: "models-downloader 20250204_models/"
+    pinned_by: "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"

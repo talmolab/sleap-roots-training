@@ -1,12 +1,13 @@
 import pytest
 
+from conftest import write_matrix
 from sleap_roots_training.registry import chooser
 
 
-def test_load_selection_matrix_has_seven_rows():
+def test_load_selection_matrix_has_nine_rows():
     matrix = chooser.load_selection_matrix()
-    # 7 selection rows over 8 distinct model ids -> 13 cards (plate row omitted).
-    assert len(matrix.rows) == 7
+    # 9 selection rows over 11 distinct model ids -> 11 cards (plate row omitted).
+    assert len(matrix.rows) == 9
     # spot-check the shared primary + a crown-only row.
     by_species_mode = {(r.species, r.mode): r for r in matrix.rows}
     canola = by_species_mode[("canola", "cylinder")]
@@ -17,8 +18,8 @@ def test_load_selection_matrix_has_seven_rows():
     assert canola.crown_model_id is None
     rice_old = by_species_mode[("rice", "cylinder")]  # last rice row wins in dict
     assert rice_old.primary_model_id is None and rice_old.lateral_model_id is None
-    # 8 distinct checksums, all 64-hex.
-    assert len(matrix.checksums) == 8
+    # 11 distinct checksums, all 64-hex.
+    assert len(matrix.checksums) == 11
 
 
 def test_parse_age_window_range():
@@ -214,6 +215,53 @@ def test_species_vocab_stays_local():
     # And it really did move: the card no longer carries species at all, so a reader
     # reaching for ModelCard.species gets a loud KeyError rather than a stale answer.
     assert "species" not in ModelCard.model_fields
+
+
+def test_wheat_and_sorghum_are_in_the_species_vocabulary():
+    # talmolab/sleap-roots-training#72: the consumer receives Bloom's common name
+    # lowercased by bloomctl, so these are the exact strings predict will match.
+    assert {"wheat", "sorghum"} <= chooser.SPECIES_VOCAB
+
+
+def test_a_matrix_with_wheat_and_sorghum_rows_loads(tmp_path):
+    path = tmp_path / "m.yaml"
+    path.write_text(
+        "models:\n"
+        "  - species: wheat\n"
+        "    mode: cylinder\n"
+        '    age: "5, 6"\n'
+        "    crown_model_id: w/c/1\n"
+        '    source: "test row"\n'
+        "  - species: sorghum\n"
+        "    mode: cylinder\n"
+        '    age: "3, 4"\n'
+        "    primary_model_id: s/p/1\n"
+        '    source: "test row"\n'
+        "origins:\n"
+        '  w/c/1: {snapshot: null, location: "test location", pinned_by: "test pin"}\n'
+        '  s/p/1: {snapshot: null, location: "test location", pinned_by: "test pin"}\n'
+    )
+    matrix = chooser.load_selection_matrix(path)
+    assert [row.species for row in matrix.rows] == ["wheat", "sorghum"]
+
+
+def test_every_species_is_a_lowercase_common_name():
+    # Predict and the traits chooser compare species by plain string equality against
+    # a lowercased Bloom common name, so a capitalized member would never match.
+    assert all(species == species.lower() for species in chooser.SPECIES_VOCAB)
+
+
+def test_an_unlisted_crop_is_still_rejected(tmp_path):
+    path = tmp_path / "m.yaml"
+    path.write_text(
+        "models:\n"
+        "  - species: alfalfa\n"
+        "    mode: cylinder\n"
+        '    age: "3"\n'
+        "    primary_model_id: a/p/1\n"
+    )
+    with pytest.raises(ValueError, match="row 0: unknown species 'alfalfa'"):
+        chooser.load_selection_matrix(path)
 
 
 def test_every_committed_matrix_mode_is_contract_valid():
@@ -415,10 +463,228 @@ def test_a_string_model_id_and_an_absent_one_are_both_accepted(tmp_path):
         '    age: "2, 3"\n'
         "    primary_model_id: soybean/primary/221003_111420.multi_instance.n=1389\n"
         "    lateral_model_id: null\n"
-        "    crown_model_id: null\n",
+        "    crown_model_id: null\n"
+        '    source: "test row"\n'
+        "origins:\n"
+        "  soybean/primary/221003_111420.multi_instance.n=1389:\n"
+        '    {snapshot: null, location: "test location", pinned_by: "test pin"}\n',
         encoding="utf-8",
     )
     matrix = chooser.load_selection_matrix(path)
     assert len(matrix.rows) == 1
     assert matrix.rows[0].primary_model_id.endswith("n=1389")
     assert matrix.rows[0].lateral_model_id is None
+
+
+# --- Selection Matrix Provenance (add-wheat-sorghum-production-cards) ---
+
+_ROW = {
+    "species": "soybean",
+    "mode": "cylinder",
+    "age": "2, 3",
+    "primary_model_id": "m/p",
+}
+_ROW_2 = {"species": "rice", "mode": "cylinder", "age": "2", "crown_model_id": "m/c"}
+
+
+def _load(tmp_path, rows=(_ROW,), **kw):
+    return chooser.load_selection_matrix(
+        write_matrix(tmp_path / "m.yaml", list(rows), **kw)
+    )
+
+
+@pytest.mark.parametrize(
+    "case, kw",
+    [
+        ("missing", {"drop": [("row", 0, "source")]}),
+        ("empty", {"override": {("row", 0, "source"): ""}}),
+        ("not a string", {"override": {("row", 0, "source"): 5}}),
+    ],
+)
+def test_a_row_without_a_valid_source_is_rejected(tmp_path, case, kw):
+    with pytest.raises(ValueError, match=r"row 0.*source"):
+        _load(tmp_path, **kw)
+
+
+@pytest.mark.parametrize(
+    "case, kw, needle",
+    [
+        ("no entry", {"drop": [("origin", "m/p")]}, "m/p"),
+        ("no location", {"drop": [("origin", "m/p", "location")]}, "location"),
+        (
+            "empty location",
+            {"override": {("origin", "m/p", "location"): ""}},
+            "location",
+        ),
+        ("no pinned_by", {"drop": [("origin", "m/p", "pinned_by")]}, "pinned_by"),
+        (
+            "int pinned_by",
+            {"override": {("origin", "m/p", "pinned_by"): 5}},
+            "pinned_by",
+        ),
+        # An unquoted `snapshot: 20250204` parses as an int, not the string it means.
+        (
+            "int snapshot",
+            {"override": {("origin", "m/p", "snapshot"): 20250204}},
+            "snapshot",
+        ),
+        # An omitted key would otherwise read as None -- a silent "ships in no snapshot".
+        ("no snapshot key", {"drop": [("origin", "m/p", "snapshot")]}, "snapshot"),
+        ("scalar entry", {"origins": {"m/p": "somewhere"}}, "m/p"),
+    ],
+)
+def test_a_referenced_model_with_a_missing_or_mistyped_origin_is_rejected(
+    tmp_path, case, kw, needle
+):
+    with pytest.raises(ValueError) as excinfo:
+        _load(tmp_path, **kw)
+    assert "m/p" in str(excinfo.value)
+    assert needle in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "kw", [{"drop": [("origins",)]}, {"origins": None}], ids=["absent", "null"]
+)
+def test_no_origins_map_reports_the_first_uncovered_model(tmp_path, kw):
+    with pytest.raises(ValueError, match="m/p"):
+        _load(tmp_path, **kw)
+
+
+def test_an_origins_list_is_rejected_naming_origins(tmp_path):
+    with pytest.raises(ValueError, match="origins"):
+        _load(tmp_path, origins=["m/p"])
+
+
+def test_an_origin_for_an_unreferenced_model_is_rejected_as_stale(tmp_path):
+    stale = {"snapshot": None, "location": "x", "pinned_by": "y"}
+    with pytest.raises(ValueError, match=r"(?i)stale.*gone/model|gone/model.*stale"):
+        _load(
+            tmp_path,
+            override={("origin", "gone/model", k): v for k, v in stale.items()},
+        )
+
+
+def test_coverage_is_checked_only_after_every_row(tmp_path):
+    # Row 0's model has no origin AND row 1 has no source: the per-row check on row 1
+    # must win, because origin coverage runs only once every row is read.
+    with pytest.raises(ValueError, match=r"row 1.*source"):
+        _load(
+            tmp_path,
+            rows=(_ROW, _ROW_2),
+            drop=[("origin", "m/p"), ("row", 1, "source")],
+        )
+
+
+@pytest.mark.parametrize(
+    "override, needle",
+    [
+        ({("row", 0, "species"): "alfalfa"}, "alfalfa"),
+        ({("row", 0, "primary_model_id"): 5}, "primary_model_id"),
+    ],
+    ids=["vocabulary", "model-id type"],
+)
+def test_earlier_row_checks_report_before_the_source_check(tmp_path, override, needle):
+    with pytest.raises(ValueError, match=needle):
+        _load(tmp_path, override=override, drop=[("row", 0, "source")], origins={})
+
+
+def test_origins_parse_into_records(tmp_path):
+    matrix = _load(
+        tmp_path,
+        rows=(_ROW, _ROW_2),
+        override={("origin", "m/c", "snapshot"): "20250204"},
+    )
+    assert matrix.rows[0].source == "test row 0"
+    assert matrix.origins["m/p"] == chooser.ModelOrigin(
+        snapshot=None, location="test location", pinned_by="test pin"
+    )
+    assert matrix.origins["m/c"].snapshot == "20250204"
+
+
+def test_every_committed_row_has_a_source_and_origins_cover_exactly_its_models():
+    matrix = chooser.load_selection_matrix()
+    assert all(isinstance(r.source, str) and r.source for r in matrix.rows)
+    referenced = {
+        model_id
+        for row in matrix.rows
+        for model_id in (row.primary_model_id, row.lateral_model_id, row.crown_model_id)
+        if model_id is not None
+    }
+    assert set(matrix.origins) == referenced
+
+
+def test_committed_origins_name_no_share_path():
+    # This repo is public: a location is relative to a run or a snapshot, never a share
+    # path naming a machine or its owner.
+    backslash = chr(92)
+    for model_id, origin in chooser.load_selection_matrix().origins.items():
+        location = origin.location
+        assert not location.startswith("/"), model_id
+        for banned in (":" + backslash, backslash * 2, "hpi", "users/"):
+            assert banned not in location, (model_id, banned)
+
+
+# --- the wheat and sorghum rows (talmolab/sleap-roots-training#72) ---
+
+WHEAT_CROWN = "20250401_wheat_models/250328_095645.multi_instance.n=1658"
+SORGHUM_PRIMARY = "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689"
+SORGHUM_LATERAL = "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590"
+
+
+def test_the_wheat_and_sorghum_source_zips_are_pinned_to_their_measured_digests():
+    # Recomputed from the zips on hpi_dev on 2026-10-03; they match training#72.
+    checksums = chooser.load_selection_matrix().checksums
+    assert checksums[WHEAT_CROWN] == (
+        "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f"
+    )
+    assert checksums[SORGHUM_PRIMARY] == (
+        "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07"
+    )
+    assert checksums[SORGHUM_LATERAL] == (
+        "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028"
+    )
+
+
+def test_wheat_ships_in_no_snapshot_and_sorghum_in_the_20250204_one():
+    origins = chooser.load_selection_matrix().origins
+    assert origins[WHEAT_CROWN].snapshot is None
+    assert origins[SORGHUM_PRIMARY].snapshot == "20250204"
+    assert origins[SORGHUM_LATERAL].snapshot == "20250204"
+
+
+# --- pre-PR review fixes ---
+
+
+def test_stale_origins_of_mixed_key_types_are_a_valueerror_not_a_typeerror(tmp_path):
+    # An unquoted numeric key next to a string key used to make the stale-key sort
+    # raise TypeError, which the CLI does not wrap: a traceback instead of an error.
+    stale = {"snapshot": None, "location": "x", "pinned_by": "y"}
+    with pytest.raises(ValueError, match="stale"):
+        _load(
+            tmp_path,
+            override={
+                **{("origin", 123, k): v for k, v in stale.items()},
+                **{("origin", "zzz", k): v for k, v in stale.items()},
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "kw, needle",
+    [
+        ({"override": {("row", 0, "source"): "   "}}, "source"),
+        ({"override": {("origin", "m/p", "location"): "  "}}, "location"),
+        ({"override": {("origin", "m/p", "pinned_by"): "\t"}}, "pinned_by"),
+    ],
+    ids=["source", "location", "pinned_by"],
+)
+def test_whitespace_only_provenance_is_rejected(tmp_path, kw, needle):
+    with pytest.raises(ValueError, match=needle):
+        _load(tmp_path, **kw)
+
+
+def test_row_model_ids_maps_each_root_type_to_its_slot():
+    row = chooser.SelectionRow(
+        "rice", "cylinder", "2", "p/1", None, "c/1", source="test row"
+    )
+    assert row.model_ids() == {"primary": "p/1", "lateral": None, "crown": "c/1"}

@@ -29,6 +29,8 @@
 #     in SPECIES_VOCAB and has two `model_selection.yaml` rows. The loader fails loudly on
 #     a missing pair rather than defaulting: a wrong node count produces a labeling package
 #     that looks fine and cannot be combined with anything.
+#   - wheat and sorghum have NO ROWS YET. They are in SPECIES_VOCAB for the model registry
+#     (talmolab/sleap-roots-training#72), so a wheat or sorghum package fails here, loudly.
 #
 # Each row now carries `verified:` so this distinction is machine-readable rather than only
 # prose here. `lookup_skeleton` warns when a package is built against an unverified count,

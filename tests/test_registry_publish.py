@@ -36,155 +36,16 @@ def _resolved(card_list, model_dir):
     return [(card, model_dir) for card in card_list]
 
 
-# --- fakes ---
-
-
-class _FakeArtifact:
-    def __init__(self, name, type, metadata=None, **kw):
-        self.name = name
-        self.type = type
-        self.metadata = metadata
-        self.added_dirs = []
-
-    def add_dir(self, local_path, **kw):
-        self.added_dirs.append(local_path)
-
-
-class _FakeLogged:
-    def __init__(self, art, order):
-        self.art = art
-        self._order = order
-
-    def wait(self, **kw):
-        self._order.append("wait")
-        return self
-
-
-class _FakeRun:
-    def __init__(self):
-        self.order = []
-        self.logged = None
-        self.linked = None
-
-    def log_artifact(self, artifact, **kw):
-        self.order.append("log")
-        self.logged = _FakeLogged(artifact, self.order)
-        return self.logged
-
-    def link_artifact(self, artifact, target_path, aliases=None, **kw):
-        self.order.append("link")
-        self.linked = (artifact, target_path, aliases)
-
-
-class _FakeCollection:
-    """A registry collection.
-
-    ``aliases`` is the lightweight per-collection query `--verify` uses to decide
-    membership. ``versions`` exists only so a test can SPY that we never paginate it
-    for an unexpected collection -- the registry holds far more collections than
-    cards, most of them sweep/run artifacts.
-    """
-
-    def __init__(self, name, aliases=(), on_version_walk=None):
-        self.name = name
-        self._aliases = list(aliases)
-        self._on_version_walk = on_version_walk
-        self.deleted = False
-        self.linked = []
-
-    @property
-    def aliases(self):
-        return list(self._aliases)
-
-    def versions(self):
-        if self._on_version_walk is not None:
-            self._on_version_walk(self.name)
-        return []
-
-    def delete(self):  # spy: the scenario says --verify never deletes
-        raise AssertionError(f"--verify must not delete {self.name}")
-
-    def link(self, *a, **kw):  # spy: nor move an alias
-        raise AssertionError(f"--verify must not re-link {self.name}")
-
-
-class _FakeArt:
-    """An artifact with a local view and a distinct SERVER view.
-
-    The distinction is the whole point: `publish_card` assigns `.metadata` locally and
-    then must consult the server. A fake that returned its own local value on re-read
-    would make the check circular and pass an implementation that never persists.
-    """
-
-    def __init__(self, aliases, metadata=None, digest="d0", save_takes=True):
-        self.aliases = aliases
-        self.metadata = metadata if metadata is not None else _SELECTORS_META
-        self.server_metadata = self.metadata
-        self.digest = digest
-        self.saved = 0
-        self.save_takes = save_takes
-
-    def save(self):
-        self.saved += 1
-        if self.save_takes:
-            self.server_metadata = self.metadata
-
-
-#: The current shape and the legacy flat shape, as they appear in live metadata.
-_SELECTORS_META = {
-    "root_type": "primary",
-    "selectors": [
-        {"species": "soybean", "mode": "cylinder", "age_min": 2, "age_max": 8}
-    ],
-    "source_model_id": "soybean/primary/x",
-}
-_LEGACY_META = {
-    "species": "soybean",
-    "mode": "cylinder",
-    "age_min": 2,
-    "age_max": 8,
-    "root_type": "primary",
-    "source_model_id": "soybean/primary/x",
-}
-
-
-class _FakeApi:
-    def __init__(
-        self,
-        collections=(),
-        arts_by_name=None,
-        fail=False,
-        aliases_by_collection=None,
-        on_version_walk=None,
-    ):
-        self._collections = list(collections)
-        self._arts = arts_by_name or {}
-        self._fail = fail
-        self._aliases = aliases_by_collection or {}
-        self._on_version_walk = on_version_walk
-
-    def artifact_collections(self, project_name, type_name):
-        if self._fail:
-            raise ConnectionError("transient registry error")
-        return [
-            _FakeCollection(
-                c,
-                aliases=self._aliases.get(c, []),
-                on_version_walk=self._on_version_walk,
-            )
-            for c in self._collections
-        ]
-
-    def artifacts(self, type_name, name):
-        return self._arts.get(name, [])
-
-    def artifact(self, name, type=None):
-        """Mirrors ``wandb.Api.artifact``'s signature (name, type=None)."""
-        found = self._arts.get(name)
-        if not found:
-            raise ValueError(f"no such artifact: {name}")
-        return found[0]
-
+from registry_fakes import (  # noqa: F401 - shared offline fakes
+    _LEGACY_META,
+    _SELECTORS_META,
+    _FakeApi,
+    _FakeArt,
+    _FakeArtifact,
+    _FakeCollection,
+    _FakeLogged,
+    _FakeRun,
+)
 
 # --- publish_card ---
 
@@ -259,7 +120,7 @@ def test_seed_publishes_all_distinct(monkeypatch, tmp_path):
     report = publish.seed_registry(
         _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api
     )
-    assert len(calls) == 8 and len(set(calls)) == 8  # one per physical model
+    assert len(calls) == 11 and len(set(calls)) == 11  # one per physical model
     assert sorted(report["published"]) == sorted(calls) and report["skipped"] == []
 
 
@@ -288,13 +149,13 @@ def test_seed_duplicate_collection_aborts(monkeypatch, tmp_path):
     assert "x/y" in message and "x=y" in message
 
 
-def test_the_eight_committed_model_ids_slug_to_eight_distinct_collections():
+def test_the_committed_model_ids_slug_to_distinct_collections():
     # The sibling of the above: the lossy slug is a real hazard in principle, but it
     # does not bite the committed matrix. Asserted so a future matrix edit that DOES
     # collide fails here rather than at `--execute` time.
     all_cards = _all_cards()
-    assert len(all_cards) == 8
-    assert len({collection_id(c) for c in all_cards}) == 8
+    assert len(all_cards) == 11
+    assert len({collection_id(c) for c in all_cards}) == 11
 
 
 def test_seed_idempotent_skip_and_force(monkeypatch, tmp_path):
@@ -838,3 +699,132 @@ def test_a_raising_refresh_on_the_real_publish_path_lands_in_failed(
         _resolved([card], model_dir), CFG, run=run2, api=_ReReadApi(run2), force=True
     )
     assert report["failed"] == ["soy-p"] and report["published"] == []
+
+
+# --- the per-alias skip both seed-registry guards exist for ---
+
+
+def test_a_non_default_alias_republishes_a_collection_that_only_carries_production(
+    monkeypatch, tmp_path
+):
+    import wandb
+
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    cfg = RegistryConfig("ent", "reg", "candidate")
+    card = _card("primary", "soybean/primary/x", ("soybean", "cylinder", 2, 8))
+    collection = collection_id(card)
+    name = f"{cfg.registry_project()}/{collection}"
+    api = _FakeApi(
+        collections=[collection], arts_by_name={name: [_FakeArt(["production"])]}
+    )
+    run = _FakeRun()
+    report = publish.seed_registry([(card, tmp_path)], cfg, run, api=api)
+    # The skip is per alias: `production` on the collection does not count as seeded
+    # under `candidate`, so without --only every card would be re-published.
+    assert report["published"] == [collection]
+    assert run.links == [(name, ["candidate"])]
+
+
+def test_a_non_default_alias_skips_a_collection_already_carrying_it(tmp_path):
+    cfg = RegistryConfig("ent", "reg", "candidate")
+    card = _card("primary", "soybean/primary/x", ("soybean", "cylinder", 2, 8))
+    collection = collection_id(card)
+    name = f"{cfg.registry_project()}/{collection}"
+    api = _FakeApi(
+        collections=[collection], arts_by_name={name: [_FakeArt(["candidate"])]}
+    )
+    run = _FakeRun()
+    report = publish.seed_registry([(card, tmp_path)], cfg, run, api=api)
+    assert report["skipped"] == [collection]
+    assert run.links == []
+
+
+# --- unpromoted_collections: the first-time-production-link check ---
+
+
+def _scoped_cards():
+    return [
+        _card("primary", "a/p/x", ("soybean", "cylinder", 2, 8)),
+        _card("lateral", "b/l/x", ("soybean", "cylinder", 2, 8)),
+        _card("crown", "c/c/x", ("rice", "cylinder", 2, 5)),
+    ]
+
+
+def test_unpromoted_lists_absent_and_candidate_only_collections_sorted():
+    cards_ = _scoped_cards()
+    absent, candidate_only, promoted = (collection_id(c) for c in cards_)
+    api = _FakeApi(
+        collections=[candidate_only, promoted],
+        arts_by_name={
+            f"{PROJECT}/{candidate_only}": [_FakeArt(["candidate", "latest"])],
+            f"{PROJECT}/{promoted}": [_FakeArt(["production", "candidate"])],
+        },
+    )
+    # `absent` is not in the listing: reading its versions would raise (the fake raises
+    # like wandb 0.28), so this passes only if existence is checked first.
+    assert publish.unpromoted_collections(CFG, cards_, api=api) == sorted(
+        [absent, candidate_only]
+    )
+
+
+def test_unpromoted_is_empty_when_every_collection_already_carries_the_alias():
+    cards_ = _scoped_cards()
+    ids = [collection_id(c) for c in cards_]
+    api = _FakeApi(
+        collections=ids,
+        arts_by_name={f"{PROJECT}/{i}": [_FakeArt(["production"])] for i in ids},
+    )
+    assert publish.unpromoted_collections(CFG, cards_, api=api) == []
+
+
+def test_unpromoted_propagates_a_listing_error():
+    with pytest.raises(ConnectionError):
+        publish.unpromoted_collections(CFG, _scoped_cards(), api=_FakeApi(fail=True))
+
+
+def test_unpromoted_builds_its_api_lazily(monkeypatch):
+    import wandb
+
+    built = []
+
+    def fake_api(*a, **k):
+        built.append("Api")
+        return _FakeApi()
+
+    monkeypatch.setattr(wandb, "Api", fake_api)
+    assert publish.unpromoted_collections(CFG, _scoped_cards()) == sorted(
+        collection_id(c) for c in _scoped_cards()
+    )
+    assert built == ["Api"]
+
+
+def test_default_verify_reports_candidate_only_collections_as_missing():
+    # The expected state between a candidate publish and its promotion.
+    candidate_only = "wheat-crown-x"
+    promoted = "soy-p-x"
+    api = _FakeApi(
+        collections=[candidate_only, promoted],
+        arts_by_name={
+            f"{PROJECT}/{candidate_only}": [_FakeArt(["candidate", "latest"])],
+            f"{PROJECT}/{promoted}": [_FakeArt(["production"])],
+        },
+        aliases_by_collection={candidate_only: ["candidate"], promoted: ["production"]},
+    )
+    report = publish.verify_registry(CFG, [candidate_only, promoted], api)
+    assert report["missing"] == [candidate_only]
+    assert report["present"] == [promoted]
+    assert report["orphans"] == []
+    assert publish.verify_failed(report)
+
+
+def test_unpromoted_reads_the_configured_alias_not_production():
+    cards_ = _scoped_cards()
+    ids = [collection_id(c) for c in cards_]
+    cfg = RegistryConfig("ent", "reg", "candidate")
+    project = cfg.registry_project()
+    api = _FakeApi(
+        collections=ids,
+        arts_by_name={f"{project}/{i}": [_FakeArt(["production"])] for i in ids},
+    )
+    # Every collection carries `production`, none carries `candidate`.
+    assert publish.unpromoted_collections(cfg, cards_, api=api) == sorted(ids)

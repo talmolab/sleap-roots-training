@@ -1,8 +1,8 @@
 """Environment-driven wandb registry configuration.
 
-Entity, the models-registry name, and the production alias are resolved from
-environment variables with defaults so nothing is hardcoded and pointing at a
-different registry later is a config change. These MUST resolve to the same target
+Entity, the models-registry name, and the alias the seed links under (default
+``production``) are resolved from environment variables with defaults, so nothing is
+hardcoded and pointing at a different registry later is a config change. These MUST resolve to the same target
 the ``sleap-roots-predict`` consumer points ``SRP_WANDB_ENTITY`` /
 ``SRP_WANDB_REGISTRY`` at.
 """
@@ -17,6 +17,8 @@ from pathlib import Path
 DEFAULT_ENTITY = "eberrigan-salk-institute-for-biological-studies"
 DEFAULT_REGISTRY = "sleap-roots-models"
 DEFAULT_ALIAS = "production"
+#: The variable the alias is read from; named in operator-facing messages.
+ALIAS_ENV = "SLEAP_ROOTS_MODEL_ALIAS"
 #: The wandb project the seed run (and so every published source artifact) lives in.
 #: Pinned because, without ``project=``, wandb names the project after the git checkout's
 #: root directory -- which is how production sources ended up in the worktree-named
@@ -31,7 +33,9 @@ class RegistryConfig:
     Attributes:
         entity: The wandb entity.
         registry: The models-registry name.
-        alias: The alias marking a version as production.
+        alias: The alias the seed links each card under (default ``production``,
+            the only one the consumer reads unless it overrides its own alias). Empty
+            when ``SLEAP_ROOTS_MODEL_ALIAS`` is set but blank.
         seed_project: The wandb project the seed run is created in. Producer-only
             provenance: the consumer reads the registry, never this project.
     """
@@ -57,16 +61,27 @@ def resolve_registry_config() -> RegistryConfig:
     and ``SLEAP_ROOTS_SEED_PROJECT`` (stripped; an empty or all-whitespace value is not a
     usable project name, so it falls back to the default).
 
+    The alias is stripped too, but a set-but-blank value resolves to ``""``, **never** to
+    ``production``: falling back would silently turn a meant-to-be-candidate publish into
+    a production one. This function does not raise on it — entity-only callers (the labels
+    inventory) share it — so a caller that writes under the alias must refuse ``""``.
+
     Returns:
         The resolved :class:`RegistryConfig`.
     """
     return RegistryConfig(
         entity=os.environ.get("WANDB_ENTITY", DEFAULT_ENTITY),
         registry=os.environ.get("SLEAP_ROOTS_MODEL_REGISTRY", DEFAULT_REGISTRY),
-        alias=os.environ.get("SLEAP_ROOTS_MODEL_ALIAS", DEFAULT_ALIAS),
+        alias=_resolve_alias(),
         seed_project=(os.environ.get("SLEAP_ROOTS_SEED_PROJECT") or "").strip()
         or DEFAULT_SEED_PROJECT,
     )
+
+
+def _resolve_alias() -> str:
+    """Return the stripped alias: the default when unset, ``""`` when set but blank."""
+    raw = os.environ.get(ALIAS_ENV)
+    return DEFAULT_ALIAS if raw is None else raw.strip()
 
 
 WANDB_NETRC_MACHINE = "api.wandb.ai"

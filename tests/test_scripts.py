@@ -400,7 +400,7 @@ def test_regen_model_checksums_enumerates_every_physical_model(tmp_path, capsys)
     assert captured.out.startswith("checksums:")
     # Every distinct physical model is enumerated, one line each, deduped and sorted.
     missing = [ln for ln in captured.err.splitlines() if "MISSING" in ln]
-    assert len(missing) == 8, captured.err
+    assert len(missing) == 11, captured.err
     assert missing == sorted(missing)
 
 

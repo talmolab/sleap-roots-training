@@ -237,3 +237,24 @@ def test_statuses_carries_the_digests_the_spec_says_to_name(tmp_path):
     assert verdicts[path].status == verify.MISMATCH
     assert verdicts[path].local_digest == verify.content_digest(path)
     assert verdicts[path].recorded_digests == ("AAAAAAAAAAAAAAAA==",)
+
+
+def test_a_blank_model_alias_does_not_break_the_labels_registry_read(monkeypatch):
+    """The labels inventory resolves the registry config only for the entity.
+
+    A blank ``SLEAP_ROOTS_MODEL_ALIAS`` is refused by ``seed-registry``, which writes
+    under it; it must not reach this unrelated read as an error.
+    """
+    asked = []
+
+    class _Api:
+        def artifact_collections(self, path, type_name):
+            asked.append(path)
+            return []
+
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "")
+    monkeypatch.setenv("WANDB_ENTITY", "ent")
+    monkeypatch.setattr(wandb, "Api", lambda *a, **k: _Api())
+    verify.fetch_index()
+
+    assert asked == ["ent-org/wandb-registry-sleap-roots-labels"]

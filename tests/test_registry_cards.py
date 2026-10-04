@@ -15,7 +15,7 @@ ARABIDOPSIS_LATERAL = "arabidopsis/lateral/240130_140452.multi_instance.n=337"
 
 
 def _row(species, mode, age, primary=None, lateral=None, crown=None):
-    return SelectionRow(species, mode, age, primary, lateral, crown)
+    return SelectionRow(species, mode, age, primary, lateral, crown, source="test row")
 
 
 def _sel(card):
@@ -64,14 +64,14 @@ def test_all_null_slots_produce_no_card():
     assert cards.expand_rows_to_cards([row]) == []
 
 
-# --- 3.8: the real matrix collapses to exactly 8 cards ---
+# --- 3.8: the real matrix collapses to exactly 11 cards ---
 
 
-def test_real_matrix_yields_eight_cards():
+def test_real_matrix_yields_eleven_cards():
     all_cards = cards.expand_rows_to_cards(chooser.load_selection_matrix().rows)
-    assert len(all_cards) == 8, "7 committed rows over 8 physical models -> 8 cards"
+    assert len(all_cards) == 11, "9 committed rows over 11 physical models -> 11 cards"
     # One card per physical model is the whole design; assert it directly.
-    assert len({c.source_model_id for c in all_cards}) == 8
+    assert len({c.source_model_id for c in all_cards}) == 11
 
 
 def test_shared_primary_is_one_card_with_four_selectors():
@@ -140,6 +140,16 @@ EXPECTED_SELECTORS_BY_MODEL = {
     },
     "rice/older/crown/221208_113552.multi_instance.n=574": {
         ("rice", "cylinder", 6, 10),
+    },
+    # talmolab/sleap-roots-training#72: wheat seminal roots are the team's "crown".
+    "20250401_wheat_models/250328_095645.multi_instance.n=1658": {
+        ("wheat", "cylinder", 5, 14),
+    },
+    "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689": {
+        ("sorghum", "cylinder", 3, 14),
+    },
+    "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590": {
+        ("sorghum", "cylinder", 3, 14),
     },
 }
 
@@ -459,7 +469,7 @@ def test_every_committed_matrix_card_validates_against_the_real_modelcard():
     # a bad card would otherwise first be noticed, which is too late.
     matrix = chooser.load_selection_matrix()
     all_cards = cards.expand_rows_to_cards(matrix.rows)
-    assert len(all_cards) == 8
+    assert len(all_cards) == 11
 
     for card in all_cards:
         meta = cards.card_to_metadata(card)
@@ -543,6 +553,9 @@ EXPECTED_COLLECTION_BY_MODEL = {
     "rice/younger/primary/230104_182346.multi_instance.n=720": "rice-younger-primary-230104_182346.multi_instance.n-720",
     "rice/younger/crown/220821_163331.multi_instance.n=867": "rice-younger-crown-220821_163331.multi_instance.n-867",
     "rice/older/crown/221208_113552.multi_instance.n=574": "rice-older-crown-221208_113552.multi_instance.n-574",
+    "20250401_wheat_models/250328_095645.multi_instance.n=1658": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+    "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+    "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
 }
 
 
@@ -564,8 +577,8 @@ def test_matrix_lock_model_to_selectors():
     all_cards = cards.expand_rows_to_cards(matrix.rows)
     got = {c.source_model_id: set(_sel(c)) for c in all_cards}
     assert got == EXPECTED_SELECTORS_BY_MODEL
-    assert len(got) == 8
-    assert len({cards.collection_id(c) for c in all_cards}) == 8  # ids stay unique
+    assert len(got) == 11
+    assert len({cards.collection_id(c) for c in all_cards}) == 11  # ids stay unique
 
 
 def test_every_collection_id_is_accepted_by_the_real_wandb_artifact():
@@ -616,3 +629,25 @@ def test_card_to_metadata_is_serialization_stable():
         assert [s["species"] for s in stored["selectors"]] == [
             s["species"] for s in meta["selectors"]
         ]
+
+
+def test_wheat_is_one_crown_card_and_sorghum_one_primary_and_one_lateral():
+    by_model = _by_model(
+        cards.expand_rows_to_cards(chooser.load_selection_matrix().rows)
+    )
+    assert (
+        by_model["20250401_wheat_models/250328_095645.multi_instance.n=1658"].root_type
+        == "crown"
+    )
+    assert (
+        by_model[
+            "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689"
+        ].root_type
+        == "primary"
+    )
+    assert (
+        by_model[
+            "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590"
+        ].root_type
+        == "lateral"
+    )
