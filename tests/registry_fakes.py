@@ -41,6 +41,7 @@ class _FakeRun:
         self.linked = None
         self.links = []
         self.finished = []
+        self.summary = {}
 
     def log_artifact(self, artifact, **kw):
         self.order.append("log")

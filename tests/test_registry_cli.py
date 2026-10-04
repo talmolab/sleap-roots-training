@@ -39,6 +39,9 @@ def _no_live_wandb_api(monkeypatch):
     monkeypatch.setattr(wandb, "Api", spy)
 
 
+#: The real confirm prompt, kept before any test spies on it.
+_REAL_CONFIRM = __import__("click").confirm
+
 #: The real pre-pass, kept so a test can opt back out of the module-wide stub below.
 _REAL_UNPROMOTED = publish.unpromoted_collections
 
@@ -50,7 +53,8 @@ PROMOTION_CHECKS: list = []
 @pytest.fixture(autouse=True)
 def _hermetic_alias(monkeypatch):
     """An alias exported in the operator's shell must not steer these tests."""
-    monkeypatch.delenv("SLEAP_ROOTS_MODEL_ALIAS", raising=False)
+    for name in ("SLEAP_ROOTS_MODEL_ALIAS", "WANDB_SWEEP_ID", "WANDB_LAUNCH"):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -1178,8 +1182,9 @@ def test_an_already_promoted_scope_proceeds_with_or_without_promote(
         (["--execute", "--yes", "--only", "soy-p", "--promote"], "candidate"),
         (["--only", "soy-p", "--promote"], None),  # dry run
         (["--verify", "--only", "soy-p", "--promote"], None),
+        (["--execute", "--verify", "--only", "soy-p", "--promote"], None),
     ],
-    ids=["no --only", "non-default alias", "dry run", "verify"],
+    ids=["no --only", "non-default alias", "dry run", "verify", "execute+verify"],
 )
 def test_promote_is_a_usage_error_where_it_does_not_apply(
     monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root, args, alias
@@ -1217,6 +1222,7 @@ def test_a_promotion_check_error_fails_closed_without_a_traceback(
     assert result.exit_code != 0
     assert "Error:" in result.output
     assert "registry unreachable" in result.output
+    assert "RuntimeError" in result.output
     assert result.exception is None or isinstance(result.exception, SystemExit)
     assert "init" not in calls
 
@@ -1288,6 +1294,17 @@ def test_the_candidate_publish_links_exactly_the_three_new_cards_as_candidate(
     }
     assert [r["species"] for r in lineage_config["row_sources"]] == ["wheat", "sorghum"]
     assert lineage_config["registry_target"]["alias"] == "candidate"
+    assert lineage_config["invocation"] == {
+        "only": sorted(NEW_IDS),
+        "force": False,
+        "promote": False,
+        "alias_source": "SLEAP_ROOTS_MODEL_ALIAS",
+        # Not checked under a non-default alias: nothing can go live here.
+        "first_production_links": None,
+    }
+    assert sorted(run.summary["published"]) == sorted(NEW_IDS)
+    assert run.summary["skipped"] == [] and run.summary["failed"] == []
+    assert run.finished  # recorded before the run was closed
     for key in ("selection_matrix_source", "selection_matrix_date", "models_snapshot"):
         assert key not in lineage_config
 
@@ -1401,3 +1418,122 @@ def test_the_target_line_escapes_non_ascii_so_any_console_can_print_it(
     first = result.output.splitlines()[0]
     assert first.isascii()
     assert "\\u200b" in first and "\\u751f" in first
+
+
+# --- PR #73 review follow-ups ---
+
+
+def _fake_publish_path(monkeypatch, seen):
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    configs = []
+
+    def fake_init(config=None, project=None, entity=None, **kw):
+        configs.append(config)
+        return SimpleNamespace(project=project, entity=entity, finish=lambda: None)
+
+    monkeypatch.setattr(wandb, "init", fake_init)
+    monkeypatch.setattr(publish, "resolve_all", lambda cs, root, sums: [])
+
+    def fake_seed(resolved, cfg, run, *, api=None, force=False):
+        seen.append(cfg.alias)
+        return {"published": ["soy-p"], "skipped": [], "failed": [], "stale": []}
+
+    monkeypatch.setattr(publish, "seed_registry", fake_seed)
+    return configs
+
+
+def test_promote_names_what_it_makes_live_and_links_under_production(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    seen = []
+    configs = _fake_publish_path(monkeypatch, seen)
+    _stub_promotion_check(monkeypatch, unpromoted=["soy-p"])
+    result = _execute(
+        tiny_matrix, stub_models_root, "--yes", "--only", "soy-p", "--promote"
+    )
+    assert result.exit_code == 0, result.output
+    assert "promoting (first 'production' link): ['soy-p']" in result.output
+    assert seen == ["production"]
+    assert configs[0]["invocation"]["first_production_links"] == ["soy-p"]
+    assert configs[0]["invocation"]["promote"] is True
+
+
+def test_promote_with_nothing_to_promote_says_so(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    seen = []
+    configs = _fake_publish_path(monkeypatch, seen)
+    result = _execute(
+        tiny_matrix, stub_models_root, "--yes", "--only", "soy-p", "--promote"
+    )
+    assert result.exit_code == 0, result.output
+    assert "nothing to promote" in result.output
+    assert configs[0]["invocation"]["first_production_links"] == []
+
+
+def test_a_run_that_cannot_record_its_outcome_still_reports_it(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    # SimpleNamespace runs have no `summary`: recording must warn, never mask the seed.
+    seen = []
+    _fake_publish_path(monkeypatch, seen)
+    result = _execute(tiny_matrix, stub_models_root, "--yes", "--only", "soy-p")
+    assert result.exit_code == 0, result.output
+    assert "published (1): ['soy-p']" in result.output
+    assert "could not record" in result.output
+
+
+def test_a_blank_alias_is_reported_before_a_rejected_matrix(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
+):
+    # A broken matrix must not hide a lost alias variable.
+    _no_wandb(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "")
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("models: [\n")
+    result = _invoke(
+        ["--selection-matrix", str(bad), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code != 0
+    assert "SLEAP_ROOTS_MODEL_ALIAS" in result.output
+    assert "not valid YAML" not in result.output
+
+
+def test_every_alias_echo_is_ascii_escaped(
+    monkeypatch, isolate_wandb_env, tiny_matrix, stub_models_root
+):
+    calls = _spy_everything(monkeypatch)
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "\u751f")
+    monkeypatch.setenv("WANDB_ENTITY", "\u5b9e")
+    # Guard 1's refusal, and the target line's entity.
+    refused = _execute(tiny_matrix, stub_models_root, "--yes")
+    assert refused.exit_code == 2
+    assert refused.output.isascii(), refused.output
+    # The real confirm prompt (guard 1 passes with --only; decline it). Only stdout carries
+    # the encode hazard: ClickException text goes to stderr, which backslash-escapes.
+    import click
+
+    monkeypatch.setattr(click, "confirm", _REAL_CONFIRM)
+    prompted = _execute(tiny_matrix, stub_models_root, "--only", "soy-p", input="n\n")
+    assert "Publish 1 cards" in prompted.stdout
+    assert "Aborted" in prompted.output
+    assert prompted.stdout.isascii(), prompted.stdout
+
+
+def test_the_verify_orphan_line_is_ascii_escaped(
+    monkeypatch, isolate_wandb_env, tiny_matrix
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "\u751f")
+    monkeypatch.setattr(
+        publish,
+        "verify_registry",
+        lambda cfg, expected, api=None, *, report_orphans=True: _verify_report(
+            present=expected, orphans=["old-coll"]
+        ),
+    )
+    result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
+    orphan = [line for line in result.output.splitlines() if line.startswith("orphan:")]
+    assert orphan and orphan[0].isascii(), result.output

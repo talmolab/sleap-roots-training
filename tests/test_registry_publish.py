@@ -815,3 +815,16 @@ def test_default_verify_reports_candidate_only_collections_as_missing():
     assert report["present"] == [promoted]
     assert report["orphans"] == []
     assert publish.verify_failed(report)
+
+
+def test_unpromoted_reads_the_configured_alias_not_production():
+    cards_ = _scoped_cards()
+    ids = [collection_id(c) for c in cards_]
+    cfg = RegistryConfig("ent", "reg", "candidate")
+    project = cfg.registry_project()
+    api = _FakeApi(
+        collections=ids,
+        arts_by_name={f"{project}/{i}": [_FakeArt(["production"])] for i in ids},
+    )
+    # Every collection carries `production`, none carries `candidate`.
+    assert publish.unpromoted_collections(cfg, cards_, api=api) == sorted(ids)

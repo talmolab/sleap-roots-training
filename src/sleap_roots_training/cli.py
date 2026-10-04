@@ -111,10 +111,11 @@ def seed_registry_command(
     # this an operator's record cannot show a lost alias variable. ascii() exposes hidden
     # characters that str.strip() keeps (a zero-width space), and unlike repr() it cannot
     # fail to encode when the output is redirected to a log on a cp1252 console.
-    source = "from " + config.ALIAS_ENV if config.ALIAS_ENV in os.environ else "default"
+    alias_from_env = config.ALIAS_ENV in os.environ
+    source = "from " + config.ALIAS_ENV if alias_from_env else "default"
     click.echo(
-        f"target: {cfg.entity}/{cfg.registry} alias {ascii(cfg.alias)} ({source}) "
-        f"seed project {cfg.seed_project}"
+        f"target: {_safe(cfg.entity)}/{_safe(cfg.registry)} alias {ascii(cfg.alias)} "
+        f"({source}) seed project {_safe(cfg.seed_project)}"
     )
     if not cfg.alias:
         raise click.ClickException(
@@ -187,7 +188,8 @@ def seed_registry_command(
             )
         for collection in report["orphans"]:
             click.echo(
-                f"orphan: {collection} ({cfg.alias}-aliased, no longer in the matrix)"
+                f"orphan: {collection} ({ascii(cfg.alias)}-aliased, no longer in the "
+                "matrix)"
             )
         for collection in report["indeterminate"]:
             click.echo(f"indeterminate: {collection} (could not read its aliases)")
@@ -240,23 +242,38 @@ def seed_registry_command(
     # the consumer the moment it is linked. Never as a side effect: not of a routine
     # re-seed, a lost alias variable, or --force (which skips only the idempotency read).
     # Checked before the prompt, model resolution and wandb.init, so a refusal mints no run.
+    # `None` under a non-default alias: nothing published there can go live, so the
+    # first-link question is never asked.
+    first_links = None
     if cfg.alias == config.DEFAULT_ALIAS:
         try:
-            unpromoted = publish.unpromoted_collections(cfg, all_cards)
+            first_links = publish.unpromoted_collections(cfg, all_cards)
         except Exception as error:  # noqa: BLE001 - fail closed, as a CLI error
             raise click.ClickException(
                 f"could not check which collections already carry "
-                f"{ascii(cfg.alias)} ({error}); nothing published."
-            )
-        if unpromoted and not promote:
+                f"{ascii(cfg.alias)} ({type(error).__name__}: {error}); nothing "
+                "published."
+            ) from error
+        if first_links and not promote:
             raise click.ClickException(
-                f"{len(unpromoted)} collection(s) would be linked to {ascii(cfg.alias)} for "
-                f"the first time, which makes them live for the consumer: {unpromoted}. "
-                "Pass --promote (with --only) to do that deliberately; nothing published."
+                f"{len(first_links)} collection(s) would be linked to {ascii(cfg.alias)} "
+                f"for the first time, which makes them live for the consumer: "
+                f"{first_links}. Pass --promote (with --only) to do that deliberately; "
+                "nothing published."
             )
+        if promote:
+            # Named before the prompt, and even under --yes: the operator's record must
+            # say which collections this run makes live, not just "published".
+            if first_links:
+                click.echo(f"promoting (first {ascii(cfg.alias)} link): {first_links}")
+            else:
+                click.echo(
+                    f"--promote: nothing to promote; every in-scope collection already "
+                    f"carries {ascii(cfg.alias)}."
+                )
     if not yes:
         click.confirm(
-            f"Publish {len(all_cards)} cards to {cfg.entity} / {cfg.registry} "
+            f"Publish {len(all_cards)} cards to {_safe(cfg.entity)} / {_safe(cfg.registry)} "
             f"(alias {ascii(cfg.alias)})?",
             abort=True,
         )
@@ -273,6 +290,15 @@ def seed_registry_command(
     lineage_config = lineage.build_lineage(
         chooser.matrix_sha256(selection_matrix), all_cards, matrix, cfg
     )
+    # How this run was asked to act, beside what it acted on: a promotion and a routine
+    # re-seed of the same cards are otherwise indistinguishable in W&B afterwards.
+    lineage_config["invocation"] = {
+        "only": sorted(only),
+        "force": force,
+        "promote": promote,
+        "alias_source": config.ALIAS_ENV if alias_from_env else "default",
+        "first_production_links": first_links,
+    }
     if lineage_config["git_dirty"]:
         click.echo(
             "WARNING: working tree is dirty; the recorded matrix content hash "
@@ -309,6 +335,7 @@ def seed_registry_command(
     # propagates out of the seed.
     try:
         report = publish.seed_registry(resolved, cfg, run, force=force)
+        _record_outcome(run, report)
     except ValueError as error:
         raise click.ClickException(str(error))
     finally:
@@ -323,6 +350,30 @@ def seed_registry_command(
         click.echo(f"FAILED ({len(report['failed'])}): {report['failed']}")
     if report["failed"] or report["stale"]:
         ctx.exit(1)
+
+
+def _safe(text: str) -> str:
+    """Return ``text`` unchanged if it is ASCII, else its escaped ``ascii()`` form.
+
+    Echoed configuration values reach stdout, which on Windows is cp1252 when redirected
+    to a log; a non-Latin value would otherwise crash the line meant to record it.
+    """
+    return text if text.isascii() else ascii(text)
+
+
+def _record_outcome(run, report: dict) -> None:
+    """Write the seed's per-collection outcome to the run, before it is closed.
+
+    Printing it is not enough: from W&B alone a reader could not tell "linked
+    `production` to X" from "skipped X, already linked". Recording must never mask the
+    seed's own result, so a failure here is a warning, not an error.
+    """
+    try:
+        run.summary.update(
+            {key: report[key] for key in ("published", "skipped", "failed", "stale")}
+        )
+    except Exception as error:  # noqa: BLE001 - the seed already ran; only warn
+        click.echo(f"warning: could not record the outcome on the run: {error}")
 
 
 #: Environment markers wandb reads to join a sweep or launch run, where it drops the
