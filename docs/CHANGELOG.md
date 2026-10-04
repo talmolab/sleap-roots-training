@@ -9,7 +9,8 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 - **Wheat and sorghum selection rows** (#72, step 1 of talmolab/sleap-roots-pipeline#118). The
   matrix now carries a wheat crown model (cylinder, 5–14; wheat seminal roots are the team's
-  "crown") and the sorghum primary + lateral pair every past sorghum production run used
+  "crown"; the model was trained on wheat seminal + rice labels) and the sorghum primary + lateral
+  pair all five past sorghum production runs used
   (cylinder, 3–14), with SHA256 checksums recomputed from the source zips. They are committed to
   be published under the `candidate` alias, **not** `production`, so production predict does not
   see them until their parity and trait checks pass and they are deliberately promoted.
@@ -24,7 +25,10 @@ All notable changes to this project are documented here. The format is based on
   `--yes`.
 - **`row_sources`, `model_origins` and `registry_target` in the seed run config.** The first two are
   read from the matrix and scoped to the run's cards. `registry_target` records the entity, registry
-  and alias the run linked under, so a candidate publish and its later promotion can be told apart.
+  and alias the run linked under. `invocation` records `--only`, `--force`, `--promote`, the alias
+  source and the collections linked to `production` for the first time. The run summary records the
+  per-collection outcome. Together they say, from W&B alone, which run made a card live.
+  `--promote` also prints what it is promoting.
 - **`sleap-roots-training inventory labels <root>`** — a re-runnable enumeration of what labeled
   data actually exists. Nobody had ever run one: the registry holds 8 collections against an
   expected 25-30, and `skeletons.yaml` cannot express the corpus it claims to describe. The command
@@ -54,7 +58,7 @@ All notable changes to this project are documented here. The format is based on
 - **`SPECIES_VOCAB` gains `wheat` and `sorghum`.** It is shared, so training `validate` and
   labeling metadata accept them too; a wheat labeling package still fails at the skeleton lookup,
   since `skeletons.yaml` has no wheat row.
-- **`SLEAP_ROOTS_MODEL_ALIAS` is stripped**, and a set-but-blank value no longer passes through
+- **`SLEAP_ROOTS_MODEL_ALIAS` is stripped**, and `seed-registry` no longer passes a set-but-blank value through
   as an empty alias.
 - **Breaking:**
   - the selection matrix requires a per-row `source` and a top-level `origins` map covering
@@ -227,7 +231,7 @@ All notable changes to this project are documented here. The format is based on
 
 ### Removed
 - `lineage.SELECTION_MATRIX_SOURCE`, `lineage.SELECTION_MATRIX_DATE` and
-  `lineage.MODELS_SNAPSHOT`. They stamped every card with the 20250204 models-downloader snapshot,
+  `lineage.MODELS_SNAPSHOT`. They stamped every seed run with the 20250204 models-downloader snapshot,
   which is false for the wheat card (in no snapshot) and both sorghum cards (in no chooser table);
   provenance now comes from the matrix.
 

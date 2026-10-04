@@ -17,7 +17,11 @@ Both new rows break it, measured on hpi_dev on 2026-10-03:
 | sorghum | yes, under `20250204_models/20250204_sorghum_experimental/` | **no** (the xlsx has the 7 committed rows + the omitted plate row) | the July 2024 sorghum diversity screen's `models_downloader_output/model_paths.csv`; byte-identical copies in BSB vs Torin2 EXP1 and WEEP June 2025 |
 | wheat | **no**; it is in the EDPIE Feb 2025 run directory | **no** | EDPIE's `models_downloader_output/model_paths.csv` (crown; its unused primary is dropped) |
 
-The windows (wheat 5–14, sorghum 3–14) are the owner's 2026-10-02 decision (pipeline#118).
+The windows (wheat 5–14, sorghum 3–14) are the owner's 2026-10-02 decision (pipeline#118). They
+are inclusive. Predict matches a scan older than its species' highest `age_max` at that maximum,
+with a warning (bloom#971 phase 1), and gives a scan younger than the window no model (bloom#994).
+Both behaviours were decided on the same day. One past sorghum run (SbTx430 WEEP, Dec 2025) has 100
+scans at 17 DAG; they select the 3–14 pair, which is what that run used.
 
 **Species spelling**, verified in code:
 
@@ -80,8 +84,8 @@ The committed strings:
 | models | `snapshot` | `location` | `pinned_by` |
 |---|---|---|---|
 | the 8 existing | `"20250204"` | `models-downloader 20250204_models/` | `model_chooser_table.xlsx (snapshot 20250204)` |
-| sorghum primary, lateral | `"20250204"` | `models-downloader 20250204_models/` | `July 2024 sorghum diversity screen run: models_downloader_output/model_paths.csv (same bytes in the BSB vs Torin2 EXP1 and WEEP June 2025 runs)` |
-| wheat crown | `null` | `EDPIE Feb 2025 run directory` | `EDPIE Feb 2025 run: models_downloader_output/model_paths.csv` |
+| sorghum primary, lateral | `"20250204"` | `models-downloader 20250204_models/` | `models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three` |
+| wheat crown | `null` | `EDPIE Feb 2025 run directory` | `EDPIE Feb 2025 run: models_downloader_output/model_paths.csv, which pins the bare 250328_095645.multi_instance.n=1658.zip; the 20250401_wheat_models/ prefix is the run subdirectory holding it` |
 
 Row `source` strings:
 
@@ -120,7 +124,7 @@ rule. The loader cannot know which paths are sensitive. The test rejects a `loca
 
 ### D3. Lineage: lists of records, scoped to the seed's cards
 
-`build_lineage(matrix_sha256, cards, matrix)` keeps `git_sha`, `git_dirty`, `matrix_content_sha256` and
+`build_lineage(matrix_sha256, cards, matrix, cfg)` keeps `git_sha`, `git_dirty`, `matrix_content_sha256` and
 the three versions. It adds:
 
 - `row_sources`: one `{species, mode, age, source}` per row that **backs** an in-scope card, in file
@@ -175,6 +179,11 @@ exits 1 with a `ClickException` naming them, and nothing is published.
   the dry-run return). Misuse is therefore a usage error (exit 2) in every mode, and a promotion always
   names its collections.
 - **Re-seeds of already-`production` collections** are unaffected: the list is empty.
+- **The run records it.** Under `--promote`, the list is echoed (or "nothing to promote"), even
+  under `--yes`. The run config's `invocation` records `--only`, `--force`, `--promote`, the alias
+  source and `first_production_links` (`None` under a non-default alias). The per-collection
+  outcome goes to the run summary before the run is closed. Added after the PR #73 review, so
+  W&B alone can answer which run made a card live.
 - **Step 6** becomes `… --only <3 ids> --promote`.
   - Its "no new versions" outcome relies on `log_artifact` deduplicating to the candidate source
     version. That holds only with the same `WANDB_ENTITY`, `SLEAP_ROOTS_SEED_PROJECT` and staged zips

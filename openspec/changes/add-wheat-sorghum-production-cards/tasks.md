@@ -424,6 +424,24 @@ include the key.
   - new tests cover candidate-only collections in a default `--verify`, whitespace-only
     provenance, and slot-scoped lineage.
 
+### Changes from the PR #73 review
+
+These were made after the posted `/review-pr` (verdict COMMENT, nothing blocking), with no new
+owner decision.
+
+- **Audit gap closed.**
+  - The run config gains `invocation` (`--only`, `--force`, `--promote`, alias source and
+    `first_production_links`).
+  - The run summary gets the per-collection outcome before `finish()`.
+  - `--promote` echoes what it makes live.
+- **ASCII-safe stdout.** The `--verify` orphan line and the confirm prompt were the remaining
+  stdout paths printing a raw alias or entity.
+- **Documentation.** The out-of-window behaviour (above-max matched at max, below-min gets no model)
+  is now written into design, the yaml header and the README. The sorghum `pinned_by` names all five
+  runs, and the wheat `pinned_by` explains its bare pinned id.
+- **PR body corrected.** Group 13.3 exercised guard 1 and the `--promote` usage checks. Guard 2
+  cannot run without a credential, and its live check is design D7.4, after merge.
+
 ### Why four `--promote` usage tests were green before group 9's implementation
 
 Task 9.3(e), (f) and (f2) are labelled red. Before the flag existed, click rejected `--promote` as

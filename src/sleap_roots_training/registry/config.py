@@ -1,8 +1,8 @@
 """Environment-driven wandb registry configuration.
 
 Entity, the models-registry name, and the alias the seed links under (default
-``production``) are resolved from environment variables with defaults so nothing is hardcoded and pointing at a
-different registry later is a config change. These MUST resolve to the same target
+``production``) are resolved from environment variables with defaults, so nothing is
+hardcoded and pointing at a different registry later is a config change. These MUST resolve to the same target
 the ``sleap-roots-predict`` consumer points ``SRP_WANDB_ENTITY`` /
 ``SRP_WANDB_REGISTRY`` at.
 """

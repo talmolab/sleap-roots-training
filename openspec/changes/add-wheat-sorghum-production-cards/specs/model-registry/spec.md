@@ -115,6 +115,8 @@ collections already all carry `production` SHALL proceed unchanged, with or with
 - **WHEN** `seed-registry --execute --yes --only <id> --promote` runs under the default alias for a
   collection with no `production`-aliased version
 - **THEN** the check does not refuse it and that card proceeds to publishing under `production`
+- **AND** the collections being linked for the first time are printed before publishing, even under
+  `--yes`, or "nothing to promote" when there are none
 
 #### Scenario: Re-seeding already-production collections needs no promotion
 
@@ -242,6 +244,16 @@ version, and SHALL never raise or abort the seed; tool/contract versions come fr
 content hash makes the exact inputs recoverable regardless). Lineage SHALL NOT be written into
 per-artifact metadata (which stays exactly the selection keys).
 
+So that W&B alone can answer which run made a card live, the seed SHALL also record:
+
+- in the run config, an `invocation` record of `--only`, `--force`, `--promote`, the alias source,
+  and `first_production_links` (the collections being linked to `production` for the first time,
+  or `None` under a non-default alias);
+- in the run summary, before the run is closed, the per-collection outcome (`published`,
+  `skipped`, `failed`, `stale`).
+
+Failing to record the outcome SHALL only warn. It SHALL NOT change the seed's reported result.
+
 #### Scenario: Run records producer lineage
 
 - **WHEN** a real seed runs
@@ -262,6 +274,16 @@ per-artifact metadata (which stays exactly the selection keys).
 - **AND WHEN** it is built for every committed card
 - **THEN** it holds every matrix row and every origin
 - **AND** the lineage mapping round-trips through JSON unchanged
+
+#### Scenario: The run records how it was invoked and what it did
+
+- **WHEN** a seed runs under `candidate` with `--only` for the three wheat and sorghum cards
+- **THEN** the run config's `invocation` records those ids, `force` and `promote` false, the alias
+  source, and `first_production_links` `None`
+- **AND** the run summary records the three as `published` before the run is closed
+- **AND WHEN** a seed runs with `--promote` under the default alias
+- **THEN** `first_production_links` lists exactly the collections linked to `production` for the
+  first time
 
 #### Scenario: Git SHA resolves without a repository
 

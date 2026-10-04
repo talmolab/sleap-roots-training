@@ -180,6 +180,12 @@ through the server-side registry, and the canary is the compatibility evidence.
 
 ### Notes for downstream consumers
 
+- **Age windows are inclusive, and the oldest one stretches.** A scan older than its species'
+  highest `age_max` is matched at that maximum, with a warning; a scan younger than every window
+  gets no model. So a 17-DAG sorghum scan selects the 3–14 cards, and a 2-DAG one gets none.
+- **Wheat `crown` is the team's name for seminal roots**, so wheat crown traits describe seminal
+  roots. The wheat crown model was trained on wheat seminal + rice crown labels.
+
 - Seeded `mode` strings are a selection contract: arabidopsis has two cylinder-family modes
   (`cylinder` vs `multiplant cylinder`) mapping to different models, so callers must emit the
   exact string.

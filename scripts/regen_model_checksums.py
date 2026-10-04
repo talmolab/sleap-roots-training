@@ -20,7 +20,7 @@ from sleap_roots_training.registry.models import _sha256_of_file
 
 
 def main(models_root: str) -> int:
-    """Print the ``checksums:`` block for the snapshot under ``models_root``."""
+    """Print the ``checksums:`` block for the ``<model_id>.zip`` files under ``models_root``."""
     root = Path(models_root)
     matrix = chooser.load_selection_matrix()
     model_ids = sorted(

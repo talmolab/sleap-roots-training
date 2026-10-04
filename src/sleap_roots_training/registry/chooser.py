@@ -225,8 +225,9 @@ def load_selection_matrix(path: Optional[Path] = None) -> SelectionMatrix:
         ValueError: If the file cannot be read, is not valid YAML, does not parse to a
             mapping, a row's ``species`` or ``mode`` is not in the canonical
             vocabulary, or the provenance (a row's ``source``, the ``origins`` map) is
-            missing, mistyped, or stale. Read and parse failures are normalized to ``ValueError`` (from
-            ``OSError`` / a YAML parse error) so a caller has one type to handle.
+            missing, mistyped, or stale. Read and parse failures are normalized to
+            ``ValueError`` (from ``OSError`` / a YAML parse error) so a caller has one
+            type to handle.
     """
     if path is not None:
         return _parse_matrix(Path(path))

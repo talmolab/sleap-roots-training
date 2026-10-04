@@ -17,7 +17,11 @@
 # (tests/data/models_downloader_input/20250204_models/model_chooser_table.xlsx).
 #
 # `age` is the native chooser comma-list; chooser.py parses it to age_min/age_max
-# (a contiguous window). Absent root-type slots are `null`.
+# (a contiguous window). Absent root-type slots are `null`. Windows are inclusive. A
+# scan OLDER than its species' highest age_max is matched at that maximum by predict
+# (with a warning), and one YOUNGER than the window gets no model; both are the owner's
+# decision of 2026-10-02 (bloom#971 phase 1, bloom#994). Past sorghum runs include 17
+# DAG scans, which therefore select the 3-14 pair, as they did in production.
 #
 # `checksums` pins each source `<model_id>.zip` by SHA256, so the published
 # `weights_checksum` (the whole-artifact digest) is deterministic. Regenerate with
@@ -158,12 +162,12 @@ origins:
   20250401_wheat_models/250328_095645.multi_instance.n=1658:
     snapshot: null
     location: "EDPIE Feb 2025 run directory"
-    pinned_by: "EDPIE Feb 2025 run: models_downloader_output/model_paths.csv"
+    pinned_by: "EDPIE Feb 2025 run: models_downloader_output/model_paths.csv, which pins the bare 250328_095645.multi_instance.n=1658.zip; the 20250401_wheat_models/ prefix is the run subdirectory holding it"
   20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689:
     snapshot: "20250204"
     location: "models-downloader 20250204_models/"
-    pinned_by: "July 2024 sorghum diversity screen run: models_downloader_output/model_paths.csv (same bytes in the BSB vs Torin2 EXP1 and WEEP June 2025 runs)"
+    pinned_by: "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
   20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590:
     snapshot: "20250204"
     location: "models-downloader 20250204_models/"
-    pinned_by: "July 2024 sorghum diversity screen run: models_downloader_output/model_paths.csv (same bytes in the BSB vs Torin2 EXP1 and WEEP June 2025 runs)"
+    pinned_by: "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
