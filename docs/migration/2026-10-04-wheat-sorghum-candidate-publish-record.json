@@ -1,7 +1,7 @@
 {
   "description": "add-wheat-sorghum-production-cards group 14 (talmolab/sleap-roots-training#72, talmolab/sleap-roots-pipeline#118 step 1): the three wheat/sorghum cards published under the `candidate` alias only. Read-only snapshot.",
-  "captured_at": "2026-10-04T17:16:19+00:00",
-  "registry_project": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
+  "captured_utc": "2026-10-04T17:22:59+00:00",
+  "registry": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
   "seed_run": {
     "path": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/4ihxu1mg",
     "url": "https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-training/runs/4ihxu1mg",
@@ -62,6 +62,9 @@
       "sleap_roots_contracts_version": "0.1.0a8",
       "sleap_roots_training_version": "0.0.1a0"
     },
+    "rawconfig_only": {
+      "wandb_version": "0.28.0"
+    },
     "summary": {
       "published": [
         "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
@@ -78,6 +81,7 @@
       "collection": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
       "source_model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658",
       "source_zip_sha256": "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250401_wheat_models-250328_095645.multi_instance.n-1658:v0",
       "versions": [
         {
           "version": "v0",
@@ -106,6 +110,7 @@
       "collection": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
       "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
       "source_zip_sha256": "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689:v0",
       "versions": [
         {
           "version": "v0",
@@ -134,6 +139,7 @@
       "collection": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
       "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
       "source_zip_sha256": "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590:v0",
       "versions": [
         {
           "version": "v0",
@@ -160,6 +166,7 @@
     }
   ],
   "registry_state": {
+    "pre_publish_model_collections": 108,
     "model_collections": 111,
     "production": [
       "arabidopsis-lateral-240130_140452.multi_instance.n-337",
@@ -178,6 +185,8 @@
     ]
   },
   "notes": [
-    "The seed run config has no `wandb_version` key: lineage sends it, but wandb drops a config key with that reserved name. Pre-existing since the first seed; not caused by this change."
+    "`wandb_version` is stored on the run, but the public API lists it under `run.rawconfig`, not `run.config`, because wandb 0.28 treats it as an internal key (`WANDB_INTERNAL_KEYS` in wandb/apis/public/runs.py). Hence `seed_run.rawconfig_only`.",
+    "`source_zip_sha256` is the matrix-pinned value. The publish refused to proceed unless each staged zip hashed to it (resolve_model_dir with require_pinned=True). The zips themselves are not in W&B: the artifacts hold their extracted contents, so this is re-checkable only against the original archives.",
+    "The run was invoked as `seed-registry --models-root <temporary local copy of the three pinned zips> --only <3 ids> --execute --yes` under SLEAP_ROOTS_MODEL_ALIAS=candidate. The models-root path is deliberately not recorded (public repo). `pre_publish_model_collections` is the read-only probe's count just before the publish."
   ]
 }

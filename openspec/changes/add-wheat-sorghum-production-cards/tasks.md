@@ -478,12 +478,15 @@ follows it.
 
 - [x] 14.1 Design D7.4: prepare the detached worktree, then the read-only probe and the live,
       non-writing guard-2 check (expect exit 1 with the `--promote` refusal). *Done 2026-10-04:*
-      - Worktree detached at squash `06f8bb4`, after `uv sync --locked`. Clean tree. The only W&B or
-        registry variable set was `WANDB_API_KEY`.
+      - Worktree detached at squash `06f8bb4`, after `uv sync --locked`. `git status --porcelain`
+        was empty, and `env | grep -E '^(WANDB_|SLEAP_ROOTS_|NETRC)'` showed only `WANDB_API_KEY`
+        (value not printed). So `SLEAP_ROOTS_TRAINING_GIT_SHA`, `SLEAP_ROOTS_SEED_PROJECT`,
+        `WANDB_ENTITY`, `WANDB_MODE`, `WANDB_SWEEP_ID` and `NETRC` were all unset.
       - Probe: none of the 3 ids existed among 108 model collections; `production` was on exactly
         the 8, and `candidate` on none.
-      - Guard 2: the candidate command run *without* its alias variable, with an empty
-        `--models-root`, exited 1 refusing all 3 as first-time `production` links. This also
+      - Guard 2: the candidate command run *without* its alias variable (`--only <3 ids>
+        --execute --yes`, empty `--models-root`) exited 1, refusing all 3 as first-time
+        `production` links. This also
         exercised the absent-collection path against real wandb 0.28.
 - [x] 14.2 Design D7.5: **ask the owner**, then publish. Expect published (3), skipped (0), no FAILED or
       STALE, and a target line showing `alias 'candidate'`. *Done 2026-10-04,* with the owner's
@@ -491,12 +494,19 @@ follows it.
       - Seed run `sleap-roots-training/4ihxu1mg`; target line `alias 'candidate' (from
         SLEAP_ROOTS_MODEL_ALIAS)`.
       - Published (3), skipped (0), no FAILED or STALE, exit 0. No "could not record" warning.
-- [x] 14.3 Design D7.6: verify. *Done 2026-10-04:* exactly as below.
+- [x] 14.3 Design D7.6: verify. *Done 2026-10-04,* observed:
+      - `SLEAP_ROOTS_MODEL_ALIAS=candidate … --verify --only <3 ids>`: 3 `present`, no `LEGACY`
+        line, exit 0. Orphan reporting is suppressed under `--only`.
+      - Default `--verify`: 8 `present`, exactly the 3 ids `missing`, no `orphan` or `LEGACY`
+        line, exit 1.
+
+      Expected:
       - candidate `--only`: 3 present, 0 legacy;
       - default `--verify`: 8 present, exactly the 3 missing, 0 orphans, 0 legacy, exit 1.
 - [x] 14.4 Design D7.6: read back each artifact (`:vN`, digest, aliases never `production`, metadata
       equal to `card_to_metadata`) and the run config (`git_sha` is the squash SHA, `git_dirty`
-      false, 3 `model_origins`, 2 `row_sources`). *Done 2026-10-04,* recorded in `docs/migration/2026-10-04-wheat-sorghum-candidate-publish-record.json`:
+      false, 3 `model_origins`, 2 `row_sources`). *Done 2026-10-04,* through a fresh `wandb.Api()`,
+      recorded in `docs/migration/2026-10-04-wheat-sorghum-candidate-publish-record.json`:
       - Artifacts: each is `v0` with aliases `candidate` and `latest`, and its metadata equals
         `card_to_metadata`.
       - Registry: `production` is on exactly the 8, `candidate` on exactly these 3, and there are
@@ -504,9 +514,10 @@ follows it.
       - Run config: `git_sha` is `06f8bb4…`, not dirty; 3 `model_origins`; 2 `row_sources`;
         `registry_target.alias` is `candidate`; `invocation.first_production_links` is `null`.
         The run summary has the 3 as published.
-      - Found while recording: the run config has **no `wandb_version`**. wandb drops a config key
-        with that reserved name. This predates this change and affects every seed run. It is
-        reported to the owner as a follow-up, not fixed here.
+      - `wandb_version` (0.28.0) is stored on the run. The public API lists it under
+        `run.rawconfig`, not `run.config`, because wandb treats it as an internal key
+        (`WANDB_INTERNAL_KEYS`). A first draft of this record misread that as the key being
+        dropped. It is not, and nothing needs fixing.
 - [x] 14.5 Design D7.7: **show the owner the comment text, then post it** on training#72 and
       pipeline#118. Tick #118 step 1 only after the owner agrees. *Done 2026-10-04:* the owner
       approved the text and the tick, and both were posted
