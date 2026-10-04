@@ -528,3 +528,13 @@ follows it.
 ## Not in this change
 
 See `proposal.md` "Out of scope". training#72 stays open for #118 step 6.
+
+## Trail (added at archive, 2026-10-04)
+
+- Implemented in #73 (squash `06f8bb4`).
+- Group 14 is recorded in #74 (squash `5bb8a06`), with the snapshot at
+  `docs/migration/2026-10-04-wheat-sorghum-candidate-publish-record.json`.
+- Archived in #75.
+- Seed run: `sleap-roots-training/4ihxu1mg`.
+- Step 6 (promotion): README "Publishing under a non-default alias" and the permanent spec's
+  *First-Time Production Link Requires Promotion*.
