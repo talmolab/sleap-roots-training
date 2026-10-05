@@ -1,0 +1,222 @@
+{
+  "description": "talmolab/sleap-roots-pipeline#118 step 6 (talmolab/sleap-roots-training#72 step 3): the three wheat/sorghum candidate cards linked to `production` with `--only <3 ids> --promote`. No new version: each card's existing v0 gained `production`. Read-only snapshot.",
+  "captured_utc": "2026-10-05T03:36:12+00:00",
+  "registry": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
+  "seed_run": {
+    "path": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/axw5245o",
+    "url": "https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-training/runs/axw5245o",
+    "state": "finished",
+    "config": {
+      "git_dirty": false,
+      "git_sha": "ce23db1c8ea93616b1bd7ff633c88a2716b416d9",
+      "invocation": {
+        "only": [
+          "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+          "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+          "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+        ],
+        "force": false,
+        "promote": true,
+        "alias_source": "default",
+        "first_production_links": [
+          "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+          "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+          "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+        ]
+      },
+      "matrix_content_sha256": "a000bb3a197ea8f3dec6916ec983e24255f385fb6207c34983a94e3f8581e6dc",
+      "registry_target": {
+        "alias": "production",
+        "entity": "eberrigan-salk-institute-for-biological-studies",
+        "registry": "sleap-roots-models"
+      },
+      "sleap_roots_contracts_version": "0.1.0a8",
+      "sleap_roots_training_version": "0.0.1a0"
+    },
+    "rawconfig_only": {
+      "wandb_version": "0.28.0"
+    },
+    "summary": {
+      "published": [
+        "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+        "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+        "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+      ],
+      "skipped": [],
+      "failed": [],
+      "stale": []
+    }
+  },
+  "collections": [
+    {
+      "collection": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+      "source_model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+      "source_zip_sha256": "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f",
+      "seed_artifact_versions": [
+        {
+          "version": "v0",
+          "digest": "c600f25e7ed81482020ede734ba1ac4c",
+          "aliases": [
+            "latest"
+          ]
+        }
+      ],
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "c600f25e7ed81482020ede734ba1ac4c",
+          "aliases": [
+            "candidate",
+            "latest",
+            "production"
+          ],
+          "is_link": true,
+          "metadata_equals_card": true
+        }
+      ]
+    },
+    {
+      "collection": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+      "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+      "source_zip_sha256": "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07",
+      "seed_artifact_versions": [
+        {
+          "version": "v0",
+          "digest": "56817fe98fb639c0fdffbe37495f5c34",
+          "aliases": [
+            "latest"
+          ]
+        }
+      ],
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "56817fe98fb639c0fdffbe37495f5c34",
+          "aliases": [
+            "candidate",
+            "latest",
+            "production"
+          ],
+          "is_link": true,
+          "metadata_equals_card": true
+        }
+      ]
+    },
+    {
+      "collection": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+      "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+      "source_zip_sha256": "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028",
+      "seed_artifact_versions": [
+        {
+          "version": "v0",
+          "digest": "891a4ef59da6c116e557fab1aa8d54a7",
+          "aliases": [
+            "latest"
+          ]
+        }
+      ],
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "891a4ef59da6c116e557fab1aa8d54a7",
+          "aliases": [
+            "candidate",
+            "latest",
+            "production"
+          ],
+          "is_link": true,
+          "metadata_equals_card": true
+        }
+      ]
+    }
+  ],
+  "registry_state": {
+    "before_link": {
+      "observed": "read-only probe on 2026-10-05, before the link",
+      "model_collections": 111,
+      "production": [
+        "arabidopsis-lateral-240130_140452.multi_instance.n-337",
+        "canola-lateral-240611_083419.multi_instance.n-631",
+        "canola_pennycress_arabidopsis-primary-240611_102513.multi_instance.n-743",
+        "rice-older-crown-221208_113552.multi_instance.n-574",
+        "rice-younger-crown-220821_163331.multi_instance.n-867",
+        "rice-younger-primary-230104_182346.multi_instance.n-720",
+        "soybean-lateral-lateral_root_221006_172103.multi_instance.n-482",
+        "soybean-primary-221003_111420.multi_instance.n-1389"
+      ],
+      "candidate": [
+        "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+        "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+        "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+      ]
+    },
+    "after_link": {
+      "model_collections": 111,
+      "production": [
+        "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+        "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+        "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+        "arabidopsis-lateral-240130_140452.multi_instance.n-337",
+        "canola-lateral-240611_083419.multi_instance.n-631",
+        "canola_pennycress_arabidopsis-primary-240611_102513.multi_instance.n-743",
+        "rice-older-crown-221208_113552.multi_instance.n-574",
+        "rice-younger-crown-220821_163331.multi_instance.n-867",
+        "rice-younger-primary-230104_182346.multi_instance.n-720",
+        "soybean-lateral-lateral_root_221006_172103.multi_instance.n-482",
+        "soybean-primary-221003_111420.multi_instance.n-1389"
+      ],
+      "candidate": [
+        "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+        "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+        "20250401_wheat_models-250328_095645.multi_instance.n-1658"
+      ]
+    }
+  },
+  "checks": {
+    "before_link": {
+      "staged_zip_sha256_equal_matrix": true,
+      "local_manifest_digest_equals_registry_v0": true,
+      "dry_run": "target line `alias 'production' (default) seed project sleap-roots-training`; all 3 `[ok]`",
+      "default_verify": {
+        "present": 8,
+        "missing": 3,
+        "orphans": 0,
+        "legacy": 0,
+        "exit": 1
+      },
+      "predict_canary_default_alias": {
+        "predict_sha": "bf2baf9",
+        "cards_listed": 8,
+        "skips": 0,
+        "wheat|cylinder|10": {},
+        "sorghum|cylinder|8": {}
+      },
+      "argo_runai_busch_lab": "2026-10-05T01:39:27Z: `argo list --running` -> No workflows found; no workflow with phase Running, Pending or empty (19 total)"
+    },
+    "after_link": {
+      "default_verify": {
+        "present": 11,
+        "missing": 0,
+        "orphans": 0,
+        "legacy": 0,
+        "exit": 0
+      },
+      "predict_list_cards_default_alias": {
+        "predict_sha": "bf2baf9",
+        "cards": 11,
+        "skips": 0
+      },
+      "predict_canary_default_alias": {
+        "wheat,cylinder,10 --expect-roots crown --expect-skips 0": "PASS (crown -> 20250401_wheat_models-250328_095645.multi_instance.n-1658)",
+        "sorghum,cylinder,8 --expect-roots primary,lateral --expect-skips 0": "PASS (primary -> ...primary_6nodes-250203_181521.multi_instance.n-1689; lateral -> ...lateral_4nodes-250203_214033.multi_instance.n-590)"
+      },
+      "argo_runai_busch_lab": "2026-10-05T01:49:52Z: `argo list --running` -> No workflows found; nothing Running or Pending (19 total)"
+    }
+  },
+  "notes": [
+    "Invoked from a clean worktree at ce23db1 (origin/main), after `uv sync --locked`, with SLEAP_ROOTS_MODEL_ALIAS unset: `seed-registry --models-root <the staged copies used for the 2026-10-04 candidate publish> --only <3 ids> --promote --execute --yes`. The models-root path is deliberately not recorded (public repo). The owner approved the --execute after reviewing the pre-checks.",
+    "`--promote` re-runs publish_card: log_artifact then link_artifact(aliases=['production']). Before running it, each artifact was built locally from the staged zips (never logged) and its manifest digest compared with the registry v0 digest; all 3 were equal. wandb then reported 'already exists with the same content. No new version will be created.', and the read-back shows only v0 in each registry collection and each seed-project source sequence.",
+    "`registry_state.before_link` is the read-only probe's state just before the link; it equals the after-state of 2026-10-04-wheat-sorghum-candidate-publish-record.json.",
+    "Rollback, if ever needed: unlink first (fetch each `:production` link, assert is_link, unlink(); never save()), confirm list_cards() returns 8 with a fresh Api(), and only then re-pin traits to sha-426ad4d. unlink() removes the link, so ingested envelopes referencing these registry ids would stop resolving."
+  ]
+}
