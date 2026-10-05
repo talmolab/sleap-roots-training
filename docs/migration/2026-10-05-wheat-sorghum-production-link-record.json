@@ -25,11 +25,45 @@
         ]
       },
       "matrix_content_sha256": "a000bb3a197ea8f3dec6916ec983e24255f385fb6207c34983a94e3f8581e6dc",
+      "model_origins": [
+        {
+          "location": "models-downloader 20250204_models/",
+          "model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
+          "snapshot": "20250204",
+          "pinned_by": "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
+        },
+        {
+          "location": "models-downloader 20250204_models/",
+          "model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
+          "snapshot": "20250204",
+          "pinned_by": "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
+        },
+        {
+          "location": "EDPIE Feb 2025 run directory",
+          "model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658",
+          "snapshot": null,
+          "pinned_by": "EDPIE Feb 2025 run: models_downloader_output/model_paths.csv, which pins the bare 250328_095645.multi_instance.n=1658.zip; the 20250401_wheat_models/ prefix is the run subdirectory holding it"
+        }
+      ],
       "registry_target": {
         "alias": "production",
         "entity": "eberrigan-salk-institute-for-biological-studies",
         "registry": "sleap-roots-models"
       },
+      "row_sources": [
+        {
+          "age": "5, 6, 7, 8, 9, 10, 11, 12, 13, 14",
+          "mode": "cylinder",
+          "source": "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): crown only, the model EDPIE pinned; its primary and lateral models deliberately not registered",
+          "species": "wheat"
+        },
+        {
+          "age": "3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14",
+          "mode": "cylinder",
+          "source": "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): the pair five past sorghum production runs pinned",
+          "species": "sorghum"
+        }
+      ],
       "sleap_roots_contracts_version": "0.1.0a8",
       "sleap_roots_training_version": "0.0.1a0"
     },
@@ -45,13 +79,17 @@
       "skipped": [],
       "failed": [],
       "stale": []
-    }
+    },
+    "created_utc": "2026-10-05T01:41:04Z",
+    "command": "SLEAP_ROOTS_MODEL_ALIAS unset; sleap-roots-training seed-registry --models-root <staged zips> --only 20250401_wheat_models-250328_095645.multi_instance.n-1658 --only 20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689 --only 20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590 --promote --execute --yes",
+    "exit_code": 0
   },
   "collections": [
     {
       "collection": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
       "source_model_id": "20250401_wheat_models/250328_095645.multi_instance.n=1658",
       "source_zip_sha256": "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250401_wheat_models-250328_095645.multi_instance.n-1658:v0",
       "seed_artifact_versions": [
         {
           "version": "v0",
@@ -79,6 +117,7 @@
       "collection": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
       "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689",
       "source_zip_sha256": "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689:v0",
       "seed_artifact_versions": [
         {
           "version": "v0",
@@ -106,6 +145,7 @@
       "collection": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
       "source_model_id": "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590",
       "source_zip_sha256": "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590:v0",
       "seed_artifact_versions": [
         {
           "version": "v0",
@@ -132,7 +172,7 @@
   ],
   "registry_state": {
     "before_link": {
-      "observed": "read-only probe on 2026-10-05, before the link",
+      "observed": "read-only probe on 2026-10-05, shortly before the 01:39:27Z workflow check",
       "model_collections": 111,
       "production": [
         "arabidopsis-lateral-240130_140452.multi_instance.n-337",
@@ -169,54 +209,118 @@
         "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
         "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
         "20250401_wheat_models-250328_095645.multi_instance.n-1658"
-      ]
+      ],
+      "observed": "fresh wandb.Api() read at captured_utc; equal to the read-back run between the link (seed_run.created_utc) and the 01:49:52Z workflow check"
     }
   },
   "checks": {
     "before_link": {
-      "staged_zip_sha256_equal_matrix": true,
-      "local_manifest_digest_equals_registry_v0": true,
-      "dry_run": "target line `alias 'production' (default) seed project sleap-roots-training`; all 3 `[ok]`",
+      "staged_zips": {
+        "command": "sha256sum of each staged <source_model_id>.zip",
+        "sha256": {
+          "20250401_wheat_models-250328_095645.multi_instance.n-1658": "650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f",
+          "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689": "7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07",
+          "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590": "f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028"
+        },
+        "equal_to_matrix_checksums": true
+      },
+      "local_manifest_digest": {
+        "command": "wandb.Artifact(name=<collection>, type='model', metadata=card_to_metadata(card)).add_dir(resolve_model_dir(..., require_pinned=True)); artifact.manifest.digest(); never logged",
+        "digests": {
+          "20250401_wheat_models-250328_095645.multi_instance.n-1658": "c600f25e7ed81482020ede734ba1ac4c",
+          "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689": "56817fe98fb639c0fdffbe37495f5c34",
+          "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590": "891a4ef59da6c116e557fab1aa8d54a7"
+        },
+        "equal_to_registry_v0": true
+      },
+      "dry_run": {
+        "command": "SLEAP_ROOTS_MODEL_ALIAS unset; sleap-roots-training seed-registry --models-root <staged zips> --only 20250401_wheat_models-250328_095645.multi_instance.n-1658 --only 20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689 --only 20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+        "result": "target line `alias 'production' (default) seed project sleap-roots-training`; all 3 `[ok]`",
+        "exit_code": 0
+      },
       "default_verify": {
+        "command": "SLEAP_ROOTS_MODEL_ALIAS unset; sleap-roots-training seed-registry --verify",
         "present": 8,
         "missing": 3,
         "orphans": 0,
         "legacy": 0,
-        "exit": 1
+        "exit_code": 1
       },
-      "predict_canary_default_alias": {
+      "predict_canary": {
         "predict_sha": "bf2baf9",
+        "command": "talmolab/sleap-roots-predict scripts/canary_check.py --context wheat,cylinder,10 --context sorghum,cylinder,8 --expect-skips 0 (SRP_WANDB_MODEL_ALIAS unset)",
         "cards_listed": 8,
         "skips": 0,
-        "wheat|cylinder|10": {},
-        "sorghum|cylinder|8": {}
+        "selected": {
+          "wheat,cylinder,10": {},
+          "sorghum,cylinder,8": {}
+        },
+        "meaning": "no card selected for either context: expected, the 3 were not yet on production",
+        "exit_code": 0
       },
-      "argo_runai_busch_lab": "2026-10-05T01:39:27Z: `argo list --running` -> No workflows found; no workflow with phase Running, Pending or empty (19 total)"
+      "running_workflows": {
+        "command": "argo list -n runai-busch-lab --running -o name; plus kubectl get workflows -n runai-busch-lab, filtered on .status.phase in {Running, Pending, empty}",
+        "observed_utc": "2026-10-05T01:39:27Z",
+        "result": "No workflows found; 0 of 19 Running, Pending or without a phase"
+      }
     },
     "after_link": {
       "default_verify": {
+        "command": "SLEAP_ROOTS_MODEL_ALIAS unset; sleap-roots-training seed-registry --verify",
         "present": 11,
         "missing": 0,
         "orphans": 0,
         "legacy": 0,
-        "exit": 0
+        "exit_code": 0
       },
-      "predict_list_cards_default_alias": {
+      "predict_list_cards": {
         "predict_sha": "bf2baf9",
-        "cards": 11,
+        "command": "talmolab/sleap-roots-predict WandbRegistrySource().list_cards(), counting 'Skipping non-conforming model artifact' warnings (SRP_WANDB_MODEL_ALIAS unset)",
+        "cards_listed": 11,
         "skips": 0
       },
-      "predict_canary_default_alias": {
-        "wheat,cylinder,10 --expect-roots crown --expect-skips 0": "PASS (crown -> 20250401_wheat_models-250328_095645.multi_instance.n-1658)",
-        "sorghum,cylinder,8 --expect-roots primary,lateral --expect-skips 0": "PASS (primary -> ...primary_6nodes-250203_181521.multi_instance.n-1689; lateral -> ...lateral_4nodes-250203_214033.multi_instance.n-590)"
-      },
-      "argo_runai_busch_lab": "2026-10-05T01:49:52Z: `argo list --running` -> No workflows found; nothing Running or Pending (19 total)"
+      "predict_canary": [
+        {
+          "predict_sha": "bf2baf9",
+          "command": "talmolab/sleap-roots-predict scripts/canary_check.py --context wheat,cylinder,10 --expect-roots crown --expect-skips 0 (SRP_WANDB_MODEL_ALIAS unset)",
+          "cards_listed": 11,
+          "skips": 0,
+          "selected": {
+            "wheat,cylinder,10": {
+              "crown": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models/20250401_wheat_models-250328_095645.multi_instance.n-1658"
+            }
+          },
+          "exit_code": 0
+        },
+        {
+          "predict_sha": "bf2baf9",
+          "command": "talmolab/sleap-roots-predict scripts/canary_check.py --context sorghum,cylinder,8 --expect-roots primary,lateral --expect-skips 0 (SRP_WANDB_MODEL_ALIAS unset)",
+          "cards_listed": 11,
+          "skips": 0,
+          "selected": {
+            "sorghum,cylinder,8": {
+              "primary": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models/20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+              "lateral": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models/20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590"
+            }
+          },
+          "exit_code": 0
+        }
+      ],
+      "running_workflows": {
+        "command": "argo list -n runai-busch-lab --running -o name; plus kubectl get workflows -n runai-busch-lab, filtered on .status.phase in {Running, Pending, empty}",
+        "observed_utc": "2026-10-05T01:49:52Z",
+        "result": "No workflows found; 0 of 19 Running, Pending or without a phase"
+      }
     }
   },
   "notes": [
-    "Invoked from a clean worktree at ce23db1 (origin/main), after `uv sync --locked`, with SLEAP_ROOTS_MODEL_ALIAS unset: `seed-registry --models-root <the staged copies used for the 2026-10-04 candidate publish> --only <3 ids> --promote --execute --yes`. The models-root path is deliberately not recorded (public repo). The owner approved the --execute after reviewing the pre-checks.",
-    "`--promote` re-runs publish_card: log_artifact then link_artifact(aliases=['production']). Before running it, each artifact was built locally from the staged zips (never logged) and its manifest digest compared with the registry v0 digest; all 3 were equal. wandb then reported 'already exists with the same content. No new version will be created.', and the read-back shows only v0 in each registry collection and each seed-project source sequence.",
-    "`registry_state.before_link` is the read-only probe's state just before the link; it equals the after-state of 2026-10-04-wheat-sorghum-candidate-publish-record.json.",
-    "Rollback, if ever needed: unlink first (fetch each `:production` link, assert is_link, unlink(); never save()), confirm list_cards() returns 8 with a fresh Api(), and only then re-pin traits to sha-426ad4d. unlink() removes the link, so ingested envelopes referencing these registry ids would stop resolving."
+    "Dates are UTC: the link ran at 2026-10-05T01:41Z (seed_run.created_utc), which was 2026-10-04 in Pacific time. `captured_utc` is when this snapshot was read, not when the link ran.",
+    "Run from a clean worktree at ce23db1 (origin/main) after `uv sync --locked`. The owner approved the --execute after reviewing the before_link checks. The models-root path is deliberately not recorded (public repo); it held the same staged copies as the 2026-10-04 candidate publish, and checks.before_link.staged_zips lists their hashes.",
+    "`--promote` re-runs publish_card: log_artifact, then link_artifact(aliases=['production']). Each artifact's local manifest digest equalled registry v0 (checks.before_link.local_manifest_digest). wandb reported 'already exists with the same content. No new version will be created.' The read-back shows only v0 in each registry collection and each seed-project source sequence. Registry metadata already had the selectors shape, so publish_card's metadata-refresh save() branch was not taken.",
+    "Lineage: because log_artifact was a no-op, run axw5245o lists the existing v0s as its logged artifacts, and their updated_at moved to 2026-10-05T01:41Z. logged_by() is still 4ihxu1mg, the candidate run that uploaded them. Nothing was re-uploaded.",
+    "Per-version metadata is not repeated here. metadata_equals_card compares it with card_to_metadata(card) from the matrix at ce23db1. matrix_content_sha256 is unchanged from the 2026-10-04 record, so that record's metadata blobs still apply verbatim.",
+    "`seed_run.rawconfig_only`: see the note in 2026-10-04-wheat-sorghum-candidate-publish-record.json; wandb lists wandb_version under run.rawconfig.",
+    "`registry_state.before_link` equals the after-state of 2026-10-04-wheat-sorghum-candidate-publish-record.json.",
+    "Rollback, if ever needed. (1) Unlink first. For each collection, fetch its `:production` link, assert is_link, and call unlink(); never save(). In wandb 0.28, unlink() sends UnlinkArtifactInput(artifact_id, artifact_portfolio_id), which removes the whole v0 membership. That removes `candidate` and `latest` as well as `production`, and the collection is left empty: keeping the cards on `candidate` would mean re-running the candidate publish. Ingested envelopes that reference these registry ids would stop resolving. (2) With a fresh wandb.Api(), check that `:production` is gone from all 3 and that predict list_cards() returns 8. (3) Only then re-pin the trait-extractor in talmolab/sleap-roots-pipeline to ghcr.io/talmolab/sleap-roots-trait-extractor:sha-426ad4d@sha256:7d5bdaf94dcaf1b695b0bfb2390bfb4dd687c0c18cb4720b25ce5bd43ed4b7e8 (the image that pipeline efb997e replaced with sha-e45b6bf). No traits image older than the deployed sha-e45b6bf has the wheat/sorghum rows, so never roll traits back while the cards are still linked."
   ]
 }
