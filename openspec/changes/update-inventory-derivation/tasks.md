@@ -39,7 +39,7 @@ commit exists, so push only at GREEN points.
   before approval. The commit body lists the review's reconciliation entries.
 - [x] 0.2 Once `main` has moved, rebase onto it before the first push. The branch was
   fast-forwarded to `469b3e0` on 2026-10-15, and none of #68–#77 touch `inventory/`.
-- [ ] 0.3 File an issue: "`derive()` tokenises path parts above the scan root". Cite the macOS
+- [x] 0.3 File an issue: "`derive()` tokenises path parts above the scan root". Cite the macOS
   `/var/folders/sr` and pytest `tmp_path` cases. Link it from proposal "Out of scope".
 
 ## 1. Species precedence (`Filename-First Species Derivation`)

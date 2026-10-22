@@ -135,10 +135,13 @@ is not compared.
 - **#64** waits for LabelCard metadata (#11/#49). **#62** waits until the multiplant files are
   found. **#60** is unrelated.
 - **Path parts above the scan root reach `derive()`**, as today. No part of the approved root
-  matches a token, but a pytest temp directory can, so the tests avoid it (tasks rules). Filed
-  as a follow-up issue in task 0.3.
-- **CI runs no `openspec validate`.** Both pinned CLIs run locally, and their output goes in
-  the PR body.
+  matches a token, but a pytest temp directory can, so the tests avoid it (tasks rules). That
+  is #78.
+- **CI runs no `openspec validate`** (#80). Both pinned CLIs run locally, and their output goes
+  in the PR body.
+- **The CSV formula neutralisation is never applied** (#79). That predates this change. The
+  two new columns cannot start with a formula character: `species_named` is JSON and `flags`
+  are fixed words.
 
 ## Impact
 
