@@ -122,7 +122,7 @@ commit exists, so push only at GREEN points.
 
 ## 2. Mode tokens (`Capture Mode Derivation`, #65)
 
-- [ ] 2.1 RED — `test(inventory): pin multiplant and ambiguous mode derivation (RED)`. All
+- [x] 2.1 RED — `test(inventory): pin multiplant and ambiguous mode derivation (RED)`. All
   tests use `_family`:
   - `test_the_one_plant_count_token_is_recognised`:
     `SLEAP_arabidopsis/multiplant_cylinder/primary/labels.v001.slp` (today `cylinder`, #65's
@@ -146,7 +146,7 @@ commit exists, so push only at GREEN points.
     `flags == ("ambiguous-mode", "folder-species-differs")`.
   - `test_the_derived_spelling_is_the_contracts`: `"multiplant cylinder" in
     chooser.MODE_VOCAB`, with `chooser` imported inside the test. **Characterisation.**
-- [ ] 2.2 GREEN — `feat(inventory): recognise multiplant and refuse to pick a mode (GREEN)`
+- [x] 2.2 GREEN — `feat(inventory): recognise multiplant and refuse to pick a mode (GREEN)`
   - Add `AMBIGUOUS_MODE` and `_MULTIPLANT_TOKEN = "multiplant"`.
   - The mode block collects the distinct modes. A `multiplant` token adds
     `multiplant cylinder` and drops `cylinder`. One mode gives that mode. More than one gives

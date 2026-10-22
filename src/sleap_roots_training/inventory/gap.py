@@ -38,6 +38,13 @@ _MODE_TOKENS = {
     "plates": "plate",
 }
 
+#: The exact token for a multiplant cylinder. It reads as ``multiplant cylinder``, the
+#: ``MODE_VOCAB`` spelling, and absorbs any ``cyl``/``cylinder`` token in the path. Only
+#: the literal token counts: ``multi``, ``multiple`` and ``multiclass`` all occur on the
+#: share meaning something else, and a labeler's name is not evidence of multiplant.
+_MULTIPLANT_TOKEN = "multiplant"
+_MULTIPLANT_MODE = "multiplant cylinder"
+
 #: Path tokens that name a root type. The team calls wheat's seminal roots **crown**, so
 #: ``seminal`` and ``sr`` map to the ``crown`` row rather than becoming a ``RootType``
 #: member of their own.
@@ -81,6 +88,9 @@ MULTI_SPECIES = "multi-species"
 #: The filename names one species and the deciding folder names others, not that one.
 #: The filename's species is used.
 FOLDER_SPECIES_DIFFERS = "folder-species-differs"
+
+#: The path names more than one capture mode, so none is derived.
+AMBIGUOUS_MODE = "ambiguous-mode"
 
 #: A token glued to a species, as in ``labels_ONLYpennycress``.
 _ONLY_PREFIX = "only"
@@ -291,12 +301,26 @@ def _derive_species(
     return species, named, decided_by, folder, flags
 
 
+def _derive_mode(tokens: list[str]) -> tuple[Optional[str], tuple[str, ...], set[str]]:
+    """Return the mode, the modes named and any flag, per ``Capture Mode Derivation``."""
+    named = {_MODE_TOKENS[t] for t in tokens if t in _MODE_TOKENS}
+    if _MULTIPLANT_TOKEN in tokens:
+        named.discard("cylinder")
+        named.add(_MULTIPLANT_MODE)
+    modes = tuple(sorted(named))
+    if len(modes) > 1:
+        return None, modes, {AMBIGUOUS_MODE}
+    return (modes[0] if modes else None), modes, set()
+
+
 def derive(family: discover.Family) -> Derived:
     """Read species, mode and root type off a family's path.
 
     Species follows ``Filename-First Species Derivation``: the stem decides, the folder
     rule is the fallback, and a deciding part naming several species gives none. Mode
-    and root type are read from the whole path.
+    follows ``Capture Mode Derivation``: the whole path, ``multiplant`` read as
+    ``multiplant cylinder``, and several distinct modes giving none. Root type is the
+    first root-type token in the whole path.
 
     Args:
         family: The family to read.
@@ -306,8 +330,7 @@ def derive(family: discover.Family) -> Derived:
     """
     tokens = _tokens(family)
     species, named, decided_by, folder, flags = _derive_species(family)
-
-    mode = next((_MODE_TOKENS[t] for t in tokens if t in _MODE_TOKENS), None)
+    mode, modes_named, mode_flags = _derive_mode(tokens)
     root_type = next(
         (_ROOT_TYPE_TOKENS[t] for t in tokens if t in _ROOT_TYPE_TOKENS), None
     )
@@ -318,7 +341,8 @@ def derive(family: discover.Family) -> Derived:
         species_named=named,
         species_from=decided_by,
         folder_species=folder,
-        flags=tuple(sorted(flags)),
+        modes_named=modes_named,
+        flags=tuple(sorted(flags | mode_flags)),
     )
 
 
