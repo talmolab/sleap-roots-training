@@ -44,7 +44,7 @@ commit exists, so push only at GREEN points.
 
 ## 1. Species precedence (`Filename-First Species Derivation`)
 
-- [ ] 1.1 RED — `test(inventory): pin filename-first species derivation (RED)`. In
+- [x] 1.1 RED — `test(inventory): pin filename-first species derivation (RED)`. In
   `tests/test_inventory_gap.py`, add the `_family` helper and these tests. Each one calls
   `gap.derive(_family(...))`, and each line below gives what today's code returns, so the
   failure is behaviour-level:
@@ -94,7 +94,7 @@ commit exists, so push only at GREEN points.
     and asserts `{8: 13, 6: 1, 7: 3}`, with 8 the strict plurality (today `{8: 13, 6: 5, 7: 3}`).
     `gap` and `discover` are imported inside the test, and the helper is copied locally,
     because that module imports neither.
-- [ ] 1.2 GREEN — `feat(inventory): read species from the filename before the folder (GREEN)`
+- [x] 1.2 GREEN — `feat(inventory): read species from the filename before the folder (GREEN)`
   - In `gap.py`:
     - `Derived` gains `species_named`, `folder_species`, `modes_named` and `flags`
       (`tuple[str, ...] = ()`), and `species_from: Optional[str] = None`. They are defaulted
