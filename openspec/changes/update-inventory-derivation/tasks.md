@@ -178,7 +178,7 @@ commit exists, so push only at GREEN points.
 
 ## 4. Table columns and report sections (`Derivation Findings Are Reported`)
 
-- [ ] 4.1 RED — `test(inventory): pin the derivation findings in the table and report (RED)`.
+- [x] 4.1 RED — `test(inventory): pin the derivation findings in the table and report (RED)`.
   In `tests/test_inventory_emit.py`, each test builds a tree under `tmp_path / "share"` with
   `write_labels`, then runs `emit.build` and `emit.write`. Each report assertion slices the
   report from its subsection heading to the next heading. Paths are compared as `/` literals,
@@ -205,7 +205,7 @@ commit exists, so push only at GREEN points.
   - Redaction: in each of the three subsection tests, neither `str(tmp_path)` nor
     `tmp_path.as_posix()` appears in either artifact. Every backticked path in the
     subsection must start with `<ROOT>/`.
-- [ ] 4.2 GREEN — `feat(inventory): report multi-species, folder-disagreeing and ambiguous-mode families (GREEN)`
+- [x] 4.2 GREEN — `feat(inventory): report multi-species, folder-disagreeing and ambiguous-mode families (GREEN)`
   - In `emit.py`:
     - `COLUMNS` gains `species_named` and `flags` after `species_source`. `_JSON_COLUMNS`
       gains `species_named`.

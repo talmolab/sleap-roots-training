@@ -11,6 +11,10 @@ is not a collection, and on the measured share one of them holds 28 labels files
 spanning a superset, a second species' collection, a generalist, per-labeler inputs and
 practice files. Deciding which of those is a collection is a person's job, and this
 module deliberately offers nowhere to record that decision.
+
+The same holds for names that say too much. A family whose filename or folder names
+several species, whose folder names a crop its filename does not, or whose path names
+several capture modes is listed under "Name derivation", and nothing is assigned to it.
 """
 
 from __future__ import annotations
@@ -44,6 +48,8 @@ COLUMNS = (
     "version",
     "species",
     "species_source",
+    "species_named",
+    "flags",
     "mode",
     "root_type",
     "node_count",
@@ -67,6 +73,7 @@ COLUMNS = (
 #: quote survives the round trip. Space-joining produced 8,489 fragment tokens in the
 #: first real scan.
 _JSON_COLUMNS = (
+    "species_named",
     "skeleton_names",
     "video_filenames",
     "member_filenames",
@@ -108,6 +115,49 @@ class AmbiguousDirectory:
     stems: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class MultiSpecies:
+    """A family whose deciding name gives several species, so none was derived.
+
+    Attributes:
+        path: The newest member, emitted relative to the root.
+        species_named: The species named, sorted.
+        species_from: ``"filename"`` or ``"folder"``.
+    """
+
+    path: str
+    species_named: tuple[str, ...]
+    species_from: str
+
+
+@dataclass(frozen=True)
+class FolderDisagreement:
+    """A directory whose families' filenames name a crop the folder does not.
+
+    Attributes:
+        path: The directory, emitted relative to the root.
+        family_count: How many of its families are flagged.
+        pairs: ``(folder species, filename species, count)``, sorted.
+    """
+
+    path: str
+    family_count: int
+    pairs: tuple[tuple[str, str, int], ...]
+
+
+@dataclass(frozen=True)
+class AmbiguousMode:
+    """A family whose path names several capture modes, so none was derived.
+
+    Attributes:
+        path: The newest member, emitted relative to the root.
+        modes: The modes named, sorted.
+    """
+
+    path: str
+    modes: tuple[str, ...]
+
+
 @dataclass
 class Inventory:
     """Everything one scan found, ready to write.
@@ -118,6 +168,9 @@ class Inventory:
         rows: One row per family, ordered by emitted path.
         gap: Where the skeleton table cannot express what was found.
         ambiguous_directories: Directories holding several families.
+        multi_species: Families whose name gives several species.
+        folder_disagreements: Directories whose filenames name a crop the folder does not.
+        ambiguous_modes: Families whose path names several capture modes.
     """
 
     root: Path
@@ -125,6 +178,9 @@ class Inventory:
     rows: list[dict] = field(default_factory=list)
     gap: gap.GapReport = field(default_factory=gap.GapReport)
     ambiguous_directories: list[AmbiguousDirectory] = field(default_factory=list)
+    multi_species: list[MultiSpecies] = field(default_factory=list)
+    folder_disagreements: list[FolderDisagreement] = field(default_factory=list)
+    ambiguous_modes: list[AmbiguousMode] = field(default_factory=list)
 
 
 def build(
@@ -171,6 +227,9 @@ def build(
 
     observations: list[gap.Observed] = []
     rows: list[dict] = []
+    multi_species: list[MultiSpecies] = []
+    ambiguous_modes: list[AmbiguousMode] = []
+    differing: dict[Path, dict[tuple[str, str], int]] = {}
     for family in families:
         candidate = family.latest
         # Every member is read, not just the newest. Requirement 3 says "read each
@@ -183,12 +242,25 @@ def build(
         observations.append(gap.Observed(family=family, facts=facts))
         derived = gap.derive(family)
         emitted = redact.emit_path(candidate.path, root)
+        # Built from the same `derived` as the row, so table and report cannot disagree.
+        if gap.MULTI_SPECIES in derived.flags:
+            multi_species.append(
+                MultiSpecies(emitted.text, derived.species_named, derived.species_from)
+            )
+        if gap.FOLDER_SPECIES_DIFFERS in derived.flags:
+            pair = (", ".join(derived.folder_species), derived.species)
+            pairs = differing.setdefault(family.directory, {})
+            pairs[pair] = pairs.get(pair, 0) + 1
+        if gap.AMBIGUOUS_MODE in derived.flags:
+            ambiguous_modes.append(AmbiguousMode(emitted.text, derived.modes_named))
         rows.append(
             {
                 "path": emitted.text,
                 "version": "" if candidate.version is None else candidate.version,
                 "species": derived.species or "",
                 "species_source": derived.source,
+                "species_named": json.dumps(list(derived.species_named)),
+                "flags": " ".join(derived.flags),
                 "mode": derived.mode or "",
                 "root_type": derived.root_type or "",
                 "node_count": "" if facts.node_count is None else facts.node_count,
@@ -245,6 +317,21 @@ def build(
     ]
     ambiguous.sort(key=lambda entry: entry.path)
 
+    folder_disagreements = sorted(
+        (
+            FolderDisagreement(
+                path=redact.emit_path(directory, root).text,
+                family_count=sum(pairs.values()),
+                pairs=tuple(
+                    (folder, filename, count)
+                    for (folder, filename), count in sorted(pairs.items())
+                ),
+            )
+            for directory, pairs in differing.items()
+        ),
+        key=lambda entry: entry.path,
+    )
+
     return Inventory(
         root=root,
         scan=scan,
@@ -255,6 +342,9 @@ def build(
             emit_path=lambda path: redact.emit_path(path, root).text,
         ),
         ambiguous_directories=ambiguous,
+        multi_species=sorted(multi_species, key=lambda entry: entry.path),
+        folder_disagreements=folder_disagreements,
+        ambiguous_modes=sorted(ambiguous_modes, key=lambda entry: entry.path),
     )
 
 
@@ -318,6 +408,60 @@ def _spreadsheet_safe(value: str) -> str:
     return "'" + value if value.startswith(_FORMULA_PREFIXES) else value
 
 
+def _render_name_derivation(inventory: Inventory) -> list[str]:
+    """Render what the names could not settle. Lists it; assigns nothing."""
+    lines = [
+        "## Name derivation",
+        "",
+        "Species is read from the filename before the folder, and a filename or folder",
+        "that names several species yields none. What the names cannot settle is listed",
+        "here, and the tool assigns nothing to it.",
+        "",
+    ]
+    if inventory.multi_species:
+        lines += [
+            "### Families naming more than one species",
+            "",
+            "Each must be split per species or matched to per-species files before it is",
+            "registered. No species is assigned to any of them.",
+            "",
+        ]
+        lines += [
+            f"- `{entry.path}` names {', '.join(entry.species_named)} "
+            f"({entry.species_from})"
+            for entry in inventory.multi_species
+        ]
+        lines.append("")
+    if inventory.folder_disagreements:
+        lines += [
+            "### Folder and filename disagree on species",
+            "",
+            "The filename's species was used.",
+            "",
+        ]
+        for entry in inventory.folder_disagreements:
+            noun = "family" if entry.family_count == 1 else "families"
+            pairs = "; ".join(
+                f"{folder} → {filename} ({count})"
+                for folder, filename, count in entry.pairs
+            )
+            lines.append(f"- `{entry.path}`: {entry.family_count} {noun}; {pairs}")
+        lines.append("")
+    if inventory.ambiguous_modes:
+        lines += [
+            "### Paths naming more than one capture mode",
+            "",
+            "No mode is derived for these.",
+            "",
+        ]
+        lines += [
+            f"- `{entry.path}` names {', '.join(entry.modes)}"
+            for entry in inventory.ambiguous_modes
+        ]
+        lines.append("")
+    return lines
+
+
 def _render_report(inventory: Inventory) -> str:
     """Render the prose report. Contains nothing that varies between runs."""
     scan = inventory.scan
@@ -337,6 +481,7 @@ def _render_report(inventory: Inventory) -> str:
         f"- directories that could not be read: {scan.unreadable_directories}",
         f"- families: {len(inventory.rows)}",
         "",
+        *_render_name_derivation(inventory),
         "## Skeleton table",
         "",
         f"Analysed {inventory.gap.families_analysed} of "
@@ -391,7 +536,7 @@ def _render_report(inventory: Inventory) -> str:
             lines.append("")
         if other:
             lines += [
-                "Derivation is open by design, so a crop nobody has heard of is not",
+                "Folder names are read openly, so a crop nobody has heard of is not",
                 "hidden — which means directory names that are not crops also land here.",
                 "These are **not** species; they are tokens read off a path:",
                 "",
