@@ -98,7 +98,7 @@ commit exists, so push only at GREEN points.
   - In `gap.py`:
     - `Derived` gains `species_named`, `folder_species`, `modes_named` and `flags`
       (`tuple[str, ...] = ()`), and `species_from: Optional[str] = None`. They are defaulted
-      after `root_type`, so existing constructors keep working.
+      after `source` (see proposal, "Why after `source`"), so existing constructors keep working.
     - Add the constants `MULTI_SPECIES` and `FOLDER_SPECIES_DIFFERS`.
     - `_species_in(tokens)` returns the distinct `KNOWN_SPECIES` after aliasing, stripping a
       leading `only` from a longer token.
@@ -266,20 +266,20 @@ commit exists, so push only at GREEN points.
     and #65. It covers the values that move on the next scan, the two columns, the "Name
     derivation" section, and the BREAKING partial-scan exit. The rule itself is not restated:
     it lives in the spec.
-- [ ] 6.2 `docs(openspec): reconcile update-inventory-derivation with what was built`. Re-read
+- [x] 6.2 `docs(openspec): reconcile update-inventory-derivation with what was built`. Re-read
   the proposal, the spec delta and this file against the implementation. Every path, flag
   spelling, column name, heading and helper named here must be the one used. Record any
   deviation as `### Why N instead of M?` in `proposal.md`.
-- [ ] 6.3 Validate on both pinned CLIs, and paste both outputs into the PR body, since CI runs
+- [x] 6.3 Validate on both pinned CLIs, and paste both outputs into the PR body, since CI runs
   neither:
   - `npx -y @fission-ai/openspec@1.5.0 validate update-inventory-derivation --strict`
   - `npx -y @fission-ai/openspec@1.11.0 validate update-inventory-derivation --strict`
-- [ ] 6.4 CI gate:
+- [x] 6.4 CI gate:
   - `uv run black --check src/sleap_roots_training tests`
   - `uv run ruff check src/sleap_roots_training`
   - `uv run pytest -m "not integration" --cov=src/sleap_roots_training --cov-fail-under=95 --cov-report=term-missing`
   - `gap.py` must show no missed lines (it is at 100% today).
-- [ ] 6.5 `git diff --stat main -- inventory/` is empty. This PR does not touch the committed
+- [x] 6.5 `git diff --stat main -- inventory/` is empty. This PR does not touch the committed
   scan.
 
 ## 7. After merge: the re-scan PR, then the archive PR

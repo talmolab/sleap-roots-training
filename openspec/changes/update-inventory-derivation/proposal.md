@@ -117,6 +117,13 @@ used to write and exit 0.
 - A scan that cannot list every directory writes nothing and exits non-zero (2026-10-15).
   This makes the approved re-scan command safe exactly as written.
 
+### Why after `source` instead of after `root_type`?
+
+Tasks 1.2 first placed the new `Derived` fields after `root_type`. `source` is itself
+defaulted and comes after `root_type`, so new fields there would have pushed `source`
+behind them, and any positional constructor would have broken. They sit after `source`
+instead, which changes no behaviour.
+
 ### Why "contradicts" requires a known species in the folder
 
 The loose rule, "the folder's derived value differs", flags 195 labelled families. Most sit in
