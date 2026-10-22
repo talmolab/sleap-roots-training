@@ -571,3 +571,65 @@ def test_the_derived_spelling_is_the_contracts():
     from sleap_roots_training.registry import chooser
 
     assert "multiplant cylinder" in chooser.MODE_VOCAB
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Skeleton Table Mode Gap, names that say too much
+# --------------------------------------------------------------------------------------
+
+
+def test_a_name_that_says_too_much_is_skipped_by_its_own_reason(tmp_path):
+    """Each family derives everything except the one field its name over-specifies."""
+    pooled = write_labels(
+        tmp_path / "cyl_x" / "primary_x" / "labels_canola_pennycress.v001.slp",
+        node_names=_nodes(6),
+    )
+    two_modes = write_labels(
+        tmp_path / "SLEAP_arabidopsis" / "plates" / "cyl_primary" / "labels.v001.slp",
+        node_names=_nodes(6),
+    )
+
+    report = gap.build_report([_observe(pooled), _observe(two_modes)], table=())
+
+    assert report.families_skipped_reasons == {
+        "multi-species": 1,
+        "ambiguous-mode": 1,
+    }
+
+
+def test_a_crowded_capture_family_is_a_gap_not_a_match(tmp_path):
+    """Characterisation after 2.2: a multiplant family is no longer a cylinder match."""
+    table = (_row("arabidopsis", "cylinder", "primary", 6),)
+    path = write_labels(
+        tmp_path / "multiplant_cylinder" / "arabidopsis_primary" / "labels.v001.slp",
+        node_names=_nodes(6),
+    )
+
+    report = gap.build_report([_observe(path)], table=table)
+
+    assert len(report.mode_gaps) == 1
+    assert report.mode_gaps[0].mode == "multiplant cylinder"
+    assert report.mode_gaps[0].table_modes == ("cylinder",)
+    assert report.node_count_disagreements == []
+
+
+def test_pooled_names_still_count_as_uncovered(tmp_path):
+    """A pooled file is labels of each crop it names."""
+    table = (_row("soybean", "cylinder", "primary", 6),)
+    by_filename = write_labels(
+        tmp_path / "cyl_x" / "primary_x" / "labels_canola_pennycress.v001.slp",
+        node_names=_nodes(6),
+    )
+    by_folder = write_labels(
+        tmp_path
+        / "SLEAP_Canola_Pennycress"
+        / "cyl_x"
+        / "primary_x"
+        / "labels.v001.slp",
+        node_names=_nodes(6),
+    )
+
+    report = gap.build_report([_observe(by_filename), _observe(by_folder)], table=table)
+
+    assert "pennycress" in report.uncovered_species
+    assert report.families_skipped_reasons["multi-species"] == 2
