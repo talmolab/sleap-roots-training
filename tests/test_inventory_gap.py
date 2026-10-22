@@ -488,3 +488,86 @@ def test_a_pooled_nickname_file_derives_no_species():
     assert derived.species is None
     assert derived.flags == ("multi-species",)
     assert derived.root_type == "crown"
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Capture Mode Derivation (#65)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_one_plant_count_token_is_recognised():
+    """#65's reproduction: `multiplant_cylinder/` derived `cylinder`."""
+    joined = gap.derive(
+        _family("SLEAP_arabidopsis/multiplant_cylinder/primary/labels.v001.slp")
+    )
+    alone = gap.derive(_family("SLEAP_arabidopsis/multiplant/primary/labels.v001.slp"))
+
+    assert joined.mode == "multiplant cylinder"
+    assert alone.mode == "multiplant cylinder"
+    assert "ambiguous-mode" not in joined.flags
+    assert "ambiguous-mode" not in alone.flags
+
+
+def test_a_capture_word_apart_from_the_count_token_is_part_of_it():
+    derived = gap.derive(
+        _family("SLEAP_arabidopsis/cyl_primary/multiplant/labels.v001.slp")
+    )
+
+    assert derived.mode == "multiplant cylinder"
+    assert "ambiguous-mode" not in derived.flags
+
+
+def test_look_alike_spellings_are_not_recognised():
+    """Characterisation: `multi`, `multiclass` and `multiple` all mean something else."""
+    assert (
+        gap.derive(_family("SLEAP_Soy/primary_multi-day/labels.v001.slp")).mode is None
+    )
+    assert (
+        gap.derive(
+            _family("SLEAP_medicago_plates/multiclass_bottomup/labels.v001.slp")
+        ).mode
+        == "plate"
+    )
+    assert (
+        gap.derive(_family("SLEAP_multiple_species/cyl/labels.v001.slp")).mode
+        == "cylinder"
+    )
+
+
+def test_two_capture_words_derive_nothing():
+    """The first token used to win silently."""
+    plain = gap.derive(_family("plates/cyl_primary/labels.v001.slp"))
+    counted = gap.derive(_family("multiplant/plate/labels.v001.slp"))
+
+    assert plain.mode is None
+    assert counted.mode is None
+    assert plain.modes_named == ("cylinder", "plate")
+    assert counted.modes_named == ("multiplant cylinder", "plate")
+    assert "ambiguous-mode" in plain.flags
+    assert "ambiguous-mode" in counted.flags
+
+
+def test_a_capture_word_named_twice_is_one():
+    """Characterisation."""
+    derived = gap.derive(
+        _family("SLEAP_arabidopsis_plates/plate_primary/labels.v001.slp")
+    )
+
+    assert derived.mode == "plate"
+    assert derived.flags == ()
+
+
+def test_flags_are_sorted():
+    derived = gap.derive(
+        _family("SLEAP_arabidopsis_plates/plates/cyl_x/labels_wheat_2-3DAG.v001.slp")
+    )
+
+    assert derived.mode is None
+    assert derived.flags == ("ambiguous-mode", "folder-species-differs")
+
+
+def test_the_derived_spelling_is_the_contracts():
+    """Characterisation: the derived mode is a `MODE_VOCAB` value."""
+    from sleap_roots_training.registry import chooser
+
+    assert "multiplant cylinder" in chooser.MODE_VOCAB
