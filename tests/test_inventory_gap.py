@@ -403,7 +403,7 @@ def test_an_alias_in_the_filename_is_read_and_compared():
 
 def test_a_glued_only_prefix_is_read_and_a_bare_one_is_not():
     glued = gap.derive(
-        _family("generalizability/x/labels_ONLYpennycress_6nodes.v000.slp")
+        _family("generalizability/x/labels_ONLYpennycress_primary_6nodes.v000.slp")
     )
     bare = gap.derive(_family("generalizability/x/labels_7DAP_laterals_ONLY.v007.slp"))
 
@@ -452,6 +452,7 @@ def test_an_open_folder_word_is_kept_and_contradicts_nothing():
     named = gap.derive(_family("SLEAP_packages_10-24-23/labels_rice_3do.v001.slp"))
 
     assert unnamed.species == "packages"
+    assert unnamed.species_from == "folder"
     assert named.species == "rice"
     assert "folder-species-differs" not in named.flags
 
@@ -571,6 +572,7 @@ def test_the_derived_spelling_is_the_contracts():
     from sleap_roots_training.registry import chooser
 
     assert "multiplant cylinder" in chooser.MODE_VOCAB
+    assert gap._MULTIPLANT_MODE in chooser.MODE_VOCAB
 
 
 # --------------------------------------------------------------------------------------
@@ -633,3 +635,24 @@ def test_pooled_names_still_count_as_uncovered(tmp_path):
 
     assert "pennycress" in report.uncovered_species
     assert report.families_skipped_reasons["multi-species"] == 2
+
+
+def test_only_the_deciding_directory_is_consulted():
+    """Characterisation: a crop in a deeper directory neither adds to nor flags it."""
+    under_sleap = gap.derive(_family("SLEAP_wheat/arabidopsis_x/labels.v001.slp"))
+    plain = gap.derive(_family("rice_runs/sorghum_x/labels.v001.slp"))
+
+    assert under_sleap.species == "wheat"
+    assert under_sleap.folder_species == ("wheat",)
+    assert plain.species == "rice"
+    assert plain.folder_species == ("rice",)
+    assert under_sleap.flags == ()
+    assert plain.flags == ()
+
+
+def test_a_species_named_twice_or_by_alias_is_one():
+    """Characterisation."""
+    derived = gap.derive(_family("x/labels_soy_soybean.v001.slp"))
+
+    assert derived.species == "soybean"
+    assert derived.flags == ()

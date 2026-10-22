@@ -190,3 +190,4 @@ def test_an_unlistable_root_is_a_clean_error(tmp_path, monkeypatch):
     assert result.exit_code != 0
     assert isinstance(result.exception, SystemExit), repr(result.exception)
     assert not out.exists()
+    assert "could not be read" in result.output
