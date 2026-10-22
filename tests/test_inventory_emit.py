@@ -468,3 +468,159 @@ def test_the_unparseable_section_is_deduplicated_and_path_qualified(tmp_path):
     assert section.count("labels.v001.slp") == 2
     assert "<ROOT>/SLEAP_sorghum/primary/labels.v001.slp" in section
     assert str(tmp_path) not in report
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Derivation Findings Are Reported
+# --------------------------------------------------------------------------------------
+
+
+def _section(report, heading):
+    """Return the lines under ``heading``, up to the next heading."""
+    lines = report.splitlines()
+    assert heading in lines, f"missing heading {heading!r}"
+    body = []
+    for line in lines[lines.index(heading) + 1 :]:
+        if line.startswith("#"):
+            break
+        body.append(line)
+    return body
+
+
+def _entries(section):
+    return [line for line in section if line.startswith("- ")]
+
+
+def _assert_redacted(out, tmp_path, section):
+    """Nothing above the root, in either artifact or in the section's paths."""
+    for name in (emit.TABLE_FILENAME, emit.REPORT_FILENAME):
+        text = (out / name).read_text(encoding="utf-8")
+        assert str(tmp_path) not in text
+        assert tmp_path.as_posix() not in text
+    for line in _entries(section):
+        for quoted in line.split("`")[1::2]:
+            assert quoted.startswith("<ROOT>/"), quoted
+
+
+def _emit(tmp_path, root):
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    return out, (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+
+def test_the_table_records_named_crops_and_flags(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "cyl_x" / "labels_canola_pennycress_arabidopsis.v015.slp")
+
+    out, _ = _emit(tmp_path, root)
+    with (out / emit.TABLE_FILENAME).open(encoding="utf-8", newline="") as handle:
+        header = next(csv.reader(handle))
+
+    assert header == [
+        "path",
+        "version",
+        "species",
+        "species_source",
+        "species_named",
+        "flags",
+        "mode",
+        "root_type",
+        "node_count",
+        "frames",
+        "user_instances",
+        "predicted_instances",
+        "skeleton_state",
+        "skeleton_names",
+        "video_filenames",
+        "members",
+        "member_filenames",
+        "member_node_counts",
+        "members_disagree",
+        "twin_of",
+        "registry_status",
+        "registry_detail",
+        "error",
+    ]
+    (row,) = _rows(out)
+    assert row["species"] == ""
+    assert json.loads(row["species_named"]) == ["arabidopsis", "canola", "pennycress"]
+    assert row["flags"] == "multi-species"
+
+
+def test_the_report_states_the_precedence(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+
+    _, report = _emit(tmp_path, root)
+    section = " ".join(_section(report, "## Name derivation"))
+
+    assert "filename before the folder" in section
+    assert "several species" in section
+
+
+def test_a_pooled_family_is_listed_not_resolved(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "cyl_x" / "labels_canola_pennycress_arabidopsis.v015.slp")
+    write_labels(root / "SLEAP_Canola_Pennycress" / "x" / "labels.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    section = _section(report, "### Families naming more than one species")
+    entries = _entries(section)
+
+    assert entries == [
+        "- `<ROOT>/SLEAP_Canola_Pennycress/x/labels.v001.slp` names canola, "
+        "pennycress (folder)",
+        "- `<ROOT>/cyl_x/labels_canola_pennycress_arabidopsis.v015.slp` names "
+        "arabidopsis, canola, pennycress (filename)",
+    ]
+    assert "split per species or matched to per-species files" in " ".join(section)
+    _assert_redacted(out, tmp_path, section)
+
+
+def test_folder_disagreements_are_grouped_by_directory(tmp_path):
+    root = tmp_path / "share"
+    first = root / "SLEAP_arabidopsis_plates" / "labels"
+    write_labels(first / "labels_wheat_2-3DAG.v002.slp")
+    write_labels(first / "labels_wheat_5DAG.v001.slp")
+    write_labels(first / "labels.v001.slp")
+    write_labels(root / "SLEAP_wheat" / "x" / "labels_rice_3do.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    section = _section(report, "### Folder and filename disagree on species")
+    entries = _entries(section)
+
+    assert len(entries) == 2
+    (grouped,) = [e for e in entries if "SLEAP_arabidopsis_plates" in e]
+    assert grouped.startswith("- `<ROOT>/SLEAP_arabidopsis_plates/labels`")
+    assert "2 families" in grouped
+    assert "arabidopsis → wheat" in grouped
+    assert "filename's species was used" in " ".join(section)
+    _assert_redacted(out, tmp_path, section)
+
+
+def test_two_capture_words_are_listed(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "plates" / "cyl_x" / "labels.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    section = _section(report, "### Paths naming more than one capture mode")
+
+    assert _entries(section) == [
+        "- `<ROOT>/plates/cyl_x/labels.v001.slp` names cylinder, plate"
+    ]
+    _assert_redacted(out, tmp_path, section)
+
+
+def test_empty_derivation_findings_emit_no_subsection(tmp_path):
+    """Characterisation: nothing to list, nothing rendered."""
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+
+    _, report = _emit(tmp_path, root)
+
+    for heading in (
+        "### Families naming more than one species",
+        "### Folder and filename disagree on species",
+        "### Paths naming more than one capture mode",
+    ):
+        assert heading not in report
