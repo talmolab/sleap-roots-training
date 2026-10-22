@@ -223,7 +223,7 @@ commit exists, so push only at GREEN points.
 
 ## 5. Partial scans write nothing (`Deterministic Artifacts`, MODIFIED)
 
-- [ ] 5.1 RED — `test(inventory): refuse to write a scan that missed a directory (RED)`:
+- [x] 5.1 RED — `test(inventory): refuse to write a scan that missed a directory (RED)`:
   - `test_emit.py::test_a_partially_readable_root_writes_nothing`: a tree with one real
     family. Use the existing `_blind` monkeypatch pattern on `emit.discover.walk` to add an
     unreadable subdirectory. Assert that `emit.build` raises `emit.PartialScan` (today it
@@ -237,7 +237,7 @@ commit exists, so push only at GREEN points.
     `SystemExit`). Today `PartialScan` escapes uncaught.
   - The existing `test_a_partial_scan_refuses_to_overwrite_the_artifacts` stays green.
     **Characterisation.**
-- [ ] 5.2 GREEN — `feat(inventory): write nothing when any directory could not be read (GREEN)`
+- [x] 5.2 GREEN — `feat(inventory): write nothing when any directory could not be read (GREEN)`
   - `emit.build` raises `PartialScan` whenever `scan.unreadable_paths` is non-empty. Its
     message lists them via `redact.emit_path(p, root).text`, sorted.
   - `cli.py` catches `PartialScan` beside `UnusableRoot` and raises `click.ClickException`.

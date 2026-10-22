@@ -90,7 +90,9 @@ class PartialScan(Exception):
 
     A root that exists but cannot be listed still passes ``is_dir()``. Writing what such
     a scan found would overwrite the committed artifacts with a near-empty file, and the
-    diff would read as the corpus having disappeared.
+    diff would read as the corpus having disappeared. The same holds for one unreadable
+    directory among many: its families would read as deleted. So any unreadable directory
+    refuses the whole scan, and the message names each one relative to the root.
     """
 
 
@@ -207,6 +209,8 @@ def build(
 
     Raises:
         UnusableRoot: If ``root`` is not a readable directory. Nothing is written.
+        PartialScan: If any directory beneath ``root`` could not be listed. Nothing is
+            written.
     """
     root = Path(root)
     if not root.is_dir():
@@ -214,11 +218,14 @@ def build(
 
     statuses = dict(statuses or {})
     scan = discover.walk(root)
-    if scan.unreadable_paths and not scan.candidates:
+    if scan.unreadable_paths:
+        unreadable = sorted(
+            redact.emit_path(path, root).text for path in scan.unreadable_paths
+        )
         raise PartialScan(
-            f"{len(scan.unreadable_paths)} director(ies) could not be read and no "
-            "candidates were found; refusing to write a scan that would read as the "
-            "corpus having disappeared"
+            f"{len(unreadable)} director(ies) could not be read, so nothing was "
+            "written; a partial scan would read as part of the corpus having "
+            "disappeared: " + ", ".join(unreadable)
         )
     families = discover.group(scan.candidates)
     by_key = {family.key: family for family in families}
@@ -352,8 +359,9 @@ def exit_code(inventory: Inventory) -> int:
     """Return the process exit status for a completed scan.
 
     Always zero. Mismatches, unregistered families and unresolvable groups are findings
-    for a person to read, not failures of the tool. Only an unusable root is an error,
-    and that raises :class:`UnusableRoot` before anything is written.
+    for a person to read, not failures of the tool. Only an unusable root or a partial
+    scan is an error, and those raise :class:`UnusableRoot` or :class:`PartialScan`
+    before anything is written.
 
     Args:
         inventory: The completed scan.

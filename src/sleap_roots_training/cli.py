@@ -459,7 +459,10 @@ def inventory_labels_command(
     directory chain recorded on another machine reaches an artifact.
 
     Exits zero whatever it finds. Mismatches, unregistered files and unresolvable groups
-    are findings to read, not failures; only an unusable ROOT is an error.
+    are findings to read, not failures. Only an unusable ROOT is an error, or a scan
+    that could not list every directory beneath it: that writes nothing, names the
+    unreadable directories and exits non-zero, so a partial scan never overwrites the
+    committed artifacts.
     """
     statuses = None
     if registry:
@@ -479,7 +482,7 @@ def inventory_labels_command(
 
     try:
         result = inventory_emit.build(root, verifier=statuses)
-    except inventory_emit.UnusableRoot as error:
+    except (inventory_emit.UnusableRoot, inventory_emit.PartialScan) as error:
         raise click.ClickException(str(error)) from error
 
     table, report = inventory_emit.write(result, output)
@@ -488,11 +491,6 @@ def inventory_labels_command(
         f"Saw {scan.files_seen} .slp file(s); {len(result.rows)} famil(ies) after "
         f"excluding {len(scan.exclusions)} derived."
     )
-    if scan.unreadable_directories:
-        click.echo(
-            f"WARNING: {scan.unreadable_directories} director(ies) could not be read; "
-            "the coverage counts are incomplete."
-        )
     if result.ambiguous_directories:
         click.echo(
             f"{len(result.ambiguous_directories)} director(ies) hold more than one "
