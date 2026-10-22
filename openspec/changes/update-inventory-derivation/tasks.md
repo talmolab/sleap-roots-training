@@ -246,7 +246,7 @@ commit exists, so push only at GREEN points.
 
 ## 6. Docs and verification
 
-- [ ] 6.1 `docs(inventory): filename-first species, derivation flags, and partial scans`:
+- [x] 6.1 `docs(inventory): filename-first species, derivation flags, and partial scans`:
   - `labeling/data/skeletons.yaml`: replace the plate-row comment's "The inventory still calls
     them arabidopsis, because it reads species from the directory before the filename (#65)"
     with: "The inventory reads the four `labels_wheat_*` files as wheat from their filenames
