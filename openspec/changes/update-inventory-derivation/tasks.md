@@ -154,7 +154,7 @@ commit exists, so push only at GREEN points.
 
 ## 3. Gap report skip reasons (`Skeleton Table Mode Gap`, MODIFIED)
 
-- [ ] 3.1 RED — `test(inventory): count names that say too much by their own reason (RED)`.
+- [x] 3.1 RED — `test(inventory): count names that say too much by their own reason (RED)`.
   These use real files via `write_labels(tmp_path / ...)`:
   - `test_a_name_that_says_too_much_is_skipped_by_its_own_reason`: two families,
     `cyl_x/primary_x/labels_canola_pennycress.v001.slp` and
@@ -171,7 +171,7 @@ commit exists, so push only at GREEN points.
     `SLEAP_Canola_Pennycress/cyl_x/primary_x/labels.v001.slp`, against a table without
     pennycress. Assert `"pennycress" in uncovered_species` (today absent) and
     `families_skipped_reasons["multi-species"] == 2`.
-- [ ] 3.2 GREEN — `feat(inventory): skip multi-species and ambiguous-mode families by name (GREEN)`
+- [x] 3.2 GREEN — `feat(inventory): skip multi-species and ambiguous-mode families by name (GREEN)`
   - In `build_report`, a `MULTI_SPECIES` flag replaces the `no-species` reason, and
     `AMBIGUOUS_MODE` replaces `no-mode`.
   - `derived_species` also takes `species_named` from multi-species families.

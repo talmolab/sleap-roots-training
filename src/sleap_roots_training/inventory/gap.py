@@ -399,6 +399,9 @@ def build_report(
         derived = derive(observed.family)
         if derived.species:
             derived_species.add(derived.species)
+        elif MULTI_SPECIES in derived.flags:
+            # A pooled file is labels of each crop it names.
+            derived_species.update(derived.species_named)
 
         names = observed.facts.skeleton_names
         if names and any(_is_unparseable(name) for name in names):
@@ -409,12 +412,15 @@ def build_report(
             )
 
         node_count = observed.facts.node_count
+        # A name that says too much is a different finding from one that says nothing.
+        no_species = MULTI_SPECIES if MULTI_SPECIES in derived.flags else "no-species"
+        no_mode = AMBIGUOUS_MODE if AMBIGUOUS_MODE in derived.flags else "no-mode"
         missing = [
             name
             for name, value in (
-                ("no-species", derived.species),
+                (no_species, derived.species),
                 ("no-root-type", derived.root_type),
-                ("no-mode", derived.mode),
+                (no_mode, derived.mode),
                 ("no-node-count", None if node_count is None else True),
             )
             if not value
