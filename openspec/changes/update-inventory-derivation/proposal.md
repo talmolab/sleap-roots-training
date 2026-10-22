@@ -55,6 +55,18 @@ reviewers reproduced them independently. "Labelled" means `user_instances > 0`.
   its images say wheat. A test in this change pins 13/1/3 against the committed CSV, so drift
   shows at PR time, not after the re-scan.
 
+- **The gap report's other findings.** Over the committed CSV: 76 families analysed, before
+  and after. `multi-species: 33` joins the skip reasons, and the other reasons are unchanged.
+  `packages` and `multiple` leave the uncovered list. The mode gaps are identical.
+  `(arabidopsis, plate, primary)` node-count disagreements drop from 9 paths to 5, because
+  the four `labels_wheat_2-3DAG*` files leave. They become wheat, which has no row, so they
+  are analysed but checked against nothing; the folder-disagreement line is what surfaces
+  them.
+- **Root type is still read from the whole path below the root.** So
+  `SLEAP_wheat/seminal/labels_rice_*` becomes `(rice, crown)`. The wheat nickname `seminal`
+  is applied to rice. These families have no mode, so they are not analysed. They carry
+  `folder-species-differs`, so a reader is warned.
+
 ## What Changes
 
 The rules themselves are normative only in the spec delta. Briefly:
@@ -115,7 +127,9 @@ used to write and exit 0.
   disagreements are flagged and grouped by directory. `only<species>` is recognised.
 - Resolving the multi-species files is a separate follow-up (#59).
 - A scan that cannot list every directory writes nothing and exits non-zero (2026-10-15).
-  This makes the approved re-scan command safe exactly as written.
+  This makes the approved re-scan command safe against partial scans as written. An
+  unreachable registry is not a partial scan: the command still writes, with every
+  `registry_status` `not-checked`, and only the manual gate in tasks 7.2 catches it.
 
 ### Why after `source` instead of after `root_type`?
 
@@ -141,9 +155,11 @@ is not compared.
   (#59).
 - **#64** waits for LabelCard metadata (#11/#49). **#62** waits until the multiplant files are
   found. **#60** is unrelated.
-- **Path parts above the scan root reach `derive()`**, as today. No part of the approved root
-  matches a token, but a pytest temp directory can, so the tests avoid it (tasks rules). That
-  is #78.
+- **Path parts above the scan root.** The scan no longer passes them to `derive()`: `emit.build`
+  derives from the path below the root and hands that `Derived` to the gap report (pre-PR
+  review round). `gap.derive` and `gap.build_report`, called directly as the gap tests do,
+  still read a family's path as given, so the derivation tests keep their relative families.
+  The rest is #78.
 - **CI runs no `openspec validate`** (#80). Both pinned CLIs run locally, and their output goes
   in the PR body.
 - **The CSV formula neutralisation is never applied** (#79). That predates this change. The

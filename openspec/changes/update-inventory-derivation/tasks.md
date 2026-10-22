@@ -282,6 +282,27 @@ commit exists, so push only at GREEN points.
 - [x] 6.5 `git diff --stat main -- inventory/` is empty. This PR does not touch the committed
   scan.
 
+## 6b. Pre-PR review round
+
+The five-lens self-review (report only) found no blocking issues. These items were taken as one
+RED/GREEN pair, plus this reconciliation.
+
+- [x] 6b.1 RED: `test(inventory): pin the pre-PR review round (RED)`. Names above the root, the
+  capped and deduplicated refusal message, `None.` and "not evidence" in "Name derivation".
+  The tests that mutation probes showed to be weak are strengthened (characterisation).
+- [x] 6b.2 GREEN: `fix(inventory): derive below the root, and bound the refusal message (GREEN)`.
+  - `emit.build` derives from `_below_root(family, root)` and passes the `Derived` through
+    `gap.Observed.derived`, so the table, the report sections and the gap report share one
+    derivation.
+  - `PartialScan` names each directory once, capped at 20.
+  - Adds the `discover.UNKNOWN_PATH` constant.
+  - The `--help` text says when the command exits non-zero.
+- [x] 6b.3 Not taken, with reasons:
+  - Dropping "directories that could not be read: N" from the report: the Candidate
+    Enumeration scenario requires that count, and it is now always 0, which is true.
+  - Widening the refusal to an unreachable registry: the owner decided partial scans only.
+    The proposal now says so, and 7.2 gates the registry.
+
 ## 7. After merge: the re-scan PR, then the archive PR
 
 These are not part of this PR. They are two follow-up PRs, merged in this order, because the
@@ -309,7 +330,10 @@ hand both off explicitly rather than leaving §7 unticked in an unarchived chang
 
   Report any drift in the PR body; do not explain it away.
 - [ ] 7.5 The commit holds `inventory/` only. Open PR B and require the full matrix green:
-  `inventory/**` triggers CI, which runs the plurality test. Rollback is one `git revert`
+  `inventory/**` triggers CI, which runs the plurality test.
+  `test_the_plate_row_survives_filename_first_derivation` pins `{8: 13, 6: 1, 7: 3}`. If the
+  live share has drifted, that test fails, and PR B may update the pin, stating the drift in its
+  body. That is the one exception to `inventory/` only. Rollback is one `git revert`
   of its squash commit.
 - [ ] 7.6 **PR C, `chore(openspec): archive update-inventory-derivation`**, after PR B. Tick
   §7, record any 7.4 drift as `### Why N instead of M?`, merge the delta into

@@ -132,10 +132,15 @@ class Observed:
     Attributes:
         family: The version family.
         facts: What the file said about itself.
+        derived: What its path below the scan root gives, when the caller has derived
+            it. The scan passes it, so the gap report reads the same values as the
+            table and never the directories above the root. ``None`` derives from
+            ``family`` as given.
     """
 
     family: discover.Family
     facts: read.FileFacts
+    derived: Optional[Derived] = None
 
 
 @dataclass(frozen=True)
@@ -396,7 +401,7 @@ def build_report(
     derived_species: set[str] = set()
 
     for observed in observations:
-        derived = derive(observed.family)
+        derived = observed.derived or derive(observed.family)
         if derived.species:
             derived_species.add(derived.species)
         elif MULTI_SPECIES in derived.flags:

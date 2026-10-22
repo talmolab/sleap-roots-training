@@ -458,10 +458,10 @@ def inventory_labels_command(
     referenced video path is emitted as its filename alone — nothing above ROOT and no
     directory chain recorded on another machine reaches an artifact.
 
-    Exits zero whatever it finds. Mismatches, unregistered files and unresolvable groups
-    are findings to read, not failures. Only an unusable ROOT is an error, or a scan
-    that could not list every directory beneath it: that writes nothing, names the
-    unreadable directories and exits non-zero, so a partial scan never overwrites the
+    Exits zero on any completed scan: mismatches, unregistered files and unresolvable
+    groups are findings to read, not failures. Exits non-zero, writing nothing, when
+    ROOT is unusable or any directory beneath it could not be listed; the unreadable
+    directories are named relative to ROOT, so a partial scan never overwrites the
     committed artifacts.
     """
     statuses = None

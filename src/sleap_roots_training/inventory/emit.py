@@ -39,6 +39,10 @@ REPORT_FILENAME = "label-inventory.md"
 #: list is in the table.
 _STEMS_SHOWN = 8
 
+#: How many unreadable directories a refused scan names before summarising the rest.
+#: A dropped share connection fails every directory still to be walked.
+_UNREADABLE_SHOWN = 20
+
 #: Registry status for a family whose digest was not looked up at all.
 NOT_CHECKED = "not-checked"
 
@@ -220,12 +224,15 @@ def build(
     scan = discover.walk(root)
     if scan.unreadable_paths:
         unreadable = sorted(
-            redact.emit_path(path, root).text for path in scan.unreadable_paths
+            {_unreadable_label(path, root) for path in scan.unreadable_paths}
         )
+        listed = ", ".join(unreadable[:_UNREADABLE_SHOWN])
+        if len(unreadable) > _UNREADABLE_SHOWN:
+            listed += f", and {len(unreadable) - _UNREADABLE_SHOWN} more"
         raise PartialScan(
             f"{len(unreadable)} director(ies) could not be read, so nothing was "
             "written; a partial scan would read as part of the corpus having "
-            "disappeared: " + ", ".join(unreadable)
+            "disappeared: " + listed
         )
     families = discover.group(scan.candidates)
     by_key = {family.key: family for family in families}
@@ -246,8 +253,10 @@ def build(
             member.path: read.read_facts(member.path) for member in family.members
         }
         facts = per_member[candidate.path]
-        observations.append(gap.Observed(family=family, facts=facts))
-        derived = gap.derive(family)
+        # Derived from the path below the root only: the directories above it are the
+        # operator's, not the corpus's, and must not supply a species, mode or flag.
+        derived = gap.derive(_below_root(family, root))
+        observations.append(gap.Observed(family=family, facts=facts, derived=derived))
         emitted = redact.emit_path(candidate.path, root)
         # Built from the same `derived` as the row, so table and report cannot disagree.
         if gap.MULTI_SPECIES in derived.flags:
@@ -355,6 +364,27 @@ def build(
     )
 
 
+def _below_root(family: discover.Family, root: Path) -> discover.Family:
+    """Return ``family`` with its directory expressed relative to ``root``.
+
+    ``discover.walk`` builds every directory by joining onto ``root``, so the relative
+    form always exists.
+    """
+    return discover.Family(
+        directory=family.directory.relative_to(root),
+        stem=family.stem,
+        suffix=family.suffix,
+    )
+
+
+def _unreadable_label(path: Path, root: Path) -> str:
+    """Name an unreadable directory for the refusal message, relative to the root."""
+    if str(path) == discover.UNKNOWN_PATH:
+        return discover.UNKNOWN_PATH
+    text = redact.emit_path(path, root).text
+    return redact.ROOT_TOKEN if text == f"{redact.ROOT_TOKEN}/." else text
+
+
 def exit_code(inventory: Inventory) -> int:
     """Return the process exit status for a completed scan.
 
@@ -422,10 +452,17 @@ def _render_name_derivation(inventory: Inventory) -> list[str]:
         "## Name derivation",
         "",
         "Species is read from the filename before the folder, and a filename or folder",
-        "that names several species yields none. What the names cannot settle is listed",
-        "here, and the tool assigns nothing to it.",
+        "that names several species yields none. Only the path below the root is read.",
+        "These are names, not evidence. What they cannot settle is listed here, and the",
+        "tool assigns nothing to it.",
         "",
     ]
+    if not (
+        inventory.multi_species
+        or inventory.folder_disagreements
+        or inventory.ambiguous_modes
+    ):
+        lines += ["None.", ""]
     if inventory.multi_species:
         lines += [
             "### Families naming more than one species",

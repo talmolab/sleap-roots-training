@@ -10,7 +10,8 @@ and a bare `only` naming nothing. A stem naming the same species twice, or by al
 names one. Where the stem names none, the folder decides: the known species in the first
 `SLEAP_<x>` directory, or its open `<x>` where it names none; where no directory is
 `SLEAP_<x>`, the known species of the first directory that names one. Only that deciding
-directory is consulted. A multi-species label file is never registered as it is — it is split
+directory is consulted, and only directories below the scan root are read: the ones above
+it are the operator's, not the corpus's, and must supply no species, mode or flag. A multi-species label file is never registered as it is — it is split
 per species or matched to per-species files — so a part naming several species yields no
 species, never the first it names. A single filename species is kept, and flagged
 `folder-species-differs`, where the deciding directory names at least one known species and
@@ -54,12 +55,18 @@ none of them is the filename's.
 - **WHEN** a family is `experiments/x_sorghum_soybean_canola_pennycress_rice_arabidopsis_on_y/labels_rice_3do.v001.slp`
 - **THEN** its species is `rice` and it is not flagged `folder-species-differs`
 
+#### Scenario: Names above the scan root derive nothing
+- **WHEN** the scan root is `…/SLEAP_janedoe/plates_x/share` and it holds `cyl_x/labels.v001.slp` and `exp/labels_wheat.v001.slp`
+- **THEN** the first family's species is empty and its mode is `cylinder`, with no flag
+- **AND** the second's species is `wheat` and its mode is empty, with no flag
+- **AND** `janedoe` appears in neither artifact
+
 #### Scenario: A filename species outside a multi-species folder is flagged
 - **WHEN** a family is `SLEAP_Canola_Pennycress/primary_root/labels_wheat_5DAG.v001.slp`
 - **THEN** its species is `wheat` and it is flagged `folder-species-differs`
 
 ### Requirement: Capture Mode Derivation
-The command SHALL derive a family's capture mode from its whole path, SHALL read an exact `multiplant` token as `multiplant cylinder`, and SHALL derive no mode, flagging the family `ambiguous-mode`, where the path names more than one distinct mode.
+The command SHALL derive a family's capture mode from its whole path below the scan root, SHALL read an exact `multiplant` token as `multiplant cylinder`, and SHALL derive no mode, flagging the family `ambiguous-mode`, where the path names more than one distinct mode.
 
 `multiplant cylinder` is the `MODE_VOCAB` spelling. Multiplant cylinders are arabidopsis only,
 all from one labeler who also labelled single-plant cylinders, so a labeler's name is not
@@ -136,6 +143,7 @@ The tool lists these and decides nothing about them.
 #### Scenario: Empty findings emit no subsection
 - **WHEN** no family is multi-species, disagrees with its folder, or names two modes
 - **THEN** none of the three subsections appears
+- **AND** the "Name derivation" section says `None.` and that these are names, not evidence
 
 #### Scenario: The new sections carry no path above the root
 - **WHEN** any of the three subsections is emitted
@@ -153,7 +161,9 @@ artifacts are committed and opened in Excel, and the values come from files writ
 elsewhere. A scan that could not list part of the tree SHALL NOT overwrite the artifacts,
 because writing what it found makes the diff read as the corpus having disappeared. That
 holds whenever any directory could not be listed, not only when nothing was found: the command
-writes nothing, names each unreadable directory relative to the root, and exits non-zero. The artifacts SHALL carry no run-varying metadata — no wall-clock timestamp, no
+writes nothing, names each unreadable directory once, relative to the root — the first 20,
+then how many more, since a dropped share connection fails every directory still to be
+walked — and exits non-zero. The artifacts SHALL carry no run-varying metadata — no wall-clock timestamp, no
 duration, no hostname — or successive runs could not diff. Byte identity across operating
 systems is out of scope.
 
@@ -173,6 +183,11 @@ systems is out of scope.
 - **WHEN** candidates are found but one directory beneath the root cannot be listed
 - **THEN** the command writes neither artifact, leaving any existing ones unchanged
 - **AND** it names that directory relative to the root and exits non-zero
+
+#### Scenario: A refused scan names each directory once, and caps the list
+- **WHEN** 25 distinct directories, one of them reported twice, cannot be listed
+- **THEN** the message counts 25, names `<ROOT>/d00` once, lists the first 20 sorted and says `and 5 more`
+- **AND** the root itself is named `<ROOT>` and a directory the walk could not name is `<unknown>`
 
 #### Scenario: Exit status reflects usability, not findings
 - **WHEN** the scan completes having recorded mismatches, unregistered families and unresolvable groups
