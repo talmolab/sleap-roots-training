@@ -624,3 +624,29 @@ def test_empty_derivation_findings_emit_no_subsection(tmp_path):
         "### Paths naming more than one capture mode",
     ):
         assert heading not in report
+
+
+def test_a_partially_readable_root_writes_nothing(tmp_path, monkeypatch):
+    """Scenario: A partially readable root writes nothing.
+
+    Candidates were found, so the zero-candidate guard did not fire. A scan that missed
+    one directory would have overwritten the committed artifacts and exited 0.
+    """
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+    real_walk = emit.discover.walk
+
+    def _half_blind(path):
+        result = real_walk(path)
+        result.unreadable_paths.append(root / "locked")
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _half_blind)
+
+    with pytest.raises(emit.PartialScan) as raised:
+        emit.build(root)
+
+    message = str(raised.value)
+    assert "<ROOT>/locked" in message
+    assert str(tmp_path) not in message
+    assert tmp_path.as_posix() not in message
