@@ -23,6 +23,19 @@ def _observe(path):
     return gap.Observed(family=family, facts=read.read_facts(path))
 
 
+def _family(rel):
+    """A family built from a relative path, with no file on disk.
+
+    ``derive()`` reads a family's whole path, and pytest names ``tmp_path`` after the
+    test, so a temp directory can supply a species, mode or root-type token (#78).
+    """
+    path = gap.Path(rel)
+    parsed = discover.parse_version(path)
+    return discover.Family(
+        directory=path.parent, stem=parsed.stem, suffix=parsed.suffix
+    )
+
+
 def _row(species, mode, root_type, node_count, age=None):
     """One injected table row, built inside a test rather than at module scope."""
     return SkeletonRow(
@@ -280,13 +293,14 @@ def test_species_mode_and_root_type_are_labelled_name_derived(tmp_path):
     assert derived.source == gap.NAME_DERIVED
 
 
-def test_wheats_seminal_nickname_derives_the_crown_root_type(tmp_path):
-    """The team calls wheat's seminal roots crown; `RootType` gains no member."""
-    path = write_labels(
-        tmp_path / "SLEAP_wheat" / "seminal" / "labels_sr_5-14DAG.v004.slp",
-        skeleton_names=("Skeleton-1",),
-    )
-    assert gap.derive(_observe(path).family).root_type == "crown"
+def test_wheats_nickname_derives_the_third_row():
+    """The team calls wheat's seminal roots crown; `RootType` gains no member.
+
+    Built from a relative family: under ``tmp_path`` this test's own temp directory,
+    ``test_wheats_seminal_nickname_d0``, supplied ``seminal`` and could not fail (#78).
+    """
+    family = _family("SLEAP_wheat/seminal/labels_sr_5-14DAG.v004.slp")
+    assert gap.derive(family).root_type == "crown"
 
 
 # --------------------------------------------------------------------------------------
@@ -356,3 +370,121 @@ def test_the_report_states_how_much_of_the_corpus_it_analysed(tmp_path):
     assert report.families_considered == 2
     assert report.families_analysed == 1
     assert report.families_skipped_reasons["no-mode"] == 1
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Filename-First Species Derivation
+# --------------------------------------------------------------------------------------
+
+
+def test_the_filename_beats_the_folder():
+    """Wheat plate labels sit in an arabidopsis folder; the filename says wheat."""
+    derived = gap.derive(
+        _family(
+            "SLEAP_arabidopsis_plates/labels/primary_8nodes/labels_wheat_2-3DAG.v002.slp"
+        )
+    )
+
+    assert derived.species == "wheat"
+    assert derived.species_from == "filename"
+    assert derived.species_named == ("wheat",)
+    assert derived.folder_species == ("arabidopsis",)
+    assert derived.flags == ("folder-species-differs",)
+
+
+def test_an_alias_in_the_filename_is_read_and_compared():
+    derived = gap.derive(
+        _family("SLEAP_sorghum/lateral_4nodes/labels_soy_lateral_4nodes.v001.slp")
+    )
+
+    assert derived.species == "soybean"
+    assert "folder-species-differs" in derived.flags
+
+
+def test_a_glued_only_prefix_is_read_and_a_bare_one_is_not():
+    glued = gap.derive(
+        _family("generalizability/x/labels_ONLYpennycress_6nodes.v000.slp")
+    )
+    bare = gap.derive(_family("generalizability/x/labels_7DAP_laterals_ONLY.v007.slp"))
+
+    assert glued.species == "pennycress"
+    assert bare.species is None
+    assert bare.flags == ()
+
+
+def test_a_filename_naming_several_derives_none():
+    """Never the first species named, and never the folder's (#59)."""
+    derived = gap.derive(
+        _family(
+            "SLEAP_medicago/primary_root/labels_canola_pennycress_arabidopsis.v015.slp"
+        )
+    )
+
+    assert derived.species is None
+    assert derived.species_named == ("arabidopsis", "canola", "pennycress")
+    assert derived.species_from == "filename"
+    assert derived.flags == ("multi-species",)
+
+
+def test_a_folder_naming_several_derives_none():
+    derived = gap.derive(
+        _family("SLEAP_Canola_Pennycress/primary_root/AAP_primary_root_labels.v001.slp")
+    )
+
+    assert derived.species is None
+    assert derived.species_named == ("canola", "pennycress")
+    assert derived.species_from == "folder"
+    assert derived.flags == ("multi-species",)
+
+
+def test_an_unnamed_file_falls_back_to_the_folder():
+    """Characterisation of the species; the new fields are pinned alongside."""
+    derived = gap.derive(_family("SLEAP_Soy/lateral/labels.v001.slp"))
+
+    assert derived.species == "soybean"
+    assert derived.species_from == "folder"
+    assert derived.species_named == ("soybean",)
+    assert derived.flags == ()
+
+
+def test_an_open_folder_word_is_kept_and_contradicts_nothing():
+    unnamed = gap.derive(_family("SLEAP_packages_10-24-23/labels.v001.slp"))
+    named = gap.derive(_family("SLEAP_packages_10-24-23/labels_rice_3do.v001.slp"))
+
+    assert unnamed.species == "packages"
+    assert named.species == "rice"
+    assert "folder-species-differs" not in named.flags
+
+
+def test_a_folder_naming_the_filenames_crop_among_several_contradicts_nothing():
+    derived = gap.derive(
+        _family(
+            "experiments/x_sorghum_soybean_canola_pennycress_rice_arabidopsis_on_y/"
+            "labels_rice_3do.v001.slp"
+        )
+    )
+
+    assert derived.species == "rice"
+    assert derived.flags == ()
+
+
+def test_a_filename_crop_outside_a_pooled_folder_is_flagged():
+    derived = gap.derive(
+        _family("SLEAP_Canola_Pennycress/primary_root/labels_wheat_5DAG.v001.slp")
+    )
+
+    assert derived.species == "wheat"
+    assert derived.flags == ("folder-species-differs",)
+
+
+def test_a_pooled_nickname_file_derives_no_species():
+    """#11's specific doubt: the pooled wheat+rice set behind the wheat collection."""
+    derived = gap.derive(
+        _family(
+            "SLEAP_wheat/seminal/labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp"
+        )
+    )
+
+    assert derived.species is None
+    assert derived.flags == ("multi-species",)
+    assert derived.root_type == "crown"

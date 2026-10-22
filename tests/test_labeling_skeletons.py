@@ -998,3 +998,38 @@ def test_the_cached_rows_cannot_be_mutated_by_a_caller():
     assert isinstance(rows, tuple)
     with pytest.raises(Exception):
         rows[0].node_count = 99
+
+
+def test_the_plate_row_survives_filename_first_derivation():
+    """The committed scan, re-derived under update-inventory-derivation, still agrees.
+
+    The four ``labels_wheat_2-3DAG*`` 6-node files leave arabidopsis, so the evidence
+    moves from 13/5/3 to 13/1/3 at 8/6/7 nodes. Re-deriving here shows that at PR time
+    rather than after the 40-minute re-scan.
+    """
+    from sleap_roots_training.inventory import discover, gap
+
+    def _family(rel):
+        path = gap.Path(rel)
+        parsed = discover.parse_version(path)
+        return discover.Family(
+            directory=path.parent, stem=parsed.stem, suffix=parsed.suffix
+        )
+
+    with _INVENTORY_CSV.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    counts = collections.Counter()
+    for row in rows:
+        if not row["node_count"] or int(row["user_instances"] or 0) <= 0:
+            continue
+        # `<ROOT>` becomes the token `root`, which names nothing.
+        derived = gap.derive(_family(row["path"]))
+        if (derived.species, derived.mode, derived.root_type) == (
+            "arabidopsis",
+            "plate",
+            "primary",
+        ):
+            counts[int(row["node_count"])] += 1
+
+    assert counts == {8: 13, 6: 1, 7: 3}
+    assert _is_strict_plurality(counts, _plate_row().node_count)
