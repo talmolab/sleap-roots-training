@@ -468,3 +468,301 @@ def test_the_unparseable_section_is_deduplicated_and_path_qualified(tmp_path):
     assert section.count("labels.v001.slp") == 2
     assert "<ROOT>/SLEAP_sorghum/primary/labels.v001.slp" in section
     assert str(tmp_path) not in report
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Derivation Findings Are Reported
+# --------------------------------------------------------------------------------------
+
+
+def _section(report, heading):
+    """Return the lines under ``heading``, up to the next heading."""
+    lines = report.splitlines()
+    assert heading in lines, f"missing heading {heading!r}"
+    body = []
+    for line in lines[lines.index(heading) + 1 :]:
+        if line.startswith("#"):
+            break
+        body.append(line)
+    return body
+
+
+def _entries(section):
+    return [line for line in section if line.startswith("- ")]
+
+
+def _assert_redacted(out, tmp_path, section):
+    """Nothing above the root, in either artifact or in the section's paths."""
+    for name in (emit.TABLE_FILENAME, emit.REPORT_FILENAME):
+        text = (out / name).read_text(encoding="utf-8")
+        assert str(tmp_path) not in text
+        assert tmp_path.as_posix() not in text
+    for line in _entries(section):
+        for quoted in line.split("`")[1::2]:
+            assert quoted.startswith("<ROOT>/"), quoted
+    for name in (emit.TABLE_FILENAME, emit.REPORT_FILENAME):
+        text = (out / name).read_text(encoding="utf-8")
+        for segment in tmp_path.parts[1:]:
+            assert f"/{segment}/" not in text, segment
+
+
+def _emit(tmp_path, root):
+    out = tmp_path / "inventory"
+    emit.write(emit.build(root), out)
+    return out, (out / emit.REPORT_FILENAME).read_text(encoding="utf-8")
+
+
+def test_the_table_records_named_crops_and_flags(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "cyl_x" / "labels_canola_pennycress_arabidopsis.v015.slp")
+
+    out, _ = _emit(tmp_path, root)
+    with (out / emit.TABLE_FILENAME).open(encoding="utf-8", newline="") as handle:
+        header = next(csv.reader(handle))
+
+    assert header == [
+        "path",
+        "version",
+        "species",
+        "species_source",
+        "species_named",
+        "flags",
+        "mode",
+        "root_type",
+        "node_count",
+        "frames",
+        "user_instances",
+        "predicted_instances",
+        "skeleton_state",
+        "skeleton_names",
+        "video_filenames",
+        "members",
+        "member_filenames",
+        "member_node_counts",
+        "members_disagree",
+        "twin_of",
+        "registry_status",
+        "registry_detail",
+        "error",
+    ]
+    (row,) = _rows(out)
+    assert row["species"] == ""
+    assert json.loads(row["species_named"]) == ["arabidopsis", "canola", "pennycress"]
+    assert row["flags"] == "multi-species"
+
+
+def test_the_report_states_the_precedence(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+
+    _, report = _emit(tmp_path, root)
+    section = " ".join(_section(report, "## Name derivation"))
+
+    assert "filename before the folder" in section
+    assert "several species" in section
+
+
+def test_a_pooled_family_is_listed_not_resolved(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "cyl_x" / "labels_canola_pennycress_arabidopsis.v015.slp")
+    write_labels(root / "SLEAP_Canola_Pennycress" / "x" / "labels.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    section = _section(report, "### Families naming more than one species")
+    entries = _entries(section)
+
+    assert entries == [
+        "- `<ROOT>/SLEAP_Canola_Pennycress/x/labels.v001.slp` names canola, "
+        "pennycress (folder)",
+        "- `<ROOT>/cyl_x/labels_canola_pennycress_arabidopsis.v015.slp` names "
+        "arabidopsis, canola, pennycress (filename)",
+    ]
+    assert "split per species or matched to per-species files" in " ".join(section)
+    _assert_redacted(out, tmp_path, section)
+
+
+def test_folder_disagreements_are_grouped_by_directory(tmp_path):
+    root = tmp_path / "share"
+    first = root / "SLEAP_arabidopsis_plates" / "labels"
+    write_labels(first / "labels_wheat_2-3DAG.v002.slp")
+    write_labels(first / "labels_wheat_5DAG.v001.slp")
+    write_labels(first / "labels_rice_x.v001.slp")
+    write_labels(first / "labels.v001.slp")
+    write_labels(root / "SLEAP_wheat" / "x" / "labels_rice_3do.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    section = _section(report, "### Folder and filename disagree on species")
+
+    assert _entries(section) == [
+        "- `<ROOT>/SLEAP_arabidopsis_plates/labels`: 3 families; "
+        "arabidopsis → rice (1); arabidopsis → wheat (2)",
+        "- `<ROOT>/SLEAP_wheat/x`: 1 family; wheat → rice (1)",
+    ]
+    assert "filename's species was used" in " ".join(section)
+    _assert_redacted(out, tmp_path, section)
+
+
+def test_two_capture_words_are_listed(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "plates" / "cyl_x" / "labels.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    section = _section(report, "### Paths naming more than one capture mode")
+
+    assert _entries(section) == [
+        "- `<ROOT>/plates/cyl_x/labels.v001.slp` names cylinder, plate"
+    ]
+    _assert_redacted(out, tmp_path, section)
+
+
+def test_empty_derivation_findings_emit_no_subsection(tmp_path):
+    """Characterisation: nothing to list, nothing rendered."""
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+
+    _, report = _emit(tmp_path, root)
+
+    for heading in (
+        "### Families naming more than one species",
+        "### Folder and filename disagree on species",
+        "### Paths naming more than one capture mode",
+    ):
+        assert heading not in report
+
+
+def test_a_partially_readable_root_writes_nothing(tmp_path, monkeypatch):
+    """Scenario: A partially readable root writes nothing.
+
+    Candidates were found, so the zero-candidate guard did not fire. A scan that missed
+    one directory would have overwritten the committed artifacts and exited 0.
+    """
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+    real_walk = emit.discover.walk
+
+    def _half_blind(path):
+        result = real_walk(path)
+        result.unreadable_paths.append(root / "locked")
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _half_blind)
+
+    with pytest.raises(emit.PartialScan) as raised:
+        emit.build(root)
+
+    message = str(raised.value)
+    assert "<ROOT>/locked" in message
+    assert str(tmp_path) not in message
+    assert tmp_path.as_posix() not in message
+
+
+def test_the_flags_cell_is_sorted_and_space_joined(tmp_path):
+    """Characterisation: the table cell, not only the `Derived` tuple, is sorted."""
+    root = tmp_path / "share"
+    write_labels(
+        root
+        / "SLEAP_arabidopsis_plates"
+        / "plates"
+        / "cyl_x"
+        / "labels_wheat_2-3DAG.v001.slp"
+    )
+
+    out, _ = _emit(tmp_path, root)
+    (row,) = _rows(out)
+
+    assert row["mode"] == ""
+    assert row["flags"] == "ambiguous-mode folder-species-differs"
+
+
+def test_names_above_the_root_derive_nothing(tmp_path):
+    """The root's own path supplied a species, a mode and a flag (#78).
+
+    `SLEAP_janedoe` above the root became the species `janedoe`, published in both
+    artifacts, and `plates_x` above it made a `cyl_x` family `ambiguous-mode`.
+    """
+    root = tmp_path / "SLEAP_janedoe" / "plates_x" / "share"
+    write_labels(root / "cyl_x" / "labels.v001.slp")
+    write_labels(root / "exp" / "labels_wheat.v001.slp")
+
+    out, report = _emit(tmp_path, root)
+    rows = {row["path"]: row for row in _rows(out)}
+    unnamed = rows["<ROOT>/cyl_x/labels.v001.slp"]
+    named = rows["<ROOT>/exp/labels_wheat.v001.slp"]
+
+    assert unnamed["species"] == ""
+    assert unnamed["mode"] == "cylinder"
+    assert unnamed["flags"] == ""
+    assert named["species"] == "wheat"
+    assert named["mode"] == ""
+    assert named["flags"] == ""
+    table = (out / emit.TABLE_FILENAME).read_text(encoding="utf-8")
+    assert "janedoe" not in table
+    assert "janedoe" not in report
+
+
+def test_an_empty_name_derivation_section_says_none(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+
+    _, report = _emit(tmp_path, root)
+
+    assert "None." in _section(report, "## Name derivation")
+
+
+def test_the_name_derivation_section_says_names_are_not_evidence(tmp_path):
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+
+    _, report = _emit(tmp_path, root)
+
+    assert "not evidence" in " ".join(_section(report, "## Name derivation"))
+
+
+def test_a_partial_scan_message_is_deduplicated_and_capped(tmp_path, monkeypatch):
+    """A dropped share connection fails every remaining directory, not one."""
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+    real_walk = emit.discover.walk
+    many = [root / f"d{index:02d}" for index in range(25)]
+
+    def _dropped(path):
+        result = real_walk(path)
+        result.unreadable_paths.extend([root / "d00", *many])
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _dropped)
+
+    with pytest.raises(emit.PartialScan) as raised:
+        emit.build(root)
+
+    message = str(raised.value)
+    assert message.startswith("25 director(ies)")
+    assert message.count("<ROOT>/d00") == 1
+    assert "<ROOT>/d19" in message
+    assert "<ROOT>/d20" not in message
+    assert "and 5 more" in message
+
+
+def test_a_partial_scan_names_the_root_and_an_unknown_path_plainly(
+    tmp_path, monkeypatch
+):
+    """`<ROOT>/.` and a cwd-resolved `<ROOT>/<unknown>` both read as real folders."""
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+    monkeypatch.chdir(root)
+    real_walk = emit.discover.walk
+
+    def _odd(path):
+        result = real_walk(path)
+        result.unreadable_paths.extend([root, emit.discover.Path("<unknown>")])
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _odd)
+
+    with pytest.raises(emit.PartialScan) as raised:
+        emit.build(root)
+
+    message = str(raised.value)
+    assert "<ROOT>/." not in message
+    assert "<ROOT>/<unknown>" not in message
+    assert "<ROOT>, <unknown>" in message

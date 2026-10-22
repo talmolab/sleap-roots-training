@@ -216,18 +216,22 @@ The first scan's (#58) headline finding was that `skeletons.yaml` had no `mode`,
 cylinder arabidopsis primary family and an 8-node plate one selected the same row. The table now
 carries a mode, and the report lists the capture modes observed with no row of their own and the
 node counts that disagree with their row. Node counts are read from the files, so none of this
-needs an external service. The committed `inventory/label-inventory.md` predates the mode key and
-still shows the old finding until the next scan.
+needs an external service. The committed scan is regenerated after each change to how names
+are read; see the CHANGELOG.
 
 Two things to know before reading the output. `species`, `mode` and `root_type` are **name-derived**
-— read off the path, not out of the file — and the report says so; they are not evidence. And where
+— read off the path, not out of the file — and the report says so; they are not evidence. Species
+is read from the filename, else the folder; families whose names give several species, or whose
+folder names a different crop, are listed under "Name derivation" and not resolved. And where
 the tool cannot tell which files form a collection, it lists them and **makes no determination**.
 A directory is not a collection: one on the measured share holds 28 labels files spanning a
 superset, a second species' collection, a generalist, per-labeler inputs and practice files.
 Deciding is a person's job, and there is deliberately nowhere to record the answer.
 
 Every emitted path is relative to the supplied root, which appears as `<ROOT>`, and a referenced
-video path is emitted as its filename alone — nothing above the root reaches an artifact.
+video path is emitted as its filename alone — nothing above the root reaches an artifact. A scan
+that cannot read every directory writes nothing, names the unreadable directories and exits
+non-zero, so a partial scan never overwrites the committed artifacts.
 
 ## Development
 

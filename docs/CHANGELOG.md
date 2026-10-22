@@ -55,6 +55,14 @@ All notable changes to this project are documented here. The format is based on
   nowhere to record the answer: a person reads the output and decides.
 
 ### Changed
+- **The label inventory reads species from the filename before the folder (#59), and reports what
+  names cannot settle (#65)** (`update-inventory-derivation`). The next scan changes `species`
+  for 228 families, 33 of them to empty: a filename or folder naming several species gets none,
+  never the first. The table gains `species_named` and `flags` (`multi-species`,
+  `folder-species-differs`, `ambiguous-mode`), and the report a "Name derivation" section listing
+  them. A literal `multiplant` path token derives `multiplant cylinder`. **BREAKING (CLI):** a scan
+  that cannot list every directory now writes nothing and exits non-zero, where it used to
+  overwrite `inventory/` and exit 0.
 - **`SPECIES_VOCAB` gains `wheat` and `sorghum`.** It is shared, so training `validate` and
   labeling metadata accept them too; a wheat labeling package still fails at the skeleton lookup,
   since `skeletons.yaml` has no wheat row.

@@ -23,6 +23,19 @@ def _observe(path):
     return gap.Observed(family=family, facts=read.read_facts(path))
 
 
+def _family(rel):
+    """A family built from a relative path, with no file on disk.
+
+    ``derive()`` reads a family's whole path, and pytest names ``tmp_path`` after the
+    test, so a temp directory can supply a species, mode or root-type token (#78).
+    """
+    path = gap.Path(rel)
+    parsed = discover.parse_version(path)
+    return discover.Family(
+        directory=path.parent, stem=parsed.stem, suffix=parsed.suffix
+    )
+
+
 def _row(species, mode, root_type, node_count, age=None):
     """One injected table row, built inside a test rather than at module scope."""
     return SkeletonRow(
@@ -280,13 +293,14 @@ def test_species_mode_and_root_type_are_labelled_name_derived(tmp_path):
     assert derived.source == gap.NAME_DERIVED
 
 
-def test_wheats_seminal_nickname_derives_the_crown_root_type(tmp_path):
-    """The team calls wheat's seminal roots crown; `RootType` gains no member."""
-    path = write_labels(
-        tmp_path / "SLEAP_wheat" / "seminal" / "labels_sr_5-14DAG.v004.slp",
-        skeleton_names=("Skeleton-1",),
-    )
-    assert gap.derive(_observe(path).family).root_type == "crown"
+def test_wheats_nickname_derives_the_third_row():
+    """The team calls wheat's seminal roots crown; `RootType` gains no member.
+
+    Built from a relative family: under ``tmp_path`` this test's own temp directory,
+    ``test_wheats_seminal_nickname_d0``, supplied ``seminal`` and could not fail (#78).
+    """
+    family = _family("SLEAP_wheat/seminal/labels_sr_5-14DAG.v004.slp")
+    assert gap.derive(family).root_type == "crown"
 
 
 # --------------------------------------------------------------------------------------
@@ -356,3 +370,289 @@ def test_the_report_states_how_much_of_the_corpus_it_analysed(tmp_path):
     assert report.families_considered == 2
     assert report.families_analysed == 1
     assert report.families_skipped_reasons["no-mode"] == 1
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Filename-First Species Derivation
+# --------------------------------------------------------------------------------------
+
+
+def test_the_filename_beats_the_folder():
+    """Wheat plate labels sit in an arabidopsis folder; the filename says wheat."""
+    derived = gap.derive(
+        _family(
+            "SLEAP_arabidopsis_plates/labels/primary_8nodes/labels_wheat_2-3DAG.v002.slp"
+        )
+    )
+
+    assert derived.species == "wheat"
+    assert derived.species_from == "filename"
+    assert derived.species_named == ("wheat",)
+    assert derived.folder_species == ("arabidopsis",)
+    assert derived.flags == ("folder-species-differs",)
+
+
+def test_an_alias_in_the_filename_is_read_and_compared():
+    derived = gap.derive(
+        _family("SLEAP_sorghum/lateral_4nodes/labels_soy_lateral_4nodes.v001.slp")
+    )
+
+    assert derived.species == "soybean"
+    assert "folder-species-differs" in derived.flags
+
+
+def test_a_glued_only_prefix_is_read_and_a_bare_one_is_not():
+    glued = gap.derive(
+        _family("generalizability/x/labels_ONLYpennycress_primary_6nodes.v000.slp")
+    )
+    bare = gap.derive(_family("generalizability/x/labels_7DAP_laterals_ONLY.v007.slp"))
+
+    assert glued.species == "pennycress"
+    assert bare.species is None
+    assert bare.flags == ()
+
+
+def test_a_filename_naming_several_derives_none():
+    """Never the first species named, and never the folder's (#59)."""
+    derived = gap.derive(
+        _family(
+            "SLEAP_medicago/primary_root/labels_canola_pennycress_arabidopsis.v015.slp"
+        )
+    )
+
+    assert derived.species is None
+    assert derived.species_named == ("arabidopsis", "canola", "pennycress")
+    assert derived.species_from == "filename"
+    assert derived.flags == ("multi-species",)
+
+
+def test_a_folder_naming_several_derives_none():
+    derived = gap.derive(
+        _family("SLEAP_Canola_Pennycress/primary_root/AAP_primary_root_labels.v001.slp")
+    )
+
+    assert derived.species is None
+    assert derived.species_named == ("canola", "pennycress")
+    assert derived.species_from == "folder"
+    assert derived.flags == ("multi-species",)
+
+
+def test_an_unnamed_file_falls_back_to_the_folder():
+    """Characterisation of the species; the new fields are pinned alongside."""
+    derived = gap.derive(_family("SLEAP_Soy/lateral/labels.v001.slp"))
+
+    assert derived.species == "soybean"
+    assert derived.species_from == "folder"
+    assert derived.species_named == ("soybean",)
+    assert derived.flags == ()
+
+
+def test_an_open_folder_word_is_kept_and_contradicts_nothing():
+    unnamed = gap.derive(_family("SLEAP_packages_10-24-23/labels.v001.slp"))
+    named = gap.derive(_family("SLEAP_packages_10-24-23/labels_rice_3do.v001.slp"))
+
+    assert unnamed.species == "packages"
+    assert unnamed.species_from == "folder"
+    assert named.species == "rice"
+    assert "folder-species-differs" not in named.flags
+
+
+def test_a_folder_naming_the_filenames_crop_among_several_contradicts_nothing():
+    derived = gap.derive(
+        _family(
+            "experiments/x_sorghum_soybean_canola_pennycress_rice_arabidopsis_on_y/"
+            "labels_rice_3do.v001.slp"
+        )
+    )
+
+    assert derived.species == "rice"
+    assert derived.flags == ()
+
+
+def test_a_filename_crop_outside_a_pooled_folder_is_flagged():
+    derived = gap.derive(
+        _family("SLEAP_Canola_Pennycress/primary_root/labels_wheat_5DAG.v001.slp")
+    )
+
+    assert derived.species == "wheat"
+    assert derived.flags == ("folder-species-differs",)
+
+
+def test_a_pooled_nickname_file_derives_no_species():
+    """#11's specific doubt: the pooled wheat+rice set behind the wheat collection."""
+    derived = gap.derive(
+        _family(
+            "SLEAP_wheat/seminal/labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp"
+        )
+    )
+
+    assert derived.species is None
+    assert derived.flags == ("multi-species",)
+    assert derived.root_type == "crown"
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Capture Mode Derivation (#65)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_one_plant_count_token_is_recognised():
+    """#65's reproduction: `multiplant_cylinder/` derived `cylinder`."""
+    joined = gap.derive(
+        _family("SLEAP_arabidopsis/multiplant_cylinder/primary/labels.v001.slp")
+    )
+    alone = gap.derive(_family("SLEAP_arabidopsis/multiplant/primary/labels.v001.slp"))
+
+    assert joined.mode == "multiplant cylinder"
+    assert alone.mode == "multiplant cylinder"
+    assert "ambiguous-mode" not in joined.flags
+    assert "ambiguous-mode" not in alone.flags
+
+
+def test_a_capture_word_apart_from_the_count_token_is_part_of_it():
+    derived = gap.derive(
+        _family("SLEAP_arabidopsis/cyl_primary/multiplant/labels.v001.slp")
+    )
+
+    assert derived.mode == "multiplant cylinder"
+    assert "ambiguous-mode" not in derived.flags
+
+
+def test_look_alike_spellings_are_not_recognised():
+    """Characterisation: `multi`, `multiclass` and `multiple` all mean something else."""
+    assert (
+        gap.derive(_family("SLEAP_Soy/primary_multi-day/labels.v001.slp")).mode is None
+    )
+    assert (
+        gap.derive(
+            _family("SLEAP_medicago_plates/multiclass_bottomup/labels.v001.slp")
+        ).mode
+        == "plate"
+    )
+    assert (
+        gap.derive(_family("SLEAP_multiple_species/cyl/labels.v001.slp")).mode
+        == "cylinder"
+    )
+
+
+def test_two_capture_words_derive_nothing():
+    """The first token used to win silently."""
+    plain = gap.derive(_family("plates/cyl_primary/labels.v001.slp"))
+    counted = gap.derive(_family("multiplant/plate/labels.v001.slp"))
+
+    assert plain.mode is None
+    assert counted.mode is None
+    assert plain.modes_named == ("cylinder", "plate")
+    assert counted.modes_named == ("multiplant cylinder", "plate")
+    assert "ambiguous-mode" in plain.flags
+    assert "ambiguous-mode" in counted.flags
+
+
+def test_a_capture_word_named_twice_is_one():
+    """Characterisation."""
+    derived = gap.derive(
+        _family("SLEAP_arabidopsis_plates/plate_primary/labels.v001.slp")
+    )
+
+    assert derived.mode == "plate"
+    assert derived.flags == ()
+
+
+def test_flags_are_sorted():
+    derived = gap.derive(
+        _family("SLEAP_arabidopsis_plates/plates/cyl_x/labels_wheat_2-3DAG.v001.slp")
+    )
+
+    assert derived.mode is None
+    assert derived.flags == ("ambiguous-mode", "folder-species-differs")
+
+
+def test_the_derived_spelling_is_the_contracts():
+    """Characterisation: the derived mode is a `MODE_VOCAB` value."""
+    from sleap_roots_training.registry import chooser
+
+    assert "multiplant cylinder" in chooser.MODE_VOCAB
+    assert gap._MULTIPLANT_MODE in chooser.MODE_VOCAB
+
+
+# --------------------------------------------------------------------------------------
+# update-inventory-derivation — Skeleton Table Mode Gap, names that say too much
+# --------------------------------------------------------------------------------------
+
+
+def test_a_name_that_says_too_much_is_skipped_by_its_own_reason(tmp_path):
+    """Each family derives everything except the one field its name over-specifies."""
+    pooled = write_labels(
+        tmp_path / "cyl_x" / "primary_x" / "labels_canola_pennycress.v001.slp",
+        node_names=_nodes(6),
+    )
+    two_modes = write_labels(
+        tmp_path / "SLEAP_arabidopsis" / "plates" / "cyl_primary" / "labels.v001.slp",
+        node_names=_nodes(6),
+    )
+
+    report = gap.build_report([_observe(pooled), _observe(two_modes)], table=())
+
+    assert report.families_skipped_reasons == {
+        "multi-species": 1,
+        "ambiguous-mode": 1,
+    }
+
+
+def test_a_crowded_capture_family_is_a_gap_not_a_match(tmp_path):
+    """Characterisation after 2.2: a multiplant family is no longer a cylinder match."""
+    table = (_row("arabidopsis", "cylinder", "primary", 6),)
+    path = write_labels(
+        tmp_path / "multiplant_cylinder" / "arabidopsis_primary" / "labels.v001.slp",
+        node_names=_nodes(6),
+    )
+
+    report = gap.build_report([_observe(path)], table=table)
+
+    assert len(report.mode_gaps) == 1
+    assert report.mode_gaps[0].mode == "multiplant cylinder"
+    assert report.mode_gaps[0].table_modes == ("cylinder",)
+    assert report.node_count_disagreements == []
+
+
+def test_pooled_names_still_count_as_uncovered(tmp_path):
+    """A pooled file is labels of each crop it names."""
+    table = (_row("soybean", "cylinder", "primary", 6),)
+    by_filename = write_labels(
+        tmp_path / "cyl_x" / "primary_x" / "labels_canola_pennycress.v001.slp",
+        node_names=_nodes(6),
+    )
+    by_folder = write_labels(
+        tmp_path
+        / "SLEAP_Canola_Pennycress"
+        / "cyl_x"
+        / "primary_x"
+        / "labels.v001.slp",
+        node_names=_nodes(6),
+    )
+
+    report = gap.build_report([_observe(by_filename), _observe(by_folder)], table=table)
+
+    assert "pennycress" in report.uncovered_species
+    assert report.families_skipped_reasons["multi-species"] == 2
+
+
+def test_only_the_deciding_directory_is_consulted():
+    """Characterisation: a crop in a deeper directory neither adds to nor flags it."""
+    under_sleap = gap.derive(_family("SLEAP_wheat/arabidopsis_x/labels.v001.slp"))
+    plain = gap.derive(_family("rice_runs/sorghum_x/labels.v001.slp"))
+
+    assert under_sleap.species == "wheat"
+    assert under_sleap.folder_species == ("wheat",)
+    assert plain.species == "rice"
+    assert plain.folder_species == ("rice",)
+    assert under_sleap.flags == ()
+    assert plain.flags == ()
+
+
+def test_a_species_named_twice_or_by_alias_is_one():
+    """Characterisation."""
+    derived = gap.derive(_family("x/labels_soy_soybean.v001.slp"))
+
+    assert derived.species == "soybean"
+    assert derived.flags == ()

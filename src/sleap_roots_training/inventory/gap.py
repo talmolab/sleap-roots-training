@@ -8,10 +8,13 @@ cylinder and an 8-node plate arabidopsis primary family selected one row — is 
 the key. Node counts are read from the files; species, mode and root type are derived from
 the path and are labelled as such, because a name is not evidence.
 
-Derivation is open, not a closed vocabulary. It recognizes the tokens the share actually
-uses and returns ``None`` when it sees something else — a species the table has never
-heard of is exactly what this report exists to surface, so a membership check that
-rejected it would hide the finding.
+Species is read from the filename before the folder (``Filename-First Species
+Derivation``): people put other crops' data in a crop's folder to train one model. The
+filename is read against :data:`KNOWN_SPECIES`, a closed vocabulary. The folder's
+``SLEAP_<x>`` word is read openly, so a crop the table has never heard of still reaches
+the uncovered list, where surfacing it is the point. A name that gives several species,
+or several capture modes, is flagged and given none: the tool prints what it cannot
+decide and stops.
 """
 
 from __future__ import annotations
@@ -35,6 +38,13 @@ _MODE_TOKENS = {
     "plates": "plate",
 }
 
+#: The exact token for a multiplant cylinder. It reads as ``multiplant cylinder``, the
+#: ``MODE_VOCAB`` spelling, and absorbs any ``cyl``/``cylinder`` token in the path. Only
+#: the literal token counts: ``multi``, ``multiple`` and ``multiclass`` all occur on the
+#: share meaning something else, and a labeler's name is not evidence of multiplant.
+_MULTIPLANT_TOKEN = "multiplant"
+_MULTIPLANT_MODE = "multiplant cylinder"
+
 #: Path tokens that name a root type. The team calls wheat's seminal roots **crown**, so
 #: ``seminal`` and ``sr`` map to the ``crown`` row rather than becoming a ``RootType``
 #: member of their own.
@@ -46,16 +56,18 @@ _ROOT_TYPE_TOKENS = {
     "sr": "crown",
 }
 
-#: ``SLEAP_<species>`` is how the share names its top-level per-crop directories.
+#: ``SLEAP_<x>`` is how the share names its top-level directories. Most name a crop, but
+#: they also hold other crops' files, and some (``packages``, ``circumnutation``,
+#: ``multiple``) name no crop at all.
 _SLEAP_DIR = re.compile(r"^SLEAP[_-](?P<species>[a-z]+)", re.IGNORECASE)
 
-#: Crop names this program already knows about. Used **only** to sort the uncovered
-#: list for a reader — never to filter derivation, because a crop nobody has heard of
-#: is exactly the finding this report exists to surface.
 #: Directory spellings that are a crop under another name. `SLEAP_Soy/` yields `soy`,
 #: which the report then published as "not a species" while listing `soybean` separately.
 _SPECIES_ALIASES = {"soy": "soybean", "arabadopsis": "arabidopsis"}
 
+#: Crop names this program knows. A filename is read against these alone, and they sort
+#: the uncovered list. A folder's ``SLEAP_<x>`` word is not filtered by them, because a
+#: crop nobody has heard of is exactly the finding this report exists to surface.
 KNOWN_SPECIES = (
     "arabidopsis",
     "soybean",
@@ -69,24 +81,48 @@ KNOWN_SPECIES = (
     "covercress",
 )
 
+#: A filename or folder names more than one species, so none is derived. Such a file is
+#: split per species, or its per-species equivalents are found, before it is registered.
+MULTI_SPECIES = "multi-species"
+
+#: The filename names one species and the deciding folder names others, not that one.
+#: The filename's species is used.
+FOLDER_SPECIES_DIFFERS = "folder-species-differs"
+
+#: The path names more than one capture mode, so none is derived.
+AMBIGUOUS_MODE = "ambiguous-mode"
+
+#: A token glued to a species, as in ``labels_ONLYpennycress``.
+_ONLY_PREFIX = "only"
+
 
 @dataclass(frozen=True)
 class Derived:
     """Species, mode and root type read off a path.
 
     Attributes:
-        species: The crop, or ``None`` if no token named one.
+        species: The crop, or ``None`` if no part named exactly one.
         mode: The capture mode, or ``None``.
         root_type: The root type, or ``None``.
         source: Always :data:`NAME_DERIVED`. Present so an emitted row cannot carry
             these values without also carrying the fact that a name is where they
             came from.
+        species_named: Every species the deciding part named, sorted.
+        species_from: ``"filename"`` or ``"folder"``, whichever decided, or ``None``.
+        folder_species: What the folder rule gives, sorted, whether or not it decided.
+        modes_named: Every mode the path named, sorted.
+        flags: What derivation could not settle, sorted.
     """
 
     species: Optional[str]
     mode: Optional[str]
     root_type: Optional[str]
     source: str = NAME_DERIVED
+    species_named: tuple[str, ...] = ()
+    species_from: Optional[str] = None
+    folder_species: tuple[str, ...] = ()
+    modes_named: tuple[str, ...] = ()
+    flags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -96,10 +132,15 @@ class Observed:
     Attributes:
         family: The version family.
         facts: What the file said about itself.
+        derived: What its path below the scan root gives, when the caller has derived
+            it. The scan passes it, so the gap report reads the same values as the
+            table and never the directories above the root. ``None`` derives from
+            ``family`` as given.
     """
 
     family: discover.Family
     facts: read.FileFacts
+    derived: Optional[Derived] = None
 
 
 @dataclass(frozen=True)
@@ -192,12 +233,99 @@ def _tokens(family: discover.Family) -> list[str]:
     on the measured corpus that hid four plate families outright and undercounted the
     8-node ones as 11 rather than 15.
     """
-    text = "/".join([*family.directory.parts, family.stem])
+    return _split("/".join([*family.directory.parts, family.stem]))
+
+
+def _split(text: str) -> list[str]:
+    """Return the lowercase alphanumeric tokens of ``text``."""
     return [t for t in re.split(r"[^A-Za-z0-9]+", text.lower()) if t]
+
+
+def _species_in(tokens: Iterable[str]) -> set[str]:
+    """Return the distinct known species named by ``tokens``.
+
+    Aliases are applied, and a leading ``only`` is stripped from a longer token. A bare
+    ``only`` names nothing.
+    """
+    found = set()
+    for token in tokens:
+        if token.startswith(_ONLY_PREFIX) and len(token) > len(_ONLY_PREFIX):
+            token = token[len(_ONLY_PREFIX) :]
+        token = _SPECIES_ALIASES.get(token, token)
+        if token in KNOWN_SPECIES:
+            found.add(token)
+    return found
+
+
+def _folder_species(directory: Path) -> tuple[str, ...]:
+    """Return the species the folder rule gives, sorted.
+
+    The known species in the first ``SLEAP_<x>`` directory, or its open ``<x>`` where it
+    names none. Where no directory is ``SLEAP_<x>``, the known species of the first
+    directory that names one. Only that one directory is consulted.
+    """
+    for part in directory.parts:
+        match = _SLEAP_DIR.match(part)
+        if match:
+            known = _species_in(_split(part))
+            if known:
+                return tuple(sorted(known))
+            word = match.group("species").lower()
+            return (_SPECIES_ALIASES.get(word, word),)
+    for part in directory.parts:
+        known = _species_in(_split(part))
+        if known:
+            return tuple(sorted(known))
+    return ()
+
+
+def _derive_species(
+    family: discover.Family,
+) -> tuple[Optional[str], tuple[str, ...], Optional[str], tuple[str, ...], set[str]]:
+    """Return species, species named, which part decided, folder species and flags."""
+    folder = _folder_species(family.directory)
+    in_stem = tuple(sorted(_species_in(_split(family.stem))))
+    flags: set[str] = set()
+    if in_stem:
+        named, decided_by = in_stem, "filename"
+    elif folder:
+        named, decided_by = folder, "folder"
+    else:
+        return None, (), None, folder, flags
+
+    if len(named) > 1:
+        flags.add(MULTI_SPECIES)
+        return None, named, decided_by, folder, flags
+    species = named[0]
+    if (
+        decided_by == "filename"
+        and any(name in KNOWN_SPECIES for name in folder)
+        and species not in folder
+    ):
+        flags.add(FOLDER_SPECIES_DIFFERS)
+    return species, named, decided_by, folder, flags
+
+
+def _derive_mode(tokens: list[str]) -> tuple[Optional[str], tuple[str, ...], set[str]]:
+    """Return the mode, the modes named and any flag, per ``Capture Mode Derivation``."""
+    named = {_MODE_TOKENS[t] for t in tokens if t in _MODE_TOKENS}
+    if _MULTIPLANT_TOKEN in tokens:
+        named.discard("cylinder")
+        named.add(_MULTIPLANT_MODE)
+    modes = tuple(sorted(named))
+    if len(modes) > 1:
+        return None, modes, {AMBIGUOUS_MODE}
+    return (modes[0] if modes else None), modes, set()
 
 
 def derive(family: discover.Family) -> Derived:
     """Read species, mode and root type off a family's path.
+
+    Species follows ``Filename-First Species Derivation``: the stem decides, the folder
+    rule is the fallback, and a deciding part naming several species gives none. Mode
+    follows ``Capture Mode Derivation``: the whole path, ``multiplant`` read as
+    ``multiplant cylinder``, and several distinct modes giving none. Root type is the
+    first root-type token in the whole path.
 
     Args:
         family: The family to read.
@@ -206,22 +334,21 @@ def derive(family: discover.Family) -> Derived:
         The derived values, any of which may be ``None``, marked name-derived.
     """
     tokens = _tokens(family)
-
-    species = None
-    for part in family.directory.parts:
-        match = _SLEAP_DIR.match(part)
-        if match:
-            species = match.group("species").lower()
-            break
-    if species is None:
-        species = next((t for t in tokens if t in KNOWN_SPECIES), None)
-    species = _SPECIES_ALIASES.get(species, species)
-
-    mode = next((_MODE_TOKENS[t] for t in tokens if t in _MODE_TOKENS), None)
+    species, named, decided_by, folder, flags = _derive_species(family)
+    mode, modes_named, mode_flags = _derive_mode(tokens)
     root_type = next(
         (_ROOT_TYPE_TOKENS[t] for t in tokens if t in _ROOT_TYPE_TOKENS), None
     )
-    return Derived(species=species, mode=mode, root_type=root_type)
+    return Derived(
+        species=species,
+        mode=mode,
+        root_type=root_type,
+        species_named=named,
+        species_from=decided_by,
+        folder_species=folder,
+        modes_named=modes_named,
+        flags=tuple(sorted(flags | mode_flags)),
+    )
 
 
 def uncovered(
@@ -274,9 +401,12 @@ def build_report(
     derived_species: set[str] = set()
 
     for observed in observations:
-        derived = derive(observed.family)
+        derived = observed.derived or derive(observed.family)
         if derived.species:
             derived_species.add(derived.species)
+        elif MULTI_SPECIES in derived.flags:
+            # A pooled file is labels of each crop it names.
+            derived_species.update(derived.species_named)
 
         names = observed.facts.skeleton_names
         if names and any(_is_unparseable(name) for name in names):
@@ -287,12 +417,15 @@ def build_report(
             )
 
         node_count = observed.facts.node_count
+        # A name that says too much is a different finding from one that says nothing.
+        no_species = MULTI_SPECIES if MULTI_SPECIES in derived.flags else "no-species"
+        no_mode = AMBIGUOUS_MODE if AMBIGUOUS_MODE in derived.flags else "no-mode"
         missing = [
             name
             for name, value in (
-                ("no-species", derived.species),
+                (no_species, derived.species),
                 ("no-root-type", derived.root_type),
-                ("no-mode", derived.mode),
+                (no_mode, derived.mode),
                 ("no-node-count", None if node_count is None else True),
             )
             if not value
