@@ -89,7 +89,7 @@ indistinguishable from the refusal.
 
 ## 3. Card status and mixed status (`registry/cards.py`)
 
-- [ ] 3.1 Tests first (`tests/test_registry_cards.py`). Extend the `_row` helper with
+- [x] 3.1 Tests first (`tests/test_registry_cards.py`). Extend the `_row` helper with
   `status="production"`.
   - **Inherited status:** cards from a candidate row are `candidate`; all others are `production`.
   - **Mixed status:** one model under a production row and a candidate row raises a ValueError naming
@@ -97,7 +97,7 @@ indistinguishable from the refusal.
   - **Same status:** two candidate rows sharing a model give one candidate card.
   - **Not published:** for a candidate card, `card_to_metadata` has no `status` key and equals the same
     card's metadata with status `production`.
-- [ ] 3.2 Implement:
+- [x] 3.2 Implement:
   - Add `Card.status: str = "production"` as a trailing field.
   - Collect each model's row statuses in `expand_rows_to_cards`, and reject mixed status there.
   - Leave `card_to_metadata` unchanged.

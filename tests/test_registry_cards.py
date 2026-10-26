@@ -14,8 +14,12 @@ CANOLA_LATERAL = "canola/lateral/240611_083419.multi_instance.n=631"
 ARABIDOPSIS_LATERAL = "arabidopsis/lateral/240130_140452.multi_instance.n=337"
 
 
-def _row(species, mode, age, primary=None, lateral=None, crown=None):
-    return SelectionRow(species, mode, age, primary, lateral, crown, source="test row")
+def _row(
+    species, mode, age, primary=None, lateral=None, crown=None, status="production"
+):
+    return SelectionRow(
+        species, mode, age, primary, lateral, crown, source="test row", status=status
+    )
 
 
 def _sel(card):
@@ -651,3 +655,76 @@ def test_wheat_is_one_crown_card_and_sorghum_one_primary_and_one_lateral():
         ].root_type
         == "lateral"
     )
+
+
+# --- Row status carried onto cards ---
+
+
+def test_cards_inherit_their_rows_status():
+    result = cards.expand_rows_to_cards(
+        [
+            _row("soybean", "cylinder", "2, 3", primary="s/p"),
+            _row(
+                "arabidopsis",
+                "plate",
+                "2, 3, 4, 5, 6, 7",
+                primary="a/p",
+                status="candidate",
+            ),
+        ]
+    )
+    assert {c.source_model_id: c.status for c in result} == {
+        "s/p": "production",
+        "a/p": "candidate",
+    }
+
+
+def test_a_model_under_rows_of_mixed_status_is_rejected():
+    # One collection cannot be both expected in production and kept out of it.
+    with pytest.raises(ValueError, match=r"'s/p'.*status"):
+        cards.expand_rows_to_cards(
+            [
+                _row("soybean", "cylinder", "2, 3", primary="s/p"),
+                _row("canola", "cylinder", "2, 3", primary="s/p", status="candidate"),
+            ]
+        )
+
+
+def test_two_candidate_rows_sharing_a_model_give_one_candidate_card():
+    result = cards.expand_rows_to_cards(
+        [
+            _row(
+                "arabidopsis",
+                "plate",
+                "2, 3, 4, 5, 6, 7",
+                primary="a/p",
+                status="candidate",
+            ),
+            _row(
+                "canola", "plate", "2, 3, 4, 5, 6, 7", primary="a/p", status="candidate"
+            ),
+        ]
+    )
+    assert [(c.source_model_id, c.status, len(c.selectors)) for c in result] == [
+        ("a/p", "candidate", 2)
+    ]
+
+
+def test_status_is_never_published():
+    candidate = cards.expand_rows_to_cards(
+        [
+            _row(
+                "arabidopsis",
+                "plate",
+                "2, 3, 4, 5, 6, 7",
+                primary="a/p",
+                status="candidate",
+            )
+        ]
+    )[0]
+    production = cards.expand_rows_to_cards(
+        [_row("arabidopsis", "plate", "2, 3, 4, 5, 6, 7", primary="a/p")]
+    )[0]
+    metadata = cards.card_to_metadata(candidate)
+    assert "status" not in metadata
+    assert metadata == cards.card_to_metadata(production)
