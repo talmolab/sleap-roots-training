@@ -140,6 +140,16 @@ indistinguishable from the refusal.
     932, 1055, 1349, 1533) to accept `**kw`.
   - Rewrite `test_a_non_default_alias_verify_without_only_is_allowed`. Its matrix gets one
     `status: candidate` row, and the test asserts `expected` is exactly that row's collections.
+  - **Also changed, which the review did not list.** Two more existing tests ran an unscoped
+    `--verify` under an alias that no row carries. The new empty-expected refusal (spec: *An alias
+    no row carries fails verification*) reverses what they assumed:
+    - `test_verify_prints_the_target_line` now scopes with `--only soy-p`, so it still tests the
+      target line.
+    - `test_the_verify_orphan_line_is_ascii_escaped` became
+      `test_an_unscoped_verify_under_an_alias_no_row_carries_is_refused_in_ascii`.
+      - **Why replace it instead of keeping it?** An orphan line can now print only under
+        `production` or `candidate`, the only statuses, and both are ASCII. The non-ASCII alias
+        that test used now reaches the refusal instead, so the ASCII guarantee is asserted there.
 - [x] 5.2 New tests first.
   - **Publish level** (`tests/test_registry_publish.py`, using `_FakeApi`/`_FakeArt`):
     - **Candidate absent from the registry** (the real pre-publish state): `verify_registry(CFG,
@@ -282,9 +292,9 @@ indistinguishable from the refusal.
 
 ## 9. Validate and hand off for review
 
-- [ ] 9.1 Run the CI-equivalent suite from the top of this file, all green.
-- [ ] 9.2 `openspec validate add-arabidopsis-plate-candidate-cards --strict`.
-- [ ] 9.3 Reconcile the implementation against the proposal, design and spec (new-feature step 9).
+- [x] 9.1 Run the CI-equivalent suite from the top of this file, all green.
+- [x] 9.2 `openspec validate add-arabidopsis-plate-candidate-cards --strict`.
+- [x] 9.3 Reconcile the implementation against the proposal, design and spec (new-feature step 9).
   Update the docs for any deviation, with a `### Why N instead of M?` section.
 - [ ] 9.4 Run `/pre-merge-check` and `/review-pr`. The PR body says `Refs #3`.
 
