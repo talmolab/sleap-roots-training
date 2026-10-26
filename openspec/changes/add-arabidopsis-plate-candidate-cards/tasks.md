@@ -296,7 +296,7 @@ indistinguishable from the refusal.
 - [x] 9.2 `openspec validate add-arabidopsis-plate-candidate-cards --strict`.
 - [x] 9.3 Reconcile the implementation against the proposal, design and spec (new-feature step 9).
   Update the docs for any deviation, with a `### Why N instead of M?` section.
-- [ ] 9.4 Run `/pre-merge-check` and `/review-pr`. The PR body says `Refs #3`.
+- [x] 9.4 Run `/pre-merge-check` and `/review-pr`. The PR body says `Refs #3`.
 - [x] 9.5 Pre-PR `/review-pr` (report only; 5 reviewers, no blockers, mutation-tested) fixes, each
   test-first:
   - `build_model_zip`:
