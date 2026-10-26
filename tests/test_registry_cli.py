@@ -1820,3 +1820,39 @@ def test_an_unscoped_verify_under_an_alias_no_row_carries_fails_without_wandb(
     assert result.exit_code == 1, result.output
     assert "candidtae" in result.output
     assert reached == [] and API_CALLS == []
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [[], ["--force"], ["--only", "a-p", "--promote"], ["--only", "a-p", "--force"]],
+    ids=["unscoped", "unscoped --force", "scoped --promote", "scoped --force"],
+)
+def test_seed_registry_never_receives_a_candidate_card_under_production(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root, extra
+):
+    # `publish.seed_registry` itself does not filter by status (design D3): the CLI
+    # chooses the scope. Pin that it never hands the library a candidate card here.
+    import wandb
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    handed = []
+
+    def seed(resolved, cfg, run, *, api=None, force=False):
+        handed.extend(card.status for card, _ in resolved)
+        return {"published": [], "skipped": [], "failed": [], "stale": []}
+
+    monkeypatch.setattr(publish, "seed_registry", seed)
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda cs, root, sums: [(c, tmp_path) for c in cs]
+    )
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda *a, **k: SimpleNamespace(
+            project=k.get("project"), entity=k.get("entity"), finish=lambda: None
+        ),
+    )
+    _execute(_status_matrix(tmp_path), stub_models_root, "--yes", *extra)
+    assert "candidate" not in handed
+    if "--only" not in extra:  # not vacuous: the production card did reach it
+        assert handed == ["production"]

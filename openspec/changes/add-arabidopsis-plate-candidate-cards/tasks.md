@@ -182,7 +182,7 @@ indistinguishable from the refusal.
 
 ## 6. Promotion safety pinned at the library boundary
 
-- [ ] 6.1 Add a test documenting the residual risk: `publish.seed_registry` itself does not filter by
+- [x] 6.1 Add a test documenting the residual risk: `publish.seed_registry` itself does not filter by
   status (design D3). The test asserts the CLI never passes it a candidate card under the default alias
   in the scoped, unscoped and `--force` paths, by spying on `seed_registry`'s `resolved` argument.
 
