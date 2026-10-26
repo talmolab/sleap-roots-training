@@ -234,7 +234,7 @@ indistinguishable from the refusal.
 
 ## 8. Docs
 
-- [ ] 8.1 Write `docs/arabidopsis-plate-models.md`, a consumer page of about one screen. It has these
+- [x] 8.1 Write `docs/arabidopsis-plate-models.md`, a consumer page of about one screen. It has these
   parts:
   - **Models table:** collection id, root type, nodes, training ages, frame counts and validation
     metrics. State that `.n=606` becomes `.n-606` in ids, and that `arabidopsis_plates/primary/…` is a
@@ -256,7 +256,7 @@ indistinguishable from the refusal.
       sorghum.
   - **Promotion:** "gates: #NEW; mechanics: README". Do not restate them.
   - No share paths. The curated copy's location goes to Benfica in Slack.
-- [ ] 8.2 README updates:
+- [x] 8.2 README updates:
   - Status, the candidate scoping and refusal, and the status-aware `--verify` with its failure lines.
   - Promotion now starts with "a reviewed PR drops `status: candidate`".
   - Fix lines that are already stale:
@@ -267,17 +267,17 @@ indistinguishable from the refusal.
     - line ~151: the candidate example;
     - lines ~165–169: the alias-lost and promote text.
   - Link the plate doc.
-- [ ] 8.3 CHANGELOG `[Unreleased]`:
+- [x] 8.3 CHANGELOG `[Unreleased]`:
   - Merge the duplicate `### Added` headers.
   - **Added:** per-row status, the plate candidate row, and `build_model_zip.py`.
   - **Changed:** status-aware `--verify`, plus the candidate scoping and refusal.
   - Record the 2026-10-05 wheat/sorghum promotion.
-- [ ] 8.4 Rewrite the roadmap's registry adjacent-work list (lines ~89–110):
+- [x] 8.4 Rewrite the roadmap's registry adjacent-work list (lines ~89–110):
   - the re-seed is done;
   - wheat/sorghum are in production;
   - #7 is closed;
   - #3 is done as candidate, with promotion in #NEW.
-- [ ] 8.5 Update the `labeling/data/skeletons.yaml` header and the `tests/test_labeling_skeletons.py`
+- [x] 8.5 Update the `labeling/data/skeletons.yaml` header and the `tests/test_labeling_skeletons.py`
   docstring: the rice and plate windows are cross-checked against the matrix.
 
 ## 9. Validate and hand off for review

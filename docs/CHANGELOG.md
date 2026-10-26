@@ -7,13 +7,25 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The arabidopsis plate cards, as `candidate`** (#3). The matrix carries one arabidopsis `plate`
+  row, window 2–7, with the full-plate primary (`arabidopsis_plates/primary/230804_133809.multi_instance.n=606`)
+  and lateral (`arabidopsis_plates/lateral/231130_135922.multi_instance.n=38`) models, marked
+  `status: candidate`. They are for trying elsewhere (GraviScan plate sections first) and are never
+  linked to `production`. See `docs/arabidopsis-plate-models.md`.
+- **Per-row `status` in the selection matrix:** `production` (the default) or `candidate`. A
+  candidate row is published under `candidate` only; status is never part of the published card. A
+  model referenced by rows of different status is rejected.
+- **`scripts/build_model_zip.py`** builds a byte-reproducible `<model_id>.zip` (stored, sorted, fixed
+  timestamp and mode, OS junk excluded), so a committed checksum can be re-derived from the model
+  directory instead of keeping the archive.
 - **Wheat and sorghum selection rows** (#72, step 1 of talmolab/sleap-roots-pipeline#118). The
   matrix now carries a wheat crown model (cylinder, 5–14; wheat seminal roots are the team's
   "crown"; the model was trained on wheat seminal + rice labels) and the sorghum primary + lateral
   pair all five past sorghum production runs used
   (cylinder, 3–14), with SHA256 checksums recomputed from the source zips. They are committed to
   be published under the `candidate` alias, **not** `production`, so production predict does not
-  see them until their parity and trait checks pass and they are deliberately promoted.
+  see them until their parity and trait checks pass and they are deliberately promoted. They were
+  promoted on 2026-10-05 (#118 step 6, run `axw5245o`; `docs/migration/2026-10-05-wheat-sorghum-production-link-record.json`).
 - **`seed-registry --execute` refuses a non-default alias without `--only`.** The skip is per
   alias, so under, say, `candidate` no card counts as seeded and an unscoped run would re-publish
   every card in the matrix. Refused as a usage error before the credential check.
@@ -53,8 +65,105 @@ All notable changes to this project are documented here. The format is based on
   Where the tool cannot determine something — which files in a directory form a collection, which
   supersedes which — it **lists the candidates and makes no determination**. There is deliberately
   nowhere to record the answer: a person reads the output and decides.
+- Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)
+  run on the exact original v000 held-out split (Arabidopsis primary-root, multi-plant cylinder,
+  bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:
+  `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all
+  instances detected), with per-epoch W&B logging confirmed. The TF reference is shown alongside as
+  context only, not a gate. (**Corrected 2026-08-06:** the TF W&B `dist_*` values are
+  **millimeters** from a lab post-processing step, so the earlier "20–40× gap" reading was a unit
+  error. In pixels the two backends are comparable, and the PyTorch baseline detects 44/44 instances
+  on every seed where no TF run exceeds 43/44 (on `vis_recall`, two of its three seeds clear TF's
+  best of 0.872 and seed 43 does not); sleap-nn's evaluator also reproduces SLEAP's own metrics
+  exactly. See
+  `docs/tf-reference.md`.) Documented finding: the finer `output_stride 2` collapses to zero predictions
+  on 2 of 3 seeds at `confmaps.sigma 2.5`; a `sigma` ablation (`sigma 5.0` trains stably on all 3
+  seeds) shows the cause is too-tight confmap targets, not a resolution ceiling or the loss — so the
+  baseline stays `output_stride 4`. Adds `examples/baseline_bottomup_v000_os4.yaml` +
+  `..._os2.yaml` + `..._os2_sigma5.yaml` (the ablation), `scripts/clean_pkg.py` (make the v000
+  `.pkg.slp` self-contained for the offline GPU box), and `scripts/dump_val_metrics.py`; write-up in
+  `docs/training.md` ("PyTorch baseline").
+- `sleap-roots-training labeling`: the labeling-package generator, ported from a personal vault
+  repo into `sleap_roots_training.labeling` (#26). Four commands — `select`, `copy-images`,
+  `build`, `validate` — replace four `uv run` scripts driven against hardcoded paths on one
+  machine. A **labeling package** is now a named contract: a directory carrying the `.slp` per root
+  type, the curated `images/`, `sample_manifest.csv` with one row per labeled frame,
+  `package_metadata.yaml`, and a generated `README.md`, with no dependency on the machine that
+  produced it. `labeling validate` checks all of it and is the entry point `publish-labels` (#10)
+  calls before upload. See `docs/labeling-packages.md`.
+
+  **For anyone who ran the vault scripts**, the behavior changes that affect you: the built `.slp`
+  **embeds its images**, so a package no longer breaks when its source paths go away (six of the
+  eight published collections carry `repaired_from: "v0"` because that happened); a given seed now
+  **selects different plants**, because the draw is a stable hash ordering rather than
+  `pandas.sample` — which is what makes widening the plant dimension produce a superset instead
+  of a different label set; view indices are unchanged (`[1, 25, 49]` for three), but curated
+  filenames now name the **view** rather than its position in the selection
+  (`..._age3_view025.jpg`, not `..._age3_0.jpg`), so a filename means the same image at every
+  selection width; skeletons come from a committed per-crop table and an uncovered crop **fails**
+  instead of getting soybean's node counts; and every silent failure is now a failure — an
+  unresolvable source image, an absolute or `..`-bearing source path, a duplicate or
+  case-colliding curated filename, a curated filename that is not a plain filename, a scan whose
+  view count contradicts `--total-views`, a scan with no predictions, a scan whose predictions do not cover every
+  selected view, a null `accession_id` or `plant_age_days`, and an empty
+  selection each stop the run rather than warning and reporting success. `labeling validate`
+  opens each `.slp` and counts its frames rather than checking the declared count against the
+  manifest it came from. A frame the model found nothing in ships **empty** rather than vanishing,
+  so a labeler can confirm a true negative — the corpus previously had no way to record one, and
+  genuine absence was indistinguishable from predictions that missed the view. `labeling validate` and ignores operating-system sidecars so a `.DS_Store` cannot fail a
+  correct package. `package_metadata.yaml` also records a `provenance` block — the input hashes,
+  the skeleton-table hash, and the code version — because the selection parameters alone only
+  reproduce a package against a byte-identical pool. Adding frames to a published package is
+  re-derive and republish, not edit in place; the reason is in the guide.
+- `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
+  config-driven training-config schema + CLI. A config is `sleap-nn`'s native
+  `data_config`/`model_config`/`trainer_config` **plus** a repo-owned `experiment` block
+  (species/mode/root_type/dataset). `validate` checks the experiment metadata, requires an explicit
+  integer `trainer_config.seed` (0.2.0 has no default) and a `data_config.preprocessing` block
+  (0.2.0 crashes post-fit without it), checks the W&B-enablement pairing, and **delegates** deep
+  validation to `sleap-nn`'s `verify_training_cfg` when the `train` extra is installed (else a
+  clear skip note) — it does not reimplement `sleap-nn`'s config. `emit` writes the sleap-nn-native
+  config with the `experiment` block stripped (sleap-nn rejects that key) for `sleap-nn train`.
+  `sleap_nn` is lazy-imported and `emit` is base-safe, so the base install/CI stay lean.
+- `docs/training.md` config-driven training guide + `examples/arabidopsis_primary_cylinder.yaml`,
+  locked by `tests/test_training_docs.py` and `tests/test_examples_validate.py`.
+- Shared test-fixture layer (`tests/conftest.py`) with `tiny_matrix`, `stub_models_root`,
+  `isolate_wandb_env` (clears the wandb/registry env vars **and** `NETRC` and repoints
+  `HOME`/`USERPROFILE`), and TF-reference payload loaders.
+- Committed TensorFlow reference baseline: the `config`/`summary` of the seven canonical
+  `20250625_cyl_arabidopsis_primary_receptive_field` runs under `tests/fixtures/tf_reference/`
+  (captured by `scripts/pull_tf_reference.py`), documented in `docs/tf-reference.md` and locked by
+  `tests/test_tf_reference.py`. The group is a `max_stride` sweep, not a replicate set; `oks_map` is
+  excluded as broken and the observability gap (no per-epoch logging) is recorded for Tier 1.
+- `sleap-roots-training seed-registry`: seed the production wandb model registry from the
+  committed selection matrix. Publishes the current legacy root models as `type="model"`
+  artifacts with `ModelCard` selection metadata and the `production` alias — the
+  surface the `sleap-roots-predict` warm worker reads. Defaults to a dry run; `--execute`
+  (with `--yes`/`--force`/`--only`) publishes; `--verify` re-runs the consumer read path,
+  reports collections the matrix no longer produces, and fails on a stale metadata shape.
+- `sleap_roots_training.registry` package: env-driven config, the provenance-stamped
+  `model_selection.yaml` (7 rows → 8 cards, one per SHA256-pinned physical model), card expansion,
+  legacy-model resolution (SHA256-verified unzip), run-config lineage, and the
+  publish/link/verify helpers.
+- Runtime deps `wandb` and `sleap-roots-contracts`.
+- Optional `train` extra: the Phase-1 `sleap-nn` keypoint backend
+  (`sleap-nn>=0.2.0,<0.3.0`, `sleap-io>=0.7.1,<0.8.0`, `torch>=2.5.0`), kept out of the base
+  install so the cross-platform CI matrix stays lean. Install with
+  `sleap-roots-training[train]`.
+- `docs/training-backend.md`: verified `sleap-nn` keypoint train/predict runbook (install,
+  GPU check, train + predict commands, and the GPU compute-capability / arch findings).
+- `tests/test_train_extra.py` (CI-safe pins contract) and `tests/test_gpu.py`
+  (integration-marked GPU smoke test, skipped without a CUDA device).
 
 ### Changed
+- **Candidate-status rows are never linked under the default alias.** An unscoped `--execute` skips
+  them (`skipped (status: candidate): <id>`); naming one with `--only` is refused before any wandb
+  call, even with `--promote` or `--force`. Promoting one takes a reviewed change to its `status`.
+- **`--verify` is status-aware.** Without `--only` it expects the cards whose row status equals the
+  alias, so a default `--verify` keeps meaning "exit 1 = production drift" while candidate rows
+  exist, and a `candidate` verify checks the candidate rows instead of every card. It fails on a
+  candidate collection linked to `production` (`UNEXPECTED PRODUCTION LINK`) or unreadable, and on
+  an alias no row carries. No collection the matrix produces is reported as an orphan.
 - **`SPECIES_VOCAB` gains `wheat` and `sorghum`.** It is shared, so training `validate` and
   labeling metadata accept them too; a wheat labeling package still fails at the skeleton lookup,
   since `skeletons.yaml` has no wheat row.
@@ -234,97 +343,6 @@ All notable changes to this project are documented here. The format is based on
   `lineage.MODELS_SNAPSHOT`. They stamped every seed run with the 20250204 models-downloader snapshot,
   which is false for the wheat card (in no snapshot) and both sorghum cards (in no chooser table);
   provenance now comes from the matrix.
-
-### Added
-- Tier 1 PyTorch-native baseline (#21): the config-driven path (`validate → emit → sleap-nn train`)
-  run on the exact original v000 held-out split (Arabidopsis primary-root, multi-plant cylinder,
-  bottom-up). Reported as a 3-seed range (42/43/44) on val for the stable `output_stride 4` config:
-  `dist_avg` **30.1–37.8 px**, `dist_p50` **17.7–21.2 px**, `vis_recall` **0.85–0.91** (all
-  instances detected), with per-epoch W&B logging confirmed. The TF reference is shown alongside as
-  context only, not a gate. (**Corrected 2026-08-06:** the TF W&B `dist_*` values are
-  **millimeters** from a lab post-processing step, so the earlier "20–40× gap" reading was a unit
-  error. In pixels the two backends are comparable, and the PyTorch baseline detects 44/44 instances
-  on every seed where no TF run exceeds 43/44 (on `vis_recall`, two of its three seeds clear TF's
-  best of 0.872 and seed 43 does not); sleap-nn's evaluator also reproduces SLEAP's own metrics
-  exactly. See
-  `docs/tf-reference.md`.) Documented finding: the finer `output_stride 2` collapses to zero predictions
-  on 2 of 3 seeds at `confmaps.sigma 2.5`; a `sigma` ablation (`sigma 5.0` trains stably on all 3
-  seeds) shows the cause is too-tight confmap targets, not a resolution ceiling or the loss — so the
-  baseline stays `output_stride 4`. Adds `examples/baseline_bottomup_v000_os4.yaml` +
-  `..._os2.yaml` + `..._os2_sigma5.yaml` (the ablation), `scripts/clean_pkg.py` (make the v000
-  `.pkg.slp` self-contained for the offline GPU box), and `scripts/dump_val_metrics.py`; write-up in
-  `docs/training.md` ("PyTorch baseline").
-- `sleap-roots-training labeling`: the labeling-package generator, ported from a personal vault
-  repo into `sleap_roots_training.labeling` (#26). Four commands — `select`, `copy-images`,
-  `build`, `validate` — replace four `uv run` scripts driven against hardcoded paths on one
-  machine. A **labeling package** is now a named contract: a directory carrying the `.slp` per root
-  type, the curated `images/`, `sample_manifest.csv` with one row per labeled frame,
-  `package_metadata.yaml`, and a generated `README.md`, with no dependency on the machine that
-  produced it. `labeling validate` checks all of it and is the entry point `publish-labels` (#10)
-  calls before upload. See `docs/labeling-packages.md`.
-
-  **For anyone who ran the vault scripts**, the behavior changes that affect you: the built `.slp`
-  **embeds its images**, so a package no longer breaks when its source paths go away (six of the
-  eight published collections carry `repaired_from: "v0"` because that happened); a given seed now
-  **selects different plants**, because the draw is a stable hash ordering rather than
-  `pandas.sample` — which is what makes widening the plant dimension produce a superset instead
-  of a different label set; view indices are unchanged (`[1, 25, 49]` for three), but curated
-  filenames now name the **view** rather than its position in the selection
-  (`..._age3_view025.jpg`, not `..._age3_0.jpg`), so a filename means the same image at every
-  selection width; skeletons come from a committed per-crop table and an uncovered crop **fails**
-  instead of getting soybean's node counts; and every silent failure is now a failure — an
-  unresolvable source image, an absolute or `..`-bearing source path, a duplicate or
-  case-colliding curated filename, a curated filename that is not a plain filename, a scan whose
-  view count contradicts `--total-views`, a scan with no predictions, a scan whose predictions do not cover every
-  selected view, a null `accession_id` or `plant_age_days`, and an empty
-  selection each stop the run rather than warning and reporting success. `labeling validate`
-  opens each `.slp` and counts its frames rather than checking the declared count against the
-  manifest it came from. A frame the model found nothing in ships **empty** rather than vanishing,
-  so a labeler can confirm a true negative — the corpus previously had no way to record one, and
-  genuine absence was indistinguishable from predictions that missed the view. `labeling validate` and ignores operating-system sidecars so a `.DS_Store` cannot fail a
-  correct package. `package_metadata.yaml` also records a `provenance` block — the input hashes,
-  the skeleton-table hash, and the code version — because the selection parameters alone only
-  reproduce a package against a byte-identical pool. Adding frames to a published package is
-  re-derive and republish, not edit in place; the reason is in the guide.
-- `sleap-roots-training validate <config.yaml>` and `sleap-roots-training emit <config.yaml>`: a
-  config-driven training-config schema + CLI. A config is `sleap-nn`'s native
-  `data_config`/`model_config`/`trainer_config` **plus** a repo-owned `experiment` block
-  (species/mode/root_type/dataset). `validate` checks the experiment metadata, requires an explicit
-  integer `trainer_config.seed` (0.2.0 has no default) and a `data_config.preprocessing` block
-  (0.2.0 crashes post-fit without it), checks the W&B-enablement pairing, and **delegates** deep
-  validation to `sleap-nn`'s `verify_training_cfg` when the `train` extra is installed (else a
-  clear skip note) — it does not reimplement `sleap-nn`'s config. `emit` writes the sleap-nn-native
-  config with the `experiment` block stripped (sleap-nn rejects that key) for `sleap-nn train`.
-  `sleap_nn` is lazy-imported and `emit` is base-safe, so the base install/CI stay lean.
-- `docs/training.md` config-driven training guide + `examples/arabidopsis_primary_cylinder.yaml`,
-  locked by `tests/test_training_docs.py` and `tests/test_examples_validate.py`.
-- Shared test-fixture layer (`tests/conftest.py`) with `tiny_matrix`, `stub_models_root`,
-  `isolate_wandb_env` (clears the wandb/registry env vars **and** `NETRC` and repoints
-  `HOME`/`USERPROFILE`), and TF-reference payload loaders.
-- Committed TensorFlow reference baseline: the `config`/`summary` of the seven canonical
-  `20250625_cyl_arabidopsis_primary_receptive_field` runs under `tests/fixtures/tf_reference/`
-  (captured by `scripts/pull_tf_reference.py`), documented in `docs/tf-reference.md` and locked by
-  `tests/test_tf_reference.py`. The group is a `max_stride` sweep, not a replicate set; `oks_map` is
-  excluded as broken and the observability gap (no per-epoch logging) is recorded for Tier 1.
-- `sleap-roots-training seed-registry`: seed the production wandb model registry from the
-  committed selection matrix. Publishes the current legacy root models as `type="model"`
-  artifacts with `ModelCard` selection metadata and the `production` alias — the
-  surface the `sleap-roots-predict` warm worker reads. Defaults to a dry run; `--execute`
-  (with `--yes`/`--force`/`--only`) publishes; `--verify` re-runs the consumer read path,
-  reports collections the matrix no longer produces, and fails on a stale metadata shape.
-- `sleap_roots_training.registry` package: env-driven config, the provenance-stamped
-  `model_selection.yaml` (7 rows → 8 cards, one per SHA256-pinned physical model), card expansion,
-  legacy-model resolution (SHA256-verified unzip), run-config lineage, and the
-  publish/link/verify helpers.
-- Runtime deps `wandb` and `sleap-roots-contracts`.
-- Optional `train` extra: the Phase-1 `sleap-nn` keypoint backend
-  (`sleap-nn>=0.2.0,<0.3.0`, `sleap-io>=0.7.1,<0.8.0`, `torch>=2.5.0`), kept out of the base
-  install so the cross-platform CI matrix stays lean. Install with
-  `sleap-roots-training[train]`.
-- `docs/training-backend.md`: verified `sleap-nn` keypoint train/predict runbook (install,
-  GPU check, train + predict commands, and the GPU compute-capability / arch findings).
-- `tests/test_train_extra.py` (CI-safe pins contract) and `tests/test_gpu.py`
-  (integration-marked GPU smoke test, skipped without a CUDA device).
 
 ### Fixed
 - `scripts/dump_val_metrics.py` no longer aborts the whole batch on one corrupt `.npz` (#52). Its
