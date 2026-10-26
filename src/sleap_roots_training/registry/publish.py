@@ -330,6 +330,8 @@ def verify_registry(
     api=None,
     *,
     report_orphans: bool = True,
+    matrix_collections: Iterable[str] = (),
+    barred_collections: Iterable[str] = (),
 ) -> dict:
     """Re-run the consumer read path and report the live registry against the matrix.
 
@@ -345,11 +347,17 @@ def verify_registry(
         report_orphans: When false (set under ``--only``), skip orphan reporting —
             ``--only`` scopes the expected set, so every out-of-scope collection would
             otherwise be reported as an orphan.
+        matrix_collections: Every collection the matrix produces, whatever its row
+            status; none of them is ever an orphan. ``expected`` is always included.
+        barred_collections: Collections that must NOT carry ``cfg.alias`` (candidate
+            rows, under the default alias). One that does is an unexpected production
+            link; one absent from the registry is not read at all.
 
     Returns:
         A report with ``present`` / ``missing`` / ``legacy`` / ``orphans`` /
-        ``indeterminate`` (all sorted) and ``orphans_suppressed``. Use
-        :func:`verify_failed` for the exit code rather than reading the buckets.
+        ``indeterminate`` / ``unexpected_production`` / ``barred_unreadable`` (all
+        sorted) and ``orphans_suppressed``. Use :func:`verify_failed` for the exit code
+        rather than reading the buckets.
     """
     if api is None:
         import wandb
@@ -377,11 +385,28 @@ def verify_registry(
         if not _is_selectors_shape(getattr(aliased, "metadata", None)):
             legacy.append(collection)
 
+    # The one safety check here, so a read error fails closed instead of being merely
+    # indeterminate. An absent collection is not linked, and wandb 0.28 raises when asked
+    # for its versions, so it is never read.
+    unexpected: list = []
+    barred_unreadable: list = []
+    for collection in barred_collections:
+        if collection not in existing:
+            continue
+        try:
+            linked = _aliased_artifact(api, project, collection, cfg.alias) is not None
+        except Exception:  # noqa: BLE001 - any read failure must fail the check
+            barred_unreadable.append(collection)
+            continue
+        if linked:
+            unexpected.append(collection)
+
+    produced = set(expected) | set(matrix_collections)
     orphans: list = []
     indeterminate: list = []
     if report_orphans:
         for name, collection in existing.items():
-            if name in set(expected):
+            if name in produced:
                 continue
             try:
                 aliases = collection.aliases
@@ -398,6 +423,8 @@ def verify_registry(
         "orphans": sorted(orphans),
         "indeterminate": sorted(indeterminate),
         "orphans_suppressed": not report_orphans,
+        "unexpected_production": sorted(unexpected),
+        "barred_unreadable": sorted(barred_unreadable),
     }
 
 
@@ -416,6 +443,13 @@ def verify_failed(report: Mapping) -> bool:
     Orphans and indeterminate collections deliberately do **not** fail: an orphan is
     expected for the whole migration window, and an unreadable collection is unknown
     rather than broken. A missing alias or a legacy shape on an **expected** collection
-    does fail — those are collections the consumer needs and cannot use.
+    does fail — those are collections the consumer needs and cannot use — and so does a
+    candidate collection linked to the alias, or one whose link could not be read: a
+    model the matrix keeps out of production may be live for the consumer.
     """
-    return bool(report.get("missing") or report.get("legacy"))
+    return bool(
+        report.get("missing")
+        or report.get("legacy")
+        or report.get("unexpected_production")
+        or report.get("barred_unreadable")
+    )

@@ -139,6 +139,9 @@ def seed_registry_command(
         all_cards = cards.expand_rows_to_cards(matrix.rows)
     except ValueError as error:
         raise click.ClickException(str(error))
+    # Captured before --only narrows `all_cards`: no collection the matrix produces is an
+    # orphan, whatever its status or the invocation's scope.
+    matrix_collections = [cards.collection_id(card) for card in all_cards]
 
     # --only scopes ALL modes (dry-run, --verify, --execute); validate up front so an
     # unknown id fails fast with a clean message and the confirm/plan reflect the scope.
@@ -195,11 +198,42 @@ def seed_registry_command(
         all_cards = [c for c in all_cards if c.status == config.DEFAULT_ALIAS]
 
     if verify:
+        # Under the default alias a candidate collection must NOT carry it, so it is
+        # checked as barred, never expected -- even when --only names it. Otherwise the
+        # expected set is the rows whose status is the alias (all named ones under --only).
+        barred = (
+            sorted(
+                cards.collection_id(c)
+                for c in all_cards
+                if c.status != config.DEFAULT_ALIAS
+            )
+            if cfg.alias == config.DEFAULT_ALIAS
+            else []
+        )
+        if only:
+            verify_expected = [c for c in expected if c not in barred]
+        else:
+            verify_expected = sorted(
+                cards.collection_id(c) for c in all_cards if c.status == cfg.alias
+            )
+            if not verify_expected:
+                # A mistyped alias variable must not produce a passing verification.
+                raise click.ClickException(
+                    f"no matrix row has status {ascii(cfg.alias)}, so there is nothing "
+                    "to verify under that alias; check SLEAP_ROOTS_MODEL_ALIAS, or name "
+                    "collections with --only."
+                )
         _require_api_key()
         # `--only` scopes `expected` above, so orphan reporting has to be suppressed
         # under it: otherwise a one-collection canary reports every OTHER collection
         # in the registry as orphaned.
-        report = publish.verify_registry(cfg, expected, report_orphans=not only)
+        report = publish.verify_registry(
+            cfg,
+            verify_expected,
+            report_orphans=not only,
+            matrix_collections=matrix_collections,
+            barred_collections=barred,
+        )
         for collection in report["present"]:
             click.echo(f"present: {collection}")
         for collection in report["missing"]:
@@ -215,6 +249,15 @@ def seed_registry_command(
             )
         for collection in report["indeterminate"]:
             click.echo(f"indeterminate: {collection} (could not read its aliases)")
+        for collection in report.get("unexpected_production", []):
+            click.echo(
+                f"UNEXPECTED PRODUCTION LINK: {collection} (row status is candidate)"
+            )
+        for collection in report.get("barred_unreadable", []):
+            click.echo(
+                f"unreadable: {collection} (could not check that it is not linked to "
+                f"{ascii(cfg.alias)})"
+            )
         if report["orphans_suppressed"]:
             click.echo(
                 "note: orphan reporting is suppressed under --only; "

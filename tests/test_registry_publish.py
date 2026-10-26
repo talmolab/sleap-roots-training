@@ -828,3 +828,110 @@ def test_unpromoted_reads_the_configured_alias_not_production():
     )
     # Every collection carries `production`, none carries `candidate`.
     assert publish.unpromoted_collections(cfg, cards_, api=api) == sorted(ids)
+
+
+# --- status-aware verify: barred (candidate) collections and matrix-wide orphans ---
+
+PROD = "soy-p"
+CAND = "a-p"
+
+
+def test_a_candidate_absent_from_the_registry_is_neither_read_nor_reported():
+    # The real pre-publish state: the plate collections do not exist yet. wandb 0.28
+    # raises on the versions of an absent collection, so it must not be read at all.
+    api = _FakeApi(
+        collections=[PROD],
+        arts_by_name={f"{PROJECT}/{PROD}": [_FakeArt(["production"])]},
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["present"] == [PROD]
+    assert report["unexpected_production"] == [] and report["barred_unreadable"] == []
+    assert CAND not in report["missing"] + report["orphans"] + report["indeterminate"]
+    assert CAND not in api.version_reads
+    assert publish.verify_failed(report) is False
+
+
+def test_a_candidate_linked_to_production_is_an_unexpected_link_and_fails():
+    api = _FakeApi(
+        collections=[PROD, CAND],
+        aliases_by_collection={PROD: ["production"], CAND: ["production", "candidate"]},
+        arts_by_name={
+            f"{PROJECT}/{PROD}": [_FakeArt(["production"])],
+            f"{PROJECT}/{CAND}": [_FakeArt(["production", "candidate"])],
+        },
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["unexpected_production"] == [CAND]
+    # Reported once, as the safety failure, never also as present or orphaned.
+    assert CAND not in report["present"] + report["orphans"]
+    assert publish.verify_failed(report) is True
+
+
+def test_a_candidate_carrying_only_candidate_passes():
+    api = _FakeApi(
+        collections=[PROD, CAND],
+        aliases_by_collection={PROD: ["production"], CAND: ["candidate"]},
+        arts_by_name={
+            f"{PROJECT}/{PROD}": [_FakeArt(["production"])],
+            f"{PROJECT}/{CAND}": [_FakeArt(["candidate"])],
+        },
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["unexpected_production"] == [] and report["orphans"] == []
+    assert publish.verify_failed(report) is False
+
+
+def test_a_read_error_on_a_barred_collection_fails_closed():
+    api = _FakeApi(
+        collections=[PROD, CAND],
+        arts_by_name={f"{PROJECT}/{PROD}": [_FakeArt(["production"])]},
+        fail_names=[CAND],
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["barred_unreadable"] == [CAND]
+    assert publish.verify_failed(report) is True
+
+
+def test_collections_the_matrix_produces_are_never_orphans():
+    candidate_cfg = RegistryConfig("ent", "reg", "candidate")
+    leftover, stranger = "wheat-crown", "old-candidate"
+    api = _FakeApi(
+        collections=[CAND, leftover, stranger],
+        aliases_by_collection={
+            CAND: ["candidate"],
+            leftover: ["production", "candidate"],
+            stranger: ["candidate"],
+        },
+        arts_by_name={f"{PROJECT}/{CAND}": [_FakeArt(["candidate"])]},
+    )
+    report = publish.verify_registry(
+        candidate_cfg, [CAND], api=api, matrix_collections=[CAND, leftover]
+    )
+    # A promoted row still carrying `candidate` is a leftover of its candidate window;
+    # a candidate-aliased collection the matrix does not produce is still an orphan.
+    assert report["orphans"] == [stranger]
+    assert report["present"] == [CAND]

@@ -81,6 +81,8 @@ def _verify_report(
     orphans=(),
     indeterminate=(),
     orphans_suppressed=False,
+    unexpected_production=(),
+    barred_unreadable=(),
 ):
     return {
         "present": list(present),
@@ -89,6 +91,8 @@ def _verify_report(
         "orphans": list(orphans),
         "indeterminate": list(indeterminate),
         "orphans_suppressed": orphans_suppressed,
+        "unexpected_production": list(unexpected_production),
+        "barred_unreadable": list(barred_unreadable),
     }
 
 
@@ -274,7 +278,7 @@ def test_verify_only_scopes(monkeypatch, tiny_matrix):
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     seen = {}
 
-    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True, **kw):
         seen["expected"] = list(expected)
         seen["report_orphans"] = report_orphans
         return _verify_report(
@@ -562,7 +566,7 @@ def test_verify_only_suppresses_orphans_and_says_so(monkeypatch, tiny_matrix):
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     seen = {}
 
-    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True, **kw):
         seen["report_orphans"] = report_orphans
         return _verify_report(
             present=list(expected), orphans_suppressed=not report_orphans
@@ -582,7 +586,7 @@ def test_verify_without_only_asks_for_orphans(monkeypatch, tiny_matrix):
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     seen = {}
 
-    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True, **kw):
         seen["report_orphans"] = report_orphans
         return _verify_report(present=list(expected), orphans=["old-collection"])
 
@@ -930,11 +934,13 @@ def test_verify_prints_the_target_line(monkeypatch, isolate_wandb_env, tiny_matr
     monkeypatch.setattr(
         publish,
         "verify_registry",
-        lambda cfg, expected, api=None, *, report_orphans=True: _verify_report(
+        lambda cfg, expected, api=None, *, report_orphans=True, **kw: _verify_report(
             present=expected
         ),
     )
-    result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
+    result = _invoke(
+        ["--selection-matrix", str(tiny_matrix), "--verify", "--only", "soy-p"]
+    )
     assert result.exit_code == 0, result.output
     assert result.output.splitlines()[0].startswith("target: ")
     assert "alias 'candidate'" in result.output.splitlines()[0]
@@ -1046,21 +1052,23 @@ def test_a_non_default_alias_dry_run_without_only_is_allowed(
 
 
 def test_a_non_default_alias_verify_without_only_is_allowed(
-    monkeypatch, isolate_wandb_env, tiny_matrix
+    monkeypatch, isolate_wandb_env, tmp_path
 ):
+    # Without --only, the expected set is the rows whose status is the alias: here the
+    # one candidate row, not the production row (which never carries `candidate`).
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
     seen = {}
 
-    def fake_verify(cfg, expected, api=None, *, report_orphans=True):
+    def fake_verify(cfg, expected, api=None, *, report_orphans=True, **kw):
         seen["alias"] = cfg.alias
         seen["expected"] = sorted(expected)
         return _verify_report(present=expected)
 
     monkeypatch.setattr(publish, "verify_registry", fake_verify)
-    result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
     assert result.exit_code == 0, result.output
-    assert seen == {"alias": "candidate", "expected": ["soy-l", "soy-p"]}
+    assert seen == {"alias": "candidate", "expected": ["a-p"]}
 
 
 def test_the_default_alias_without_only_is_not_refused_by_the_alias_guard(
@@ -1347,7 +1355,7 @@ def test_the_promotion_check_never_runs_in_a_dry_run_verify_or_non_default_alias
     monkeypatch.setattr(
         publish,
         "verify_registry",
-        lambda cfg, expected, api=None, *, report_orphans=True: _verify_report(
+        lambda cfg, expected, api=None, *, report_orphans=True, **kw: _verify_report(
             present=expected
         ),
     )
@@ -1522,21 +1530,20 @@ def test_every_alias_echo_is_ascii_escaped(
     assert prompted.stdout.isascii(), prompted.stdout
 
 
-def test_the_verify_orphan_line_is_ascii_escaped(
+def test_an_unscoped_verify_under_an_alias_no_row_carries_is_refused_in_ascii(
     monkeypatch, isolate_wandb_env, tiny_matrix
 ):
+    # An orphan line can now only print under `production` or `candidate` (the only
+    # statuses), both ASCII. What an exotic alias reaches instead is this refusal, so
+    # that is what must stay printable on any console.
     monkeypatch.setenv("WANDB_API_KEY", "secret")
     monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "\u751f")
-    monkeypatch.setattr(
-        publish,
-        "verify_registry",
-        lambda cfg, expected, api=None, *, report_orphans=True: _verify_report(
-            present=expected, orphans=["old-coll"]
-        ),
-    )
+    reached = []
+    monkeypatch.setattr(publish, "verify_registry", lambda *a, **k: reached.append(1))
     result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
-    orphan = [line for line in result.output.splitlines() if line.startswith("orphan:")]
-    assert orphan and orphan[0].isascii(), result.output
+    assert result.exit_code == 1, result.output
+    assert "\\u751f" in result.output and result.output.isascii(), result.output
+    assert reached == [] and API_CALLS == []
 
 
 def test_an_invalid_row_status_is_a_clean_error_not_a_traceback(
@@ -1717,3 +1724,99 @@ def test_verify_with_execute_is_not_refused_by_the_candidate_check(
         ]
     )
     assert reached, result.output
+
+
+# --- status-aware verify wiring ---
+
+
+def _capture_verify(monkeypatch, report=None):
+    seen = {}
+
+    def fake_verify(cfg, expected, api=None, **kw):
+        seen["expected"] = sorted(expected)
+        seen.update({k: sorted(v) for k, v in kw.items() if k != "report_orphans"})
+        return report or _verify_report(present=expected)
+
+    monkeypatch.setattr(publish, "verify_registry", fake_verify)
+    return seen
+
+
+def test_default_verify_expects_production_rows_and_bars_candidate_ones(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seen = _capture_verify(monkeypatch)
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
+    assert result.exit_code == 0, result.output
+    assert seen == {
+        "expected": ["s-p"],
+        "matrix_collections": ["a-p", "s-p"],
+        "barred_collections": ["a-p"],
+    }
+
+
+def test_candidate_verify_expects_candidate_rows_and_bars_nothing(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    seen = _capture_verify(monkeypatch)
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
+    assert result.exit_code == 0, result.output
+    assert seen["expected"] == ["a-p"] and seen["barred_collections"] == []
+    assert seen["matrix_collections"] == ["a-p", "s-p"]
+
+
+def test_default_verify_only_a_candidate_checks_it_as_barred_not_expected(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seen = _capture_verify(monkeypatch)
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(_status_matrix(tmp_path)),
+            "--verify",
+            "--only",
+            "a-p",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert seen["expected"] == [] and seen["barred_collections"] == ["a-p"]
+
+
+@pytest.mark.parametrize(
+    "report, line",
+    [
+        (
+            _verify_report(present=["s-p"], unexpected_production=["a-p"]),
+            "UNEXPECTED PRODUCTION LINK: a-p (row status is candidate)",
+        ),
+        (
+            _verify_report(present=["s-p"], barred_unreadable=["a-p"]),
+            "unreadable: a-p",
+        ),
+    ],
+    ids=["unexpected", "unreadable"],
+)
+def test_verify_prints_and_fails_on_the_candidate_safety_buckets(
+    monkeypatch, isolate_wandb_env, tmp_path, report, line
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    _capture_verify(monkeypatch, report=report)
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
+    assert result.exit_code == 1, result.output
+    assert line in result.output
+
+
+def test_an_unscoped_verify_under_an_alias_no_row_carries_fails_without_wandb(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidtae")
+    reached = []
+    monkeypatch.setattr(publish, "verify_registry", lambda *a, **k: reached.append(1))
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
+    assert result.exit_code == 1, result.output
+    assert "candidtae" in result.output
+    assert reached == [] and API_CALLS == []

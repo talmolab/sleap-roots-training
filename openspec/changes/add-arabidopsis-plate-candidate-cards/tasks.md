@@ -134,13 +134,13 @@ indistinguishable from the refusal.
 
 ## 5. Status-aware verify (`registry/publish.py`, `cli.py`)
 
-- [ ] 5.1 Make the existing tests that must change first. They are part of this group's commit.
+- [x] 5.1 Make the existing tests that must change first. They are part of this group's commit.
   - Add `unexpected_production=()` and `barred_unreadable=()` to `_verify_report`.
   - Change the 7 fake `verify_registry` signatures in `test_registry_cli.py` (lines ~277, 565, 585,
     932, 1055, 1349, 1533) to accept `**kw`.
   - Rewrite `test_a_non_default_alias_verify_without_only_is_allowed`. Its matrix gets one
     `status: candidate` row, and the test asserts `expected` is exactly that row's collections.
-- [ ] 5.2 New tests first.
+- [x] 5.2 New tests first.
   - **Publish level** (`tests/test_registry_publish.py`, using `_FakeApi`/`_FakeArt`):
     - **Candidate absent from the registry** (the real pre-publish state): `verify_registry(CFG,
       [prod], matrix_collections=[prod, cand], barred_collections=[cand], api=_FakeApi(collections=[prod],
@@ -169,7 +169,7 @@ indistinguishable from the refusal.
     - **Report output:** a report with `unexpected_production=["x"]` prints
       `UNEXPECTED PRODUCTION LINK: x (row status is candidate)` and exits 1.
       `barred_unreadable=["y"]` prints `unreadable: y …` and exits 1.
-- [ ] 5.3 Implement:
+- [x] 5.3 Implement:
   - **`verify_registry`:** add the keyword-only `matrix_collections` and `barred_collections`, both
     defaulting to empty.
     - A barred collection is read only if it is in `existing`.
