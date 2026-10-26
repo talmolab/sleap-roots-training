@@ -500,3 +500,93 @@ def test_build_model_zip_refuses_to_overwrite(tmp_path, capsys):
 def test_build_model_zip_refuses_a_missing_source(tmp_path, capsys):
     assert build_model_zip.main(str(tmp_path / "nope"), str(tmp_path / "m.zip")) == 1
     assert not (tmp_path / "m.zip").exists()
+
+
+#: SHA256 of the archive of `_golden_model_dir`, measured on Windows (Python 3.11). CI
+#: re-derives it on Ubuntu, Windows and macOS under 3.11 and 3.12.
+GOLDEN_DIGEST = "f7e29252194060bdfdea578dfa821372e0467c0df13a08c5f44e86e855a6ff3f"
+
+
+def _golden_model_dir(tmp_path: Path) -> Path:
+    """A fixed tree whose archive digest is pinned below (no junk, fixed bytes)."""
+    model = tmp_path / "golden" / "m.multi_instance.n=1"
+    (model / "viz").mkdir(parents=True)
+    (model / "best_model.h5").write_bytes(b"weights")
+    (model / "training_config.json").write_bytes(b"{}")
+    (model / "viz" / "a.png").write_bytes(b"png")
+    return model
+
+
+def test_build_model_zip_digest_is_host_and_version_independent(tmp_path, capsys):
+    # The committed matrix checksums were measured on Windows and must re-derive on any
+    # CI host and Python: pin the exact bytes of a fixed tree, and the header fields that
+    # would otherwise default per host (create_system) or leak the file mode.
+    import zipfile
+
+    out = tmp_path / "g.zip"
+    assert build_model_zip.main(str(_golden_model_dir(tmp_path)), str(out)) == 0
+    with zipfile.ZipFile(out) as zf:
+        headers = {(i.create_system, i.external_attr) for i in zf.infolist()}
+    assert headers == {(3, 0o100644 << 16)}
+    assert capsys.readouterr().out.strip() == GOLDEN_DIGEST
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod only toggles read-only")
+def test_build_model_zip_ignores_file_permissions(tmp_path, capsys):
+    model = _golden_model_dir(tmp_path)
+    (model / "best_model.h5").chmod(0o755)
+    assert build_model_zip.main(str(model), str(tmp_path / "g.zip")) == 0
+    assert capsys.readouterr().out.strip() == GOLDEN_DIGEST
+
+
+def test_build_model_zip_resolves_a_relative_source(tmp_path, monkeypatch, capsys):
+    # `.` has an empty name; unresolved it would write rooted `/best_model.h5` entries
+    # and a different digest for the same tree.
+    model = _golden_model_dir(tmp_path)
+    monkeypatch.chdir(model)
+    assert build_model_zip.main(".", str(tmp_path / "g.zip")) == 0
+    assert capsys.readouterr().out.strip() == GOLDEN_DIGEST
+
+
+@pytest.mark.parametrize("contents", [(), (".DS_Store",), ("best_model.h5",)])
+def test_build_model_zip_refuses_a_source_that_is_not_a_model(
+    tmp_path, capsys, contents
+):
+    model = tmp_path / "not_a_model"
+    model.mkdir()
+    for name in contents:
+        (model / name).write_bytes(b"x")
+    out = tmp_path / "m.zip"
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert not out.exists()
+    assert "training_config.json" in capsys.readouterr().err
+
+
+def test_build_model_zip_refuses_an_output_inside_the_source(tmp_path, capsys):
+    # A zip left in the model directory would be archived by the next build.
+    model = _golden_model_dir(tmp_path)
+    out = model / "self.zip"
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert not out.exists()
+
+
+def test_a_failed_build_leaves_no_archive_behind(tmp_path, monkeypatch, capsys):
+    # A half-written zip is still a valid zip (its central directory is written on
+    # close), so a failure must not leave one where an operator would hash it.
+    model = _golden_model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    real_open = open
+    reads = []
+
+    def failing_open(path, *a, **k):
+        if str(path).endswith("training_config.json"):
+            reads.append(path)
+            raise OSError("share went away")
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", failing_open)
+    with pytest.raises(OSError):
+        build_model_zip.main(str(model), str(out))
+    monkeypatch.undo()
+    assert reads and not out.exists()
+    assert list(out.parent.glob("m.zip*")) == []

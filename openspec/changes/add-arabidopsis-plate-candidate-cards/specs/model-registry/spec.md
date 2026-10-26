@@ -127,21 +127,51 @@ A refused run therefore makes no wandb call. These SHALL NOT be refused or narro
 
 The repository SHALL provide `scripts/build_model_zip.py`, which builds a `<model_id>.zip` from a
 trained model directory and prints its SHA256. The archive SHALL be byte-reproducible from the same
-directory contents. To achieve that:
+file tree: the same file names and bytes, under a directory of the same name. That SHALL hold on any
+host and any supported Python. To achieve that:
 
 - entries SHALL be stored uncompressed;
 - entries SHALL be in sorted path order;
-- every entry SHALL have the same fixed timestamp and permission bits;
-- every file SHALL sit under one top-level directory named after the model directory;
+- every entry SHALL have the same fixed timestamp, permission bits and creator system;
+- every file SHALL sit under one top-level directory named after the resolved model directory;
 - OS junk files (as excluded by model resolution) SHALL be left out.
 
 A checksum committed to the matrix can therefore be re-derived from the source directory, without
-keeping the archive. The script SHALL refuse to overwrite an existing output file.
+keeping the archive.
+
+The script SHALL refuse, exiting non-zero and writing nothing, in these cases:
+
+- the source lacks `best_model.h5` or `training_config.json`;
+- the output lies inside the source (the next build would archive it);
+- the output already exists.
+
+The script SHALL write the archive to a temporary file and move it into place only when it is
+complete. A failed build therefore leaves no archive at the output path.
 
 #### Scenario: Two builds are byte-identical
 
 - **WHEN** the script builds an archive twice from the same model directory, at different times
 - **THEN** both archives have the same SHA256
+
+#### Scenario: The digest does not depend on the host, the Python version or the file modes
+
+- **WHEN** a fixed test tree is built on each CI host and Python version, including after changing a
+  file's permission bits
+- **THEN** every build has the same pinned SHA256
+- **AND** every entry records creator system Unix and mode `0o100644`
+- **AND WHEN** the source is given as `.` from inside the model directory
+- **THEN** the archive is the same as when it is given by full path
+
+#### Scenario: A source that is not a model, or an output inside it, is refused
+
+- **WHEN** the source is empty, holds only OS junk, or lacks `training_config.json`, or the output
+  path is inside the source
+- **THEN** the script exits non-zero and no archive is written
+
+#### Scenario: A failed build leaves no archive
+
+- **WHEN** reading a source file fails part-way through a build
+- **THEN** the error propagates and nothing exists at the output path
 
 #### Scenario: The archive resolves as a pinned model
 
