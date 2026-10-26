@@ -14,12 +14,14 @@ All notable changes to this project are documented here. The format is based on
   linked to `production`. See `docs/arabidopsis-plate-models.md`.
 - **Per-row `status` in the selection matrix:** `production` (the default) or `candidate`. A
   candidate row is published under `candidate` only; status is never part of the published card. A
-  model referenced by rows of different status is rejected.
+  model referenced by rows of different status is rejected. Under `production`, a collection that is
+  `candidate` in the packaged matrix stays barred even when `--selection-matrix` names an edited copy.
 - **`scripts/build_model_zip.py`** builds a byte-reproducible `<model_id>.zip` (stored, sorted, fixed
   timestamp, mode and creator system, OS junk excluded), so a committed checksum can be re-derived from
   the model directory instead of keeping the archive. A golden-digest test proves the bytes on every CI
   host and Python. It refuses a non-model source or an output inside it, streams large files, and
-  leaves nothing behind when a build fails.
+  leaves no archive behind when a build fails. A temporary file left by another build is refused,
+  never deleted.
 - **Wheat and sorghum selection rows** (#72, step 1 of talmolab/sleap-roots-pipeline#118). The
   matrix now carries a wheat crown model (cylinder, 5–14; wheat seminal roots are the team's
   "crown"; the model was trained on wheat seminal + rice labels) and the sorghum primary + lateral
@@ -158,6 +160,9 @@ All notable changes to this project are documented here. The format is based on
   (integration-marked GPU smoke test, skipped without a CUDA device).
 
 ### Changed
+- **The selection matrix rejects unknown row keys.** A missing `status` means `production`, so a
+  misspelled one (`stauts`, `Status`) would have loaded a candidate row as production. Top-level
+  matrix keys are unchanged.
 - **Candidate-status rows are never linked under the default alias.** An unscoped `--execute` skips
   them (`skipped (status: candidate): <id>`); naming one with `--only` is refused before any wandb
   call, even with `--promote` or `--force`. Promoting one takes a reviewed change to its `status`.

@@ -329,7 +329,7 @@ indistinguishable from the refusal.
     - Adding `desktop.ini` to the shared junk set: it would change extraction too, and needs its own
       change.
     - Rejecting unknown matrix keys: a broader loader change. (Reversed for row keys in 9.6.)
-- [ ] 9.6 Post-PR `/review-pr 82` fixes (5 reviewers, no blockers), each test-first, RED then GREEN:
+- [x] 9.6 Post-PR `/review-pr 82` fixes (5 reviewers, no blockers), each test-first, RED then GREEN:
   - Loader: reject unknown **row** keys. A misspelled `status` (`stauts`, `Status`) loaded the plate
     row as production, and the first-link refusal then pointed the operator at `--promote`.
     Top-level matrix keys are unchanged.

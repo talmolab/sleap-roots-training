@@ -148,6 +148,11 @@ alias a card may be linked under; it is never part of the published card.
   wandb call, even with `--promote` or `--force`. A dry run marks them `(status: candidate)`.
   If nothing else is in scope, the run says so and stops before the credential check. The run's
   `invocation` records the skipped ids as `skipped_by_status`.
+- **A row may hold only the known keys** (`species`, `mode`, `age`, the three model ids,
+  `source`, `status`). Any other key, such as a misspelled `stauts`, is rejected at load time:
+  otherwise the row would silently be `production`.
+- **The packaged matrix decides status.** A collection that is `candidate` there stays barred
+  from `production` even when `--selection-matrix` names an edited copy.
 - **An alias that only looks like `production`** (`Production`, or `production` plus an
   invisible character) is refused in every mode: it would otherwise pass every guard.
 - **`--verify` expects each card under its own status.** Without `--only`, a default `--verify`
