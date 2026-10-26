@@ -148,6 +148,10 @@ def seed_registry_command(
     try:
         matrix = chooser.load_selection_matrix(selection_matrix)
         all_cards = cards.expand_rows_to_cards(matrix.rows)
+        # The packaged matrix is the authority for status, in every mode: an edited copy
+        # passed as --selection-matrix cannot un-bar what the reviewed matrix keeps out
+        # of production.
+        packaged = _packaged_candidates(selection_matrix, cfg.alias)
     except ValueError as error:
         raise click.ClickException(str(error))
     # Captured before --only narrows `all_cards`: no collection the matrix produces is an
@@ -190,15 +194,9 @@ def seed_registry_command(
     # unnamed, it is out of an unscoped run's scope. Decided from the matrix alone, so it
     # runs before the credential check and every wandb call. `--verify` wins over
     # `--execute` below, so it is exempt; so are a dry run and a non-default alias.
-    # The packaged matrix is the authority for status, so an edited copy passed as
-    # --selection-matrix cannot un-bar what the reviewed matrix keeps out of production.
     skipped_by_status: list[str] = []
     if execute and not verify:
-        candidates = _candidate_collections(
-            all_cards,
-            cfg.alias,
-            packaged=_packaged_candidates(selection_matrix, cfg.alias),
-        )
+        candidates = _candidate_collections(all_cards, cfg.alias, packaged)
         if candidates and only:
             raise click.ClickException(
                 f"{len(candidates)} collection(s) come from rows with status "
@@ -223,7 +221,7 @@ def seed_registry_command(
                 return
 
     if verify:
-        _run_verify(ctx, cfg, all_cards, expected, only, matrix_collections)
+        _run_verify(ctx, cfg, all_cards, expected, only, matrix_collections, packaged)
         return
 
     if models_root is None:
@@ -246,9 +244,9 @@ def seed_registry_command(
             except (FileNotFoundError, ValueError) as error:
                 status = f"MISSING ({error})"
             marker = (
-                ""
-                if card.status == config.DEFAULT_ALIAS
-                else f"  (status: {card.status})"
+                f"  (status: {chooser.CANDIDATE_STATUS})"
+                if card.status == chooser.CANDIDATE_STATUS or collection in packaged
+                else ""
             )
             click.echo(
                 f"{collection}  {cards.card_to_metadata(card)}  [{status}]{marker}"
@@ -427,20 +425,29 @@ def _packaged_candidates(
     )
 
 
-def _run_verify(ctx, cfg, all_cards, expected, only, matrix_collections) -> None:
+def _run_verify(
+    ctx: click.Context,
+    cfg: config.RegistryConfig,
+    all_cards: list[cards.Card],
+    expected: list[str],
+    only: tuple[str, ...],
+    matrix_collections: list[str],
+    packaged: frozenset[str],
+) -> None:
     """Run ``seed-registry --verify``: report the live registry against the matrix.
 
     Without ``--only`` the expected set is the cards whose row status equals the alias.
-    Under the default alias a candidate collection is checked as barred -- it must not
-    carry the alias -- and never as expected, even when ``--only`` names it.
+    Under the default alias a candidate collection -- by its row, or by the packaged
+    matrix (``packaged``) -- is checked as barred: it must not carry the alias, and it is
+    never expected, even when ``--only`` names it.
     """
-    barred = _candidate_collections(all_cards, cfg.alias)
+    barred = _candidate_collections(all_cards, cfg.alias, packaged)
+    barred_set = set(barred)
     if only:
-        verify_expected = [c for c in expected if c not in set(barred)]
+        verify_expected = [c for c in expected if c not in barred_set]
     else:
-        verify_expected = sorted(
-            cards.collection_id(c) for c in all_cards if c.status == cfg.alias
-        )
+        by_status = [cards.collection_id(c) for c in all_cards if c.status == cfg.alias]
+        verify_expected = sorted(c for c in by_status if c not in barred_set)
         if not verify_expected:
             # A mistyped alias variable must not produce a passing verification.
             raise click.ClickException(
