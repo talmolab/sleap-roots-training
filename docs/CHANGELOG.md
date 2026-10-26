@@ -16,8 +16,10 @@ All notable changes to this project are documented here. The format is based on
   candidate row is published under `candidate` only; status is never part of the published card. A
   model referenced by rows of different status is rejected.
 - **`scripts/build_model_zip.py`** builds a byte-reproducible `<model_id>.zip` (stored, sorted, fixed
-  timestamp and mode, OS junk excluded), so a committed checksum can be re-derived from the model
-  directory instead of keeping the archive.
+  timestamp, mode and creator system, OS junk excluded), so a committed checksum can be re-derived from
+  the model directory instead of keeping the archive. A golden-digest test proves the bytes on every CI
+  host and Python. It refuses a non-model source or an output inside it, streams large files, and
+  leaves nothing behind when a build fails.
 - **Wheat and sorghum selection rows** (#72, step 1 of talmolab/sleap-roots-pipeline#118). The
   matrix now carries a wheat crown model (cylinder, 5–14; wheat seminal roots are the team's
   "crown"; the model was trained on wheat seminal + rice labels) and the sorghum primary + lateral
@@ -163,7 +165,14 @@ All notable changes to this project are documented here. The format is based on
   alias, so a default `--verify` keeps meaning "exit 1 = production drift" while candidate rows
   exist, and a `candidate` verify checks the candidate rows instead of every card. It fails on a
   candidate collection linked to `production` (`UNEXPECTED PRODUCTION LINK`) or unreadable, and on
-  an alias no row carries. No collection the matrix produces is reported as an orphan.
+  an alias no row carries. No collection the matrix produces is reported as an orphan. It lists each
+  candidate it found not linked, and gives the cause of any it could not read.
+- **An alias that differs from `production` only in case or invisible characters is refused**
+  (`Production`, `production` plus a zero-width space). Every guard keys on `production` exactly,
+  so such an alias passed them all with `--only`.
+- **The seed run's `invocation` records `skipped_by_status`**, the candidate collections an unscoped
+  default-alias run left out. A run whose whole scope is candidates stops before the credential
+  check instead of creating an empty run.
 - **`SPECIES_VOCAB` gains `wheat` and `sorghum`.** It is shared, so training `validate` and
   labeling metadata accept them too; a wheat labeling package still fails at the skeleton lookup,
   since `skeletons.yaml` has no wheat row.

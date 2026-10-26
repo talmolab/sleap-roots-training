@@ -130,6 +130,14 @@ its collections. This holds under `--force` too. Consequences:
   [Row status](#row-status-production-or-candidate)), so they do not block a full re-seed.
 - A re-run after a partial promotion repeats the same `--only … --promote`.
 
+**`--force` is not evidence that metadata was refreshed.** Artifact metadata is not part of
+the manifest digest, so re-logging byte-identical weights creates no new version and can
+leave the previously published metadata live. The seed therefore reads the server's own view
+back after linking and, where the metadata is stale, refreshes it in place; a collection that
+still does not take is reported in a distinct `failed` bucket and exits non-zero, with the
+remaining cards still attempted. Use that report, not the presence of `--force`, to decide
+whether a collection is migrated.
+
 ### Row status: production or candidate
 
 A matrix row may carry `status: candidate` (absent means `production`). Status decides which
@@ -138,24 +146,21 @@ alias a card may be linked under; it is never part of the published card.
 - **Under the default alias**, an unscoped `--execute` skips candidate cards and prints
   `skipped (status: candidate): <id>`. Naming one with `--only` is refused (exit 1) before any
   wandb call, even with `--promote` or `--force`. A dry run marks them `(status: candidate)`.
+  If nothing else is in scope, the run says so and stops before the credential check. The run's
+  `invocation` records the skipped ids as `skipped_by_status`.
+- **An alias that only looks like `production`** (`Production`, or `production` plus an
+  invisible character) is refused in every mode: it would otherwise pass every guard.
 - **`--verify` expects each card under its own status.** Without `--only`, a default `--verify`
   checks the `production` cards, and `SLEAP_ROOTS_MODEL_ALIAS=candidate … --verify` checks the
   `candidate` cards. An alias no row carries (a typo) is refused (exit 1).
 - **A default `--verify` fails on a candidate card that carries `production`**
-  (`UNEXPECTED PRODUCTION LINK`), or one whose link it cannot read (`unreadable`). A candidate
-  collection that does not exist yet is not read.
+  (`UNEXPECTED PRODUCTION LINK`), or one whose link it cannot read (`unreadable`, with the
+  error). Each candidate it finds unlinked is listed as `not linked (status: candidate)`; one
+  that does not exist yet is not read.
 - **No collection the matrix produces is an orphan**, whatever its status.
 
 The arabidopsis plate cards are the current candidate row; see
 [docs/arabidopsis-plate-models.md](docs/arabidopsis-plate-models.md).
-
-**`--force` is not evidence that metadata was refreshed.** Artifact metadata is not part of
-the manifest digest, so re-logging byte-identical weights creates no new version and can
-leave the previously published metadata live. The seed therefore reads the server's own view
-back after linking and, where the metadata is stale, refreshes it in place; a collection that
-still does not take is reported in a distinct `failed` bucket and exits non-zero, with the
-remaining cards still attempted. Use that report, not the presence of `--force`, to decide
-whether a collection is migrated.
 
 ### Rollout (canary-first)
 

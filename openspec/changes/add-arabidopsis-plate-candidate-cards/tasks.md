@@ -252,7 +252,7 @@ indistinguishable from the refusal.
   - **Caveats:**
     - the models were trained on full plates, not sections;
     - sleap-nn resizes each frame to fit 1500×1616 and then pads it, so sections are upscaled;
-    - the lateral model rests on one 7-DAG session with 4 validation frames;
+    - the lateral model rests on one imaging session of unconfirmed age, with 4 validation frames;
     - each model's metrics come from its own validation set;
     - ages older than 7 are clamped to 7 with only a warning, and ages younger than 2 get no model.
   - **Fetch:** the literal
@@ -297,6 +297,38 @@ indistinguishable from the refusal.
 - [x] 9.3 Reconcile the implementation against the proposal, design and spec (new-feature step 9).
   Update the docs for any deviation, with a `### Why N instead of M?` section.
 - [ ] 9.4 Run `/pre-merge-check` and `/review-pr`. The PR body says `Refs #3`.
+- [x] 9.5 Pre-PR `/review-pr` (report only; 5 reviewers, no blockers, mutation-tested) fixes, each
+  test-first:
+  - `build_model_zip`:
+    - resolve the source (a `.` source wrote rooted entries) and require a model directory;
+    - refuse an output inside the source;
+    - stream files instead of reading them whole;
+    - write through a temporary file, so a failed build leaves nothing;
+    - pin a golden digest plus the header fields, so CI proves host and version independence.
+
+    The committed plate digests were rebuilt and are unchanged.
+  - CLI and verify:
+    - refuse an alias that differs from `production` only in case or invisible characters
+      (`Production` passed every guard with `--only`);
+    - stop an unscoped run whose whole scope is candidates before the credential check;
+    - record `invocation.skipped_by_status`;
+    - name each candidate verify found not linked, and keep an unreadable one's cause.
+  - Code:
+    - `Card.status` is required (no fail-open default);
+    - one `CANDIDATE_STATUS` constant;
+    - the verify branch moves into `_run_verify`.
+  - Docs:
+    - the lateral's age is unconfirmed (its frame names say `day1`), and both ages are marked as
+      inferred;
+    - the metrics are SLEAP 1.3 TensorFlow values, not reproduced under sleap-nn;
+    - the primary emits `R1`–`R8`, unlike the `r1`–`r8` label corpus;
+    - the window's history is stated.
+  - Recorded: the publish record (10.6) gains per-file archive digests.
+  - Deferred, with reasons:
+    - Unicode-normalising archive names: today's model names are ASCII.
+    - Adding `desktop.ini` to the shared junk set: it would change extraction too, and needs its own
+      change.
+    - Rejecting unknown matrix keys: a broader loader change.
 
 ## 10. After merge: smoke test and publish under `candidate` (owner approves each write)
 
@@ -319,9 +351,12 @@ indistinguishable from the refusal.
   - `SLEAP_ROOTS_MODEL_ALIAS=candidate seed-registry --verify` shows 2 present and exits 0.
   - A default `--verify` still shows 11 present, nothing unexpected, and exit 0.
 - [ ] 10.6 Read both artifacts back. Write
-  `docs/migration/2026-10-22-arabidopsis-plate-candidate-publish-record.json`, using the same schema as
-  `2026-10-04-wheat-sorghum-candidate-publish-record.json`, plus the smoke-test result and the rollback
-  (`unlink()` the `candidate` alias).
+  `docs/migration/<publish date>-arabidopsis-plate-candidate-publish-record.json`, using the same
+  schema as `2026-10-04-wheat-sorghum-candidate-publish-record.json`. Also record:
+  - the smoke-test result and the rollback (`unlink()` the `candidate` alias);
+  - each archive's member list with per-file SHA256, so what was published is reconstructable even if
+    the curated copy later changes;
+  - the SHA256 of each original training-run `best_model.h5` it was compared against (task 1.3).
   - Before committing, grep the record for `:\`, `\\`, `hpi`, `users/` and a leading `/`.
 - [ ] 10.7 Open "Promote arabidopsis plate cards to production (gated)" (#NEW) with these gates:
   - parity on the candidate alias, with a plate prefix mapping in predict's `run_parity_harness.py`;

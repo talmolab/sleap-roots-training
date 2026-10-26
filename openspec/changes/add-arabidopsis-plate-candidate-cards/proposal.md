@@ -16,8 +16,10 @@ the full-plate models on GraviScan plate sections. She needs them **there**, not
 - **Source:** the owner's curated copy, `SLEAP_arabidopsis_plates/PLATE_arabidopsis/PLATE_arabidopsis/`,
   dated 2025-07-09. It is byte-identical to the original training runs. The 2023 Box models Benfica
   found are older IAA runs, with n≤25.
-- **Window: 2–7.** The primary model's labels span 2–7 DAG, so 7–14 (the models-downloader chooser
-  table) is not used. The lateral model is one 7-DAG session, and shares the row.
+- **Window: 2–7.** The primary model's labels span 2–7 DAG (read from the day prefix of its image
+  filenames), so 7–14 (the models-downloader chooser table) is not used. The lateral model is one
+  imaging session whose age is unconfirmed (7 DAG by its folder name, `day1` by its frame names), and
+  shares the row.
 - **Status:** `candidate` only. The row carries `status: candidate`, so the default `--verify` keeps
   meaning "exit 1 = real production drift".
 - **Issue #3** is closed after the publish, with a pointer to a new promotion-tracking issue that holds
