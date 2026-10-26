@@ -68,14 +68,14 @@ def test_all_null_slots_produce_no_card():
     assert cards.expand_rows_to_cards([row]) == []
 
 
-# --- 3.8: the real matrix collapses to exactly 11 cards ---
+# --- 3.8: the real matrix collapses to exactly 13 cards ---
 
 
-def test_real_matrix_yields_eleven_cards():
+def test_real_matrix_yields_thirteen_cards():
     all_cards = cards.expand_rows_to_cards(chooser.load_selection_matrix().rows)
-    assert len(all_cards) == 11, "9 committed rows over 11 physical models -> 11 cards"
+    assert len(all_cards) == 13, "10 committed rows over 13 physical models -> 13 cards"
     # One card per physical model is the whole design; assert it directly.
-    assert len({c.source_model_id for c in all_cards}) == 11
+    assert len({c.source_model_id for c in all_cards}) == 13
 
 
 def test_shared_primary_is_one_card_with_four_selectors():
@@ -154,6 +154,13 @@ EXPECTED_SELECTORS_BY_MODEL = {
     },
     "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590": {
         ("sorghum", "cylinder", 3, 14),
+    },
+    # talmolab/sleap-roots-training#3: candidate-only; 2-7 is the primary's training span.
+    "arabidopsis_plates/primary/230804_133809.multi_instance.n=606": {
+        ("arabidopsis", "plate", 2, 7),
+    },
+    "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38": {
+        ("arabidopsis", "plate", 2, 7),
     },
 }
 
@@ -473,7 +480,7 @@ def test_every_committed_matrix_card_validates_against_the_real_modelcard():
     # a bad card would otherwise first be noticed, which is too late.
     matrix = chooser.load_selection_matrix()
     all_cards = cards.expand_rows_to_cards(matrix.rows)
-    assert len(all_cards) == 11
+    assert len(all_cards) == 13
 
     for card in all_cards:
         meta = cards.card_to_metadata(card)
@@ -560,6 +567,8 @@ EXPECTED_COLLECTION_BY_MODEL = {
     "20250401_wheat_models/250328_095645.multi_instance.n=1658": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
     "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
     "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+    "arabidopsis_plates/primary/230804_133809.multi_instance.n=606": "arabidopsis_plates-primary-230804_133809.multi_instance.n-606",
+    "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38": "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
 }
 
 
@@ -581,8 +590,8 @@ def test_matrix_lock_model_to_selectors():
     all_cards = cards.expand_rows_to_cards(matrix.rows)
     got = {c.source_model_id: set(_sel(c)) for c in all_cards}
     assert got == EXPECTED_SELECTORS_BY_MODEL
-    assert len(got) == 11
-    assert len({cards.collection_id(c) for c in all_cards}) == 11  # ids stay unique
+    assert len(got) == 13
+    assert len({cards.collection_id(c) for c in all_cards}) == 13  # ids stay unique
 
 
 def test_every_collection_id_is_accepted_by_the_real_wandb_artifact():
@@ -728,3 +737,20 @@ def test_status_is_never_published():
     metadata = cards.card_to_metadata(candidate)
     assert "status" not in metadata
     assert metadata == cards.card_to_metadata(production)
+
+
+# --- Committed Matrix Totals ---
+
+PLATE_PRIMARY = "arabidopsis_plates/primary/230804_133809.multi_instance.n=606"
+PLATE_LATERAL = "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38"
+
+
+def test_committed_matrix_totals_and_status_split():
+    matrix = chooser.load_selection_matrix()
+    all_cards = cards.expand_rows_to_cards(matrix.rows)
+    assert (len(matrix.rows), len(matrix.checksums), len(all_cards)) == (10, 13, 13)
+    candidates = {
+        c.source_model_id: c.root_type for c in all_cards if c.status == "candidate"
+    }
+    assert candidates == {PLATE_PRIMARY: "primary", PLATE_LATERAL: "lateral"}
+    assert sum(c.status == "production" for c in all_cards) == 11

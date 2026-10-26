@@ -4,10 +4,10 @@ from conftest import write_matrix
 from sleap_roots_training.registry import chooser
 
 
-def test_load_selection_matrix_has_nine_rows():
+def test_load_selection_matrix_has_ten_rows():
     matrix = chooser.load_selection_matrix()
-    # 9 selection rows over 11 distinct model ids -> 11 cards (plate row omitted).
-    assert len(matrix.rows) == 9
+    # 10 selection rows over 13 distinct model ids -> 13 cards.
+    assert len(matrix.rows) == 10
     # spot-check the shared primary + a crown-only row.
     by_species_mode = {(r.species, r.mode): r for r in matrix.rows}
     canola = by_species_mode[("canola", "cylinder")]
@@ -18,8 +18,8 @@ def test_load_selection_matrix_has_nine_rows():
     assert canola.crown_model_id is None
     rice_old = by_species_mode[("rice", "cylinder")]  # last rice row wins in dict
     assert rice_old.primary_model_id is None and rice_old.lateral_model_id is None
-    # 11 distinct checksums, all 64-hex.
-    assert len(matrix.checksums) == 11
+    # 13 distinct checksums, all 64-hex.
+    assert len(matrix.checksums) == 13
 
 
 def test_parse_age_window_range():
@@ -729,3 +729,36 @@ def test_the_source_check_reports_before_the_status_check(tmp_path):
 def test_the_status_check_reports_before_origins_coverage(tmp_path):
     with pytest.raises(ValueError, match="status"):
         _load(tmp_path, override={("row", 0, "status"): "staging"}, origins={})
+
+
+# --- the arabidopsis plate row (talmolab/sleap-roots-training#3) ---
+
+PLATE_PRIMARY = "arabidopsis_plates/primary/230804_133809.multi_instance.n=606"
+PLATE_LATERAL = "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38"
+
+
+def test_the_arabidopsis_plate_source_zips_are_pinned_to_their_measured_digests():
+    # Built by scripts/build_model_zip.py from the owner's curated copy on 2026-10-26;
+    # byte-reproducible, so these re-derive from the model directories.
+    checksums = chooser.load_selection_matrix().checksums
+    assert checksums[PLATE_PRIMARY] == (
+        "ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721"
+    )
+    assert checksums[PLATE_LATERAL] == (
+        "f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265"
+    )
+
+
+def test_the_plate_models_ship_in_no_snapshot_and_say_who_pinned_them():
+    origins = chooser.load_selection_matrix().origins
+    for model_id in (PLATE_PRIMARY, PLATE_LATERAL):
+        assert origins[model_id].snapshot is None
+        assert origins[model_id].pinned_by.strip()
+
+
+def test_only_the_plate_row_is_candidate():
+    statuses = {
+        (r.species, r.mode): r.status for r in chooser.load_selection_matrix().rows
+    }
+    assert statuses.pop(("arabidopsis", "plate")) == "candidate"
+    assert set(statuses.values()) == {"production"}

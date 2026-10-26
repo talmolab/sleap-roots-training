@@ -188,7 +188,7 @@ indistinguishable from the refusal.
 
 ## 7. Add the plate row (`registry/data/model_selection.yaml`)
 
-- [ ] 7.1 Tests first. They fail until the row lands.
+- [x] 7.1 Tests first. They fail until the row lands.
   - **`test_registry_chooser.py`:**
     - `test_load_selection_matrix_has_nine_rows` becomes `…_has_ten_rows`; its counts become 10 rows
       and 13 checksums; its "plate row omitted" comment goes.
@@ -215,7 +215,7 @@ indistinguishable from the refusal.
       - Both `model_origins` have `snapshot is None`.
     - **Dry run:** a dry run with `--only <2 plate ids>` prints metadata with the selector
       `(arabidopsis, plate, 2, 7)` and no `status` key.
-- [ ] 7.2 Add the row, with these fields:
+- [x] 7.2 Add the row, with these fields:
   - `arabidopsis`, `plate`, `"2, 3, 4, 5, 6, 7"`;
   - the two model ids, and `crown_model_id: null`;
   - `status: candidate`;
@@ -228,7 +228,7 @@ indistinguishable from the refusal.
   - Rewrite the header: "Model selection matrix: 10 rows over 13 physical models; rows with
     `status: candidate` are published under `candidate` and never linked to `production`."
   - Replace the "plate row is OMITTED" note.
-- [ ] 7.3 Run the dry run against the scratch models-root from 1.3:
+- [x] 7.3 Run the dry run against the scratch models-root from 1.3:
   `SLEAP_ROOTS_MODEL_ALIAS=candidate uv run sleap-roots-training seed-registry --models-root <scratch>
   --only <2 ids>`. Both cards must show `[ok]`.
 

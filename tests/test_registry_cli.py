@@ -1856,3 +1856,91 @@ def test_seed_registry_never_receives_a_candidate_card_under_production(
     assert "candidate" not in handed
     if "--only" not in extra:  # not vacuous: the production card did reach it
         assert handed == ["production"]
+
+
+# --- the committed arabidopsis plate row (talmolab/sleap-roots-training#3) ---
+
+PLATE_IDS = [
+    "arabidopsis_plates-primary-230804_133809.multi_instance.n-606",
+    "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
+]
+
+
+def _only_plate():
+    return [arg for cid in PLATE_IDS for arg in ("--only", cid)]
+
+
+def test_the_committed_plate_cards_cannot_be_promoted_offline(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    # The offline twin of the live refusal check run before publishing (tasks 10.3).
+    calls = _spy_everything(monkeypatch)
+    result = _invoke(
+        [
+            "--models-root",
+            str(tmp_path),
+            "--execute",
+            "--yes",
+            "--promote",
+            *_only_plate(),
+        ]
+    )
+    assert result.exit_code == 1, result.output
+    for cid in PLATE_IDS:
+        assert cid in result.output
+    assert calls == [] and API_CALLS == [] and PROMOTION_CHECKS == []
+
+
+def test_the_committed_plate_candidate_publish_links_exactly_the_two_cards(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    import wandb
+
+    from registry_fakes import _FakeApi, _FakeArtifact, _FakeRun
+    from sleap_roots_training.registry import config as registry_config
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    cfg = registry_config.resolve_registry_config()
+    run = _FakeRun(entity=cfg.entity, project=cfg.seed_project)
+    configs = []
+
+    def fake_init(config=None, **kw):
+        configs.append(config)
+        return run
+
+    monkeypatch.setattr(wandb, "init", fake_init)
+    monkeypatch.setattr(wandb, "Api", lambda *a, **k: _FakeApi(collections=[]))
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda cs, root, sums: [(c, tmp_path) for c in cs]
+    )
+    result = _invoke(
+        ["--models-root", str(tmp_path), "--execute", "--yes", *_only_plate()]
+    )
+    assert result.exit_code == 0, result.output
+    project = cfg.registry_project()
+    assert sorted(run.links) == sorted(
+        (f"{project}/{cid}", ["candidate"]) for cid in PLATE_IDS
+    )
+    lineage_config = configs[0]
+    assert [(r["species"], r["mode"]) for r in lineage_config["row_sources"]] == [
+        ("arabidopsis", "plate")
+    ]
+    assert all(o["snapshot"] is None for o in lineage_config["model_origins"])
+
+
+def test_a_dry_run_of_the_plate_cards_shows_their_published_metadata(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    _no_wandb(monkeypatch)
+    result = _invoke(["--models-root", str(tmp_path), *_only_plate()])
+    assert result.exit_code == 0, result.output
+    for cid in PLATE_IDS:
+        (line,) = [ln for ln in result.output.splitlines() if ln.startswith(cid)]
+        assert "'species': 'arabidopsis'" in line and "'mode': 'plate'" in line
+        assert "'age_min': 2" in line and "'age_max': 7" in line
+        # Shown beside the metadata, never inside it.
+        metadata = line.split("  ")[1]
+        assert "status" not in metadata
+        assert line.endswith("(status: candidate)")
