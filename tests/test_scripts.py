@@ -37,6 +37,7 @@ def _load(name: str):
 clean_pkg = _load("clean_pkg")
 dump_val_metrics = _load("dump_val_metrics")
 regen_model_checksums = _load("regen_model_checksums")
+build_model_zip = _load("build_model_zip")
 
 
 # --- fakes for clean_pkg (no sleap_io needed) --------------------------------------------------
@@ -421,3 +422,81 @@ def test_regen_model_checksums_hashes_a_present_archive(tmp_path, capsys):
     captured = capsys.readouterr()
     assert f"  {model_id}: {expected}" in captured.out
     assert model_id not in captured.err  # not reported missing
+
+
+# --- build_model_zip --------------------------------------------------------------------------
+
+
+def _model_dir(tmp_path: Path) -> Path:
+    model = tmp_path / "src" / "230804_133809.multi_instance.n=606"
+    (model / "viz").mkdir(parents=True)
+    (model / "best_model.h5").write_bytes(b"weights")
+    (model / "training_config.json").write_text("{}")
+    (model / "viz" / "a.png").write_bytes(b"png")
+    (model / ".DS_Store").write_bytes(b"junk")
+    return model
+
+
+def test_build_model_zip_is_byte_reproducible(tmp_path, capsys):
+    # The committed checksum must be re-derivable from the source directory, so two builds
+    # differing only in when they ran (and in the files' mtimes) must hash identically.
+    import os
+
+    model = _model_dir(tmp_path)
+    first, second = tmp_path / "a" / "m.zip", tmp_path / "b" / "m.zip"
+    assert build_model_zip.main(str(model), str(first)) == 0
+    for path in model.rglob("*"):
+        os.utime(path, (1_700_000_000, 1_700_000_000))
+    assert build_model_zip.main(str(model), str(second)) == 0
+    assert first.read_bytes() == second.read_bytes()
+    printed = capsys.readouterr().out.split()
+    assert printed[0] == printed[1] == regen_model_checksums._sha256_of_file(first)
+
+
+def test_build_model_zip_layout_is_stored_sorted_and_timestamp_free(tmp_path):
+    import zipfile
+
+    model = _model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    assert build_model_zip.main(str(model), str(out)) == 0
+    with zipfile.ZipFile(out) as zf:
+        infos = zf.infolist()
+    names = [info.filename for info in infos]
+    assert names == sorted(names)
+    # OS junk never enters the archive, so the digest cannot depend on the build host.
+    assert names == [
+        f"{model.name}/best_model.h5",
+        f"{model.name}/training_config.json",
+        f"{model.name}/viz/a.png",
+    ]
+    assert {info.compress_type for info in infos} == {zipfile.ZIP_STORED}
+    assert {info.date_time for info in infos} == {(1980, 1, 1, 0, 0, 0)}
+
+
+def test_build_model_zip_archive_resolves_as_a_pinned_model(tmp_path, capsys):
+    from sleap_roots_training.registry.models import resolve_model_dir
+
+    model = _model_dir(tmp_path)
+    model_id = f"arabidopsis_plates/primary/{model.name}"
+    root = tmp_path / "models_root"
+    assert build_model_zip.main(str(model), str(root / f"{model_id}.zip")) == 0
+    sha = capsys.readouterr().out.strip()
+    resolved = resolve_model_dir(
+        model_id, root, {model_id: sha}, require_pinned=True, cache_root=tmp_path / "c"
+    )
+    assert (resolved / "best_model.h5").read_bytes() == b"weights"
+    assert (resolved / "training_config.json").is_file()
+
+
+def test_build_model_zip_refuses_to_overwrite(tmp_path, capsys):
+    model = _model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    out.write_bytes(b"keep me")
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert out.read_bytes() == b"keep me"
+    assert "exists" in capsys.readouterr().err
+
+
+def test_build_model_zip_refuses_a_missing_source(tmp_path, capsys):
+    assert build_model_zip.main(str(tmp_path / "nope"), str(tmp_path / "m.zip")) == 1
+    assert not (tmp_path / "m.zip").exists()

@@ -132,7 +132,8 @@ directory contents. To achieve that:
 - entries SHALL be stored uncompressed;
 - entries SHALL be in sorted path order;
 - every entry SHALL have the same fixed timestamp and permission bits;
-- every file SHALL sit under one top-level directory named after the model directory.
+- every file SHALL sit under one top-level directory named after the model directory;
+- OS junk files (as excluded by model resolution) SHALL be left out.
 
 A checksum committed to the matrix can therefore be re-derived from the source directory, without
 keeping the archive. The script SHALL refuse to overwrite an existing output file.
@@ -177,9 +178,9 @@ re-pointing a card. Promoting these cards changes `status`, and so SHALL modify 
 
 - **WHEN** the committed selection matrix is loaded and expanded to cards
 - **THEN** `arabidopsis_plates/primary/230804_133809.multi_instance.n=606` is one `primary` card with
-  checksum `ac0ca83ee8292ede4e45973437bf439334244e93325329d071ad306dd294a764`
+  checksum `ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721`
 - **AND** `arabidopsis_plates/lateral/231130_135922.multi_instance.n=38` is one `lateral` card with
-  checksum `d30d5eb1dbef798e58b640b7d34632854496a67b6bedb7a35cdd2766127f39bc`
+  checksum `f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265`
 - **AND** each has the single selector (`arabidopsis`, `plate`, 2, 7) and status `candidate`
 - **AND** their collection ids are `arabidopsis_plates-primary-230804_133809.multi_instance.n-606` and
   `arabidopsis_plates-lateral-231130_135922.multi_instance.n-38`

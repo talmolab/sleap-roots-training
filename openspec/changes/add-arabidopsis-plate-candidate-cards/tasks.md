@@ -42,25 +42,30 @@ indistinguishable from the refusal.
 
 ## 1. Reproducible archive build (`scripts/build_model_zip.py`)
 
-- [ ] 1.1 Tests first (`tests/test_scripts.py`), using a `tmp_path` model directory with
-  `best_model.h5`, `training_config.json` and one nested file:
+- [x] 1.1 Tests first (`tests/test_scripts.py`), using a `tmp_path` model directory with
+  `best_model.h5`, `training_config.json`, one nested file and one OS-junk file:
   - **Determinism:** two builds, with the source files' mtimes changed between them, give identical
     SHA256s.
   - **Layout:** every entry sits under `<dirname>/`, entries are sorted, `compress_type ==
-    ZIP_STORED`, and every `date_time == (1980, 1, 1, 0, 0, 0)`.
+    ZIP_STORED`, every `date_time == (1980, 1, 1, 0, 0, 0)`, and OS junk is excluded.
   - **Resolution:** the archive resolves with
     `resolve_model_dir(model_id, root, {model_id: sha}, require_pinned=True)`.
   - **No overwrite:** an existing output path makes the script exit non-zero, with the file unchanged.
+  - **Missing source:** a source that is not a directory makes the script exit non-zero.
   - **Output:** the script prints the SHA256.
-- [ ] 1.2 Implement the script: a stdlib-only `main(argv)` with a google-style docstring, matching the
-  existing `scripts/` style.
-- [ ] 1.3 Owner step, no code. Build both archives from the curated copy into a scratch `--models-root`.
+- [x] 1.2 Implement the script: `main(model_dir, out_zip)` with a google-style docstring, matching
+  `regen_model_checksums.py`. It reuses the registry's `junk_filter` and `_sha256_of_file`.
+- [x] 1.3 Owner step, no code. Build both archives from the curated copy into a scratch `--models-root`.
   - Primary source: `primary_root/labels/models/230804_133809.multi_instance.n=606/`.
   - Lateral source: `lateral_roots/labels/models/231130_135922.multi_instance.n=38/`.
   - Confirm the digests:
-    - primary: `ac0ca83ee8292ede4e45973437bf439334244e93325329d071ad306dd294a764`
-    - lateral: `d30d5eb1dbef798e58b640b7d34632854496a67b6bedb7a35cdd2766127f39bc`
-    - Both were measured 2026-10-22 from the prototype of this script.
+    - primary: `ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721`
+    - lateral: `f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265`
+    - Both were measured 2026-10-26 with the committed script, two builds each, byte-identical.
+    - **Why these instead of the proposal's digests?** The proposal recorded digests from a
+      scratch prototype that set permission bits `0o644`. The committed script records a
+      regular-file mode, `0o100644`, which is what `zipfile` writes for a real file. The archive
+      header bytes therefore differ. The file contents are unchanged.
   - Confirm each archive contains:
     - `best_model.h5` and `training_config.json`;
     - `labels_gt.val.slp`, which predict's parity harness needs;

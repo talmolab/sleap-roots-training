@@ -96,8 +96,13 @@ timestamps and compressor version, so the archive itself would have to be kept f
 - a fixed 1980-01-01 timestamp and fixed permission bits;
 - every file under one top-level directory named after the model directory.
 
-The same directory contents always produce the same SHA256. This was verified on 2026-10-22: two
-builds per model, with identical digests, both accepted by `resolve_model_dir(require_pinned=True)`.
+OS junk is excluded through the registry's own `junk_filter`, so the digest cannot depend on the
+host that built it.
+
+The same directory contents always produce the same SHA256. This was verified on 2026-10-26 with
+the committed script: two builds per model gave identical digests, and both were accepted by
+`resolve_model_dir(require_pinned=True)`. A 2026-10-22 prototype used different permission bits, so
+its digests are superseded (see tasks 1.3).
 The committed checksum can therefore be re-derived from the curated copy, and nothing has to be stored
 on the share.
 
