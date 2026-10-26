@@ -1537,3 +1537,28 @@ def test_the_verify_orphan_line_is_ascii_escaped(
     result = _invoke(["--selection-matrix", str(tiny_matrix), "--verify"])
     orphan = [line for line in result.output.splitlines() if line.startswith("orphan:")]
     assert orphan and orphan[0].isascii(), result.output
+
+
+def test_an_invalid_row_status_is_a_clean_error_not_a_traceback(
+    monkeypatch, tmp_path, stub_models_root
+):
+    _no_wandb(monkeypatch)
+    bad = write_matrix(
+        tmp_path / "bad.yaml",
+        [
+            {
+                "species": "soybean",
+                "mode": "cylinder",
+                "age": "2, 3",
+                "primary_model_id": "x/p/1",
+                "status": "staging",
+            }
+        ],
+    )
+    result = _invoke(
+        ["--selection-matrix", str(bad), "--models-root", str(stub_models_root)]
+    )
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "staging" in result.output and "row 0" in result.output
+    assert not isinstance(result.exception, ValueError)

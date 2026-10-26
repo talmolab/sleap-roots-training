@@ -74,7 +74,7 @@ indistinguishable from the refusal.
 
 ## 2. Row status in the loader (`registry/chooser.py`)
 
-- [ ] 2.1 Tests first (`tests/test_registry_chooser.py`), using `write_matrix`:
+- [x] 2.1 Tests first (`tests/test_registry_chooser.py`), using `write_matrix`:
   - **Default:** a row without `status` has `status == "production"`.
   - **Explicit values:** `status: production` and `status: candidate` load as written.
   - **Invalid values:** `staging`, `null`, `""`, `1`, `Candidate` and `" candidate "` each raise a
@@ -82,7 +82,7 @@ indistinguishable from the refusal.
   - **Order:** a row with both a bad `status` and a missing `source` reports the `source` error.
   - **CLI:** `seed-registry` over a matrix with `status: staging` exits non-zero with that message,
     and no traceback.
-- [ ] 2.2 Implement:
+- [x] 2.2 Implement:
   - Add `ROW_STATUSES = (config.DEFAULT_ALIAS, "candidate")`.
   - Add `SelectionRow.status: str = "production"` as a trailing field.
   - Check status after `source` and before `origins`.

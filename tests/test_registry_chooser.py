@@ -688,3 +688,44 @@ def test_row_model_ids_maps_each_root_type_to_its_slot():
         "rice", "cylinder", "2", "p/1", None, "c/1", source="test row"
     )
     assert row.model_ids() == {"primary": "p/1", "lateral": None, "crown": "c/1"}
+
+
+# --- per-row publication status -----------------------------------------------------------
+
+
+def test_a_row_without_status_is_production(tmp_path):
+    assert _load(tmp_path).rows[0].status == "production"
+
+
+@pytest.mark.parametrize("status", ["production", "candidate"])
+def test_an_explicit_status_loads_as_written(tmp_path, status):
+    matrix = _load(tmp_path, override={("row", 0, "status"): status})
+    assert matrix.rows[0].status == status
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["staging", None, "", 1, "Candidate", " candidate "],
+    ids=["unknown", "null", "empty", "not-a-string", "cased", "padded"],
+)
+def test_an_invalid_status_is_rejected_naming_both_values(tmp_path, status):
+    # Nothing is normalized: the alias strip in config.py is for environment variables,
+    # and a committed matrix that says " candidate " is a typo to fix, not to forgive.
+    with pytest.raises(ValueError, match=r"row 0.*status") as excinfo:
+        _load(tmp_path, override={("row", 0, "status"): status})
+    assert "'production'" in str(excinfo.value)
+    assert "'candidate'" in str(excinfo.value)
+
+
+def test_the_source_check_reports_before_the_status_check(tmp_path):
+    with pytest.raises(ValueError, match="source"):
+        _load(
+            tmp_path,
+            override={("row", 0, "status"): "staging"},
+            drop=[("row", 0, "source")],
+        )
+
+
+def test_the_status_check_reports_before_origins_coverage(tmp_path):
+    with pytest.raises(ValueError, match="status"):
+        _load(tmp_path, override={("row", 0, "status"): "staging"}, origins={})
