@@ -453,10 +453,13 @@ def verify_failed(report: Mapping) -> bool:
     does fail — those are collections the consumer needs and cannot use — and so does a
     candidate collection linked to the alias, or one whose link could not be read: a
     model the matrix keeps out of production may be live for the consumer.
+
+    Every key is required: a report that stopped carrying a failure category raises
+    ``KeyError`` instead of passing.
     """
     return bool(
-        report.get("missing")
-        or report.get("legacy")
-        or report.get("unexpected_production")
-        or report.get("barred_unreadable")
+        report["missing"]
+        or report["legacy"]
+        or report["unexpected_production"]
+        or report["barred_unreadable"]
     )

@@ -120,6 +120,21 @@ CANDIDATE_STATUS = "candidate"
 #: value is deliberately also an alias name: ``--verify`` expects a card under the alias
 #: equal to its status. Exact strings: nothing is stripped or case-folded.
 ROW_STATUSES: tuple[str, ...] = (DEFAULT_ALIAS, CANDIDATE_STATUS)
+#: Every key a matrix row may carry. Anything else is rejected: a missing ``status``
+#: means production, so a misspelled one would otherwise load a candidate row as
+#: production without a word.
+ROW_KEYS: frozenset[str] = frozenset(
+    {
+        "species",
+        "mode",
+        "age",
+        "primary_model_id",
+        "lateral_model_id",
+        "crown_model_id",
+        "source",
+        "status",
+    }
+)
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"
@@ -311,6 +326,11 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
         for required in ("species", "mode", "age"):
             if required not in raw:
                 raise ValueError(f"row {index}: missing required key {required!r}")
+        unknown = sorted(set(raw) - ROW_KEYS, key=str)
+        if unknown:
+            raise ValueError(
+                f"row {index}: unknown key(s) {unknown} (known keys: {sorted(ROW_KEYS)})"
+            )
         species = raw["species"]
         mode = raw["mode"]
         if species not in SPECIES_VOCAB:

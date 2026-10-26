@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 import click
 
@@ -190,9 +190,15 @@ def seed_registry_command(
     # unnamed, it is out of an unscoped run's scope. Decided from the matrix alone, so it
     # runs before the credential check and every wandb call. `--verify` wins over
     # `--execute` below, so it is exempt; so are a dry run and a non-default alias.
-    skipped_by_status: list = []
+    # The packaged matrix is the authority for status, so an edited copy passed as
+    # --selection-matrix cannot un-bar what the reviewed matrix keeps out of production.
+    skipped_by_status: list[str] = []
     if execute and not verify:
-        candidates = _candidate_collections(all_cards, cfg.alias)
+        candidates = _candidate_collections(
+            all_cards,
+            cfg.alias,
+            packaged=_packaged_candidates(selection_matrix, cfg.alias),
+        )
         if candidates and only:
             raise click.ClickException(
                 f"{len(candidates)} collection(s) come from rows with status "
@@ -206,7 +212,9 @@ def seed_registry_command(
             click.echo(f"skipped (status: {chooser.CANDIDATE_STATUS}): {collection}")
         if candidates:
             skipped_by_status = candidates
-            all_cards = [c for c in all_cards if c.status == config.DEFAULT_ALIAS]
+            all_cards = [
+                c for c in all_cards if cards.collection_id(c) not in candidates
+            ]
             if not all_cards:
                 click.echo(
                     "nothing in scope: every card is candidate-status under "
@@ -381,18 +389,41 @@ def _looks_like(alias: str, target: str) -> bool:
     return visible.casefold() == target.casefold()
 
 
-def _candidate_collections(cards_, alias: str) -> list[str]:
-    """Return the candidate-status collections among ``cards_``, under the default alias.
+def _candidate_collections(
+    card_list: Iterable[cards.Card],
+    alias: str,
+    packaged: frozenset[str] = frozenset(),
+) -> list[str]:
+    """Return the candidate-status collections among ``card_list``, under the default alias.
 
-    These must never carry ``alias``. Under any other alias nothing is barred: a
-    candidate row is published there.
+    These must never carry ``alias``. A collection in ``packaged`` (candidate-status in
+    the packaged matrix) counts whatever its card says. Under any other alias nothing is
+    barred: a candidate row is published there.
     """
     if alias != config.DEFAULT_ALIAS:
         return []
     return sorted(
         cards.collection_id(card)
-        for card in cards_
-        if card.status != config.DEFAULT_ALIAS
+        for card in card_list
+        if card.status != config.DEFAULT_ALIAS or cards.collection_id(card) in packaged
+    )
+
+
+def _packaged_candidates(
+    selection_matrix: Optional[Path], alias: str
+) -> frozenset[str]:
+    """Return the packaged matrix's candidate-status collections, when they matter.
+
+    Empty when the run already reads the packaged matrix (its own statuses apply) or the
+    alias is not the default (nothing is barred).
+    """
+    if selection_matrix is None or alias != config.DEFAULT_ALIAS:
+        return frozenset()
+    packaged = cards.expand_rows_to_cards(chooser.load_selection_matrix(None).rows)
+    return frozenset(
+        cards.collection_id(card)
+        for card in packaged
+        if card.status == chooser.CANDIDATE_STATUS
     )
 
 
@@ -443,18 +474,21 @@ def _run_verify(ctx, cfg, all_cards, expected, only, matrix_collections) -> None
         )
     for collection in report["indeterminate"]:
         click.echo(f"indeterminate: {collection} (could not read its aliases)")
-    for collection in report.get("barred_clear", []):
+    # Indexed, not .get(): these are the safety signals, and a missing one must raise
+    # rather than read as "nothing to report".
+    for collection in report["barred_clear"]:
         click.echo(f"not linked (status: {chooser.CANDIDATE_STATUS}): {collection}")
-    for collection in report.get("unexpected_production", []):
+    for collection in report["unexpected_production"]:
         click.echo(
             f"UNEXPECTED PRODUCTION LINK: {collection} "
             f"(row status is {chooser.CANDIDATE_STATUS})"
         )
-    errors = report.get("barred_errors", {})
-    for collection in report.get("barred_unreadable", []):
+    errors = report["barred_errors"]
+    for collection in report["barred_unreadable"]:
+        cause = _safe(errors.get(collection, "unknown error"))
         click.echo(
             f"unreadable: {collection} (could not check that it is not linked to "
-            f"{ascii(cfg.alias)}: {errors.get(collection, 'unknown error')})"
+            f"{ascii(cfg.alias)}: {cause})"
         )
     if report["orphans_suppressed"]:
         click.echo(

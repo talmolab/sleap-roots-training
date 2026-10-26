@@ -17,7 +17,8 @@ Usage:
 It refuses a directory without ``best_model.h5`` and ``training_config.json``, an output
 inside the model directory (the next build would archive it), and an existing output. The
 archive is written to a temporary file beside the output and renamed into place only once
-complete, so a failed build leaves nothing an operator could mistake for a good archive.
+complete, so a failed build leaves nothing an operator could mistake for a good archive. An
+existing temporary file is refused and left alone: it may be another build's.
 """
 
 import shutil
@@ -72,8 +73,19 @@ def main(model_dir: str, out_zip: str) -> int:
 
     out.parent.mkdir(parents=True, exist_ok=True)
     partial = out.with_name(out.name + ".partial")
+    # Created exclusively before the cleanup below takes ownership of it: an existing
+    # partial may be another build's work in progress, so it is refused, never deleted.
     try:
-        with zipfile.ZipFile(partial, "x", compression=zipfile.ZIP_STORED) as archive:
+        handle = open(partial, "xb")
+    except FileExistsError:
+        print(
+            f"refusing to build: {partial} exists (a killed or running build); "
+            "remove it once no build is writing it",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        with handle, zipfile.ZipFile(handle, "w") as archive:
             for name in relative:
                 path = source / name
                 info = zipfile.ZipInfo(f"{source.name}/{name}", _FIXED_DATE_TIME)
