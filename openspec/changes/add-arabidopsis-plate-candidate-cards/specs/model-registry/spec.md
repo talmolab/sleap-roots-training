@@ -76,8 +76,10 @@ Under the **default** alias, `seed-registry --execute` SHALL never publish a car
 Neither `--promote` nor `--force` SHALL override this. The packaged matrix is the authority for a
 row's status: when `--selection-matrix` names another matrix, a collection whose row in the
 **packaged** matrix is `candidate`-status SHALL be treated as candidate-status as well, so an edited
-copy cannot promote what the reviewed matrix keeps out of production. The decision SHALL be made from
-the matrices alone. It SHALL run after:
+copy cannot promote what the reviewed matrix keeps out of production. That holds in every mode:
+`--verify` SHALL check such a collection as barred, never as expected, and a dry run SHALL mark it
+`status: candidate`. A packaged matrix that fails to load SHALL be reported as a CLI error. The
+decision SHALL be made from the matrices alone. It SHALL run after:
 
 - the blank-alias check;
 - the matrix load;
@@ -119,6 +121,9 @@ A refused run therefore makes no wandb call. These SHALL NOT be refused or narro
   `--selection-matrix`, and `seed-registry --execute --yes --only <that row's collection> --promote`
   runs under the default alias
 - **THEN** it is refused by this check, naming that collection, before any wandb call
+- **AND WHEN** the same copy is used for an unscoped `--execute`, a `--verify` or a dry run
+- **THEN** that collection is skipped and never published, checked as barred, or marked
+  `status: candidate`, respectively
 
 #### Scenario: Losing the candidate alias variable cannot publish a candidate row
 

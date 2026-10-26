@@ -341,13 +341,27 @@ indistinguishable from the refusal.
     build's file); pin the `file_size`-before-stream line against `writestr` under a lowered ZIP64
     threshold.
   - Docs (`docs/arabidopsis-plate-models.md`), from the archives' own files:
-    - the metrics are over matched instances; state ground-truth and predicted counts and OKS
-      mAP/mAR;
-    - the split is a random 10% of frames, not held out by plate or session;
-    - `R1` is the base and `R8` the tip (owner; every validation instance has `R1` above `R8`), and
-      both skeletons are linear chains;
-    - both models resize to 1500×1616; the lateral runs at scale 1.0;
+    - the metrics are over paired instances ("paired" is not "found"); state labelled, paired and
+      predicted counts and OKS mAP/mAR;
+    - the split is a random 10% of frames, and some validation images are training images labelled
+      again in a second copy (3 of 61 primary, 2 of 4 lateral), so the numbers are not held out;
+    - the primary's labels include an IAA-treated set (166 of 545 train, 23 of 61 val frames);
+    - the primary's `R1` is the base and `R8` the tip (owner; all 304 validation roots with both ends
+      labelled have `R1` above `R8`); the lateral's `r1`-as-base is inferred; both skeletons are
+      linear chains;
+    - both models resize to 1500 × 1616 (height × width); the lateral runs at scale 1.0;
     - the page says "to be published" until 10.9 records the published versions.
+  - Focused review of these fixes (2 reviewers, no blockers), test-first:
+    - the packaged statuses apply to `--verify` (barred, not expected) and the dry-run marker too,
+      and a packaged matrix that fails to load is a CLI error;
+    - tests now prove an edited copy's unscoped run never publishes the packaged candidate, and that
+      the verify echo, not only `verify_failed`, requires its report keys (both killed by reverting
+      the line they pin);
+    - the page: some validation images are training images (3 of 61 primary, 2 of 4 lateral), so the
+      numbers are not held out; "paired" is not "found"; the IAA-treated share; the lateral's base is
+      inferred; one dimension order.
+    - Accepted: an edited copy that re-lists the same weights under a new model id gets past the
+      collection-keyed bar; the bar guards against slips, not a determined operator.
   - Declined, with reasons: the remaining suggestions (alias NFKC folding, a library-level guard in
     `publish_card`, lazy-pagination fakes, symlink refusal, type and naming clean-ups) do not change
     what this PR publishes; they are noted on the PR.
