@@ -1562,3 +1562,158 @@ def test_an_invalid_row_status_is_a_clean_error_not_a_traceback(
     assert "Error:" in result.output
     assert "staging" in result.output and "row 0" in result.output
     assert not isinstance(result.exception, ValueError)
+
+
+# --- candidate rows under the default alias (Candidate Rows Are Never Linked to Production)
+
+
+_PLATE_AGE = "2, 3, 4, 5, 6, 7"
+
+
+def _status_matrix(tmp_path):
+    """One production row (collection ``s-p``) and one candidate row (``a-p``)."""
+    return write_matrix(
+        tmp_path / "status.yaml",
+        [
+            {
+                "species": "soybean",
+                "mode": "cylinder",
+                "age": "2, 3",
+                "primary_model_id": "s/p",
+            },
+            {
+                "species": "arabidopsis",
+                "mode": "plate",
+                "age": _PLATE_AGE,
+                "primary_model_id": "a/p",
+                "status": "candidate",
+            },
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["--promote"], ["--promote", "--force"], []],
+    ids=["--promote", "--promote --force", "lost alias variable"],
+)
+def test_naming_a_candidate_collection_under_production_is_refused_before_anything(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root, extra
+):
+    calls = _spy_everything(monkeypatch)
+    result = _execute(
+        _status_matrix(tmp_path), stub_models_root, "--yes", "--only", "a-p", *extra
+    )
+    assert result.exit_code == 1, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "a-p" in result.output and "status" in result.output
+    # Refused by the candidate check itself, not by the first-link check behind it.
+    assert "Pass --promote" not in result.output
+    # Both remedies: promote via the matrix, or re-seed naming production ids only.
+    assert "reviewed" in result.output and "production-status" in result.output
+    assert calls == [] and API_CALLS == [] and PROMOTION_CHECKS == []
+
+
+def test_an_unscoped_production_reseed_skips_candidate_rows(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
+):
+    import wandb
+
+    from sleap_roots_training.registry import cards as registry_cards
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seen = {"promotion": [], "resolve": [], "seed": []}
+
+    def promotion(cfg, cs, api=None):
+        seen["promotion"] += [registry_cards.collection_id(c) for c in cs]
+        return []
+
+    def resolve(cs, root, sums):
+        seen["resolve"] += [registry_cards.collection_id(c) for c in cs]
+        return [(c, tmp_path) for c in cs]
+
+    def seed(resolved, cfg, run, *, api=None, force=False):
+        seen["seed"] += [registry_cards.collection_id(c) for c, _ in resolved]
+        return {"published": [], "skipped": [], "failed": [], "stale": []}
+
+    monkeypatch.setattr(publish, "unpromoted_collections", promotion)
+    monkeypatch.setattr(publish, "resolve_all", resolve)
+    monkeypatch.setattr(publish, "seed_registry", seed)
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda *a, **k: SimpleNamespace(
+            project=k.get("project"), entity=k.get("entity"), finish=lambda: None
+        ),
+    )
+    result = _execute(_status_matrix(tmp_path), stub_models_root, "--yes")
+    assert result.exit_code == 0, result.output
+    assert "skipped (status: candidate): a-p" in result.output
+    assert seen == {"promotion": ["s-p"], "resolve": ["s-p"], "seed": ["s-p"]}
+
+
+def test_a_candidate_row_publishes_under_the_candidate_alias(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    import wandb
+
+    from registry_fakes import _FakeApi, _FakeArtifact, _FakeRun
+    from sleap_roots_training.registry import config as registry_config
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    monkeypatch.setenv("SLEAP_ROOTS_MODEL_ALIAS", "candidate")
+    cfg = registry_config.resolve_registry_config()
+    run = _FakeRun(entity=cfg.entity, project=cfg.seed_project)
+    monkeypatch.setattr(wandb, "init", lambda *a, **k: run)
+    monkeypatch.setattr(wandb, "Api", lambda *a, **k: _FakeApi(collections=[]))
+    monkeypatch.setattr(wandb, "Artifact", _FakeArtifact)
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda cs, root, sums: [(c, tmp_path) for c in cs]
+    )
+    result = _execute(_status_matrix(tmp_path), tmp_path, "--yes", "--only", "a-p")
+    assert result.exit_code == 0, result.output
+    assert run.links == [(f"{cfg.registry_project()}/a-p", ["candidate"])]
+
+
+def test_a_default_alias_dry_run_lists_candidate_cards_marked(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
+):
+    _no_wandb(monkeypatch)
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(_status_matrix(tmp_path)),
+            "--models-root",
+            str(stub_models_root),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    (line,) = [ln for ln in result.output.splitlines() if ln.startswith("a-p ")]
+    assert "status: candidate" in line
+    (line,) = [ln for ln in result.output.splitlines() if ln.startswith("s-p ")]
+    assert "status: candidate" not in line
+    assert API_CALLS == [] and PROMOTION_CHECKS == []
+
+
+def test_verify_with_execute_is_not_refused_by_the_candidate_check(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    reached = []
+
+    def fake_verify(cfg, expected, api=None, **kw):
+        reached.append(sorted(expected))
+        return _verify_report(present=expected)
+
+    monkeypatch.setattr(publish, "verify_registry", fake_verify)
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(_status_matrix(tmp_path)),
+            "--verify",
+            "--execute",
+            "--only",
+            "a-p",
+        ]
+    )
+    assert reached, result.output

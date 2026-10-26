@@ -172,6 +172,28 @@ def seed_registry_command(
             f"({config.DEFAULT_ALIAS!r}), not {ascii(cfg.alias)}."
         )
 
+    # A candidate-status row is never linked to the default alias: named, it is refused;
+    # unnamed, it is out of an unscoped run's scope. Decided from the matrix alone, so it
+    # runs before the credential check and every wandb call. `--verify` wins over
+    # `--execute` below, so it is exempt; so are a dry run and a non-default alias.
+    if execute and not verify and cfg.alias == config.DEFAULT_ALIAS:
+        candidates = sorted(
+            cards.collection_id(card)
+            for card in all_cards
+            if card.status != config.DEFAULT_ALIAS
+        )
+        if candidates and only:
+            raise click.ClickException(
+                f"{len(candidates)} collection(s) come from rows with status "
+                f"'candidate' and are never linked to {ascii(cfg.alias)}: {candidates}. "
+                "To promote one, change its row's `status` in a reviewed change to the "
+                "committed matrix first; to re-seed production, name only "
+                "production-status collections with --only. Nothing published."
+            )
+        for collection in candidates:
+            click.echo(f"skipped (status: candidate): {collection}")
+        all_cards = [c for c in all_cards if c.status == config.DEFAULT_ALIAS]
+
     if verify:
         _require_api_key()
         # `--only` scopes `expected` above, so orphan reporting has to be suppressed
@@ -223,7 +245,14 @@ def seed_registry_command(
                 )
             except (FileNotFoundError, ValueError) as error:
                 status = f"MISSING ({error})"
-            click.echo(f"{collection}  {cards.card_to_metadata(card)}  [{status}]")
+            marker = (
+                ""
+                if card.status == config.DEFAULT_ALIAS
+                else f"  (status: {card.status})"
+            )
+            click.echo(
+                f"{collection}  {cards.card_to_metadata(card)}  [{status}]{marker}"
+            )
         return
 
     # The idempotency skip is per alias, so under a non-default alias no card counts as

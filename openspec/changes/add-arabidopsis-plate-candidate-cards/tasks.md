@@ -104,7 +104,7 @@ indistinguishable from the refusal.
 
 ## 4. Candidate scoping and refusal under production (`cli.py`)
 
-- [ ] 4.1 Tests first (`tests/test_registry_cli.py`), over an inline matrix with one production row and
+- [x] 4.1 Tests first (`tests/test_registry_cli.py`), over an inline matrix with one production row and
   one candidate row.
   - **Refusal:** under the default alias, `--execute --yes --only <cand> --promote` exits 1.
     - The output names `<cand>`, `status`, and the production-ids remedy.
@@ -126,7 +126,7 @@ indistinguishable from the refusal.
     `status: candidate`.
   - **Verify:** `--verify --execute` under the default alias reaches `verify_registry` and is not
     refused.
-- [ ] 4.2 Implement:
+- [x] 4.2 Implement:
   - Place the guard after the `--promote` usage validation, conditioned on `execute and not verify`,
     under the default alias, and before `_require_api_key`.
   - It refuses when `--only` names a candidate card. Otherwise it drops candidate cards from
