@@ -2132,10 +2132,10 @@ def test_an_edited_matrix_copy_cannot_promote_a_packaged_candidate(
     assert calls == [] and API_CALLS == [] and PROMOTION_CHECKS == []
 
 
-def test_an_edited_matrix_copy_still_skips_a_packaged_candidate_unscoped(
-    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
-):
+def _edited_copy(tmp_path):
+    """The packaged matrix with every ``status: candidate`` line deleted."""
     text = _packaged_matrix_text()
+    assert "status: candidate" in text
     edited = tmp_path / "edited.yaml"
     edited.write_text(
         "\n".join(
@@ -2143,6 +2143,98 @@ def test_an_edited_matrix_copy_still_skips_a_packaged_candidate_unscoped(
         ),
         encoding="utf-8",
     )
-    _spy_everything(monkeypatch)
-    result = _execute(edited, stub_models_root, "--yes")
+    return edited
+
+
+def test_an_edited_matrix_copy_still_skips_a_packaged_candidate_unscoped(
+    monkeypatch, isolate_wandb_env, tmp_path
+):
+    import wandb
+
+    from sleap_roots_training.registry import cards as registry_cards
+
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seeded = []
+
+    def seed(resolved, cfg, run, *, api=None, force=False):
+        seeded.extend(registry_cards.collection_id(c) for c, _ in resolved)
+        return {"published": [], "skipped": [], "failed": [], "stale": []}
+
+    monkeypatch.setattr(
+        publish, "resolve_all", lambda cs, root, sums: [(c, tmp_path) for c in cs]
+    )
+    monkeypatch.setattr(publish, "seed_registry", seed)
+    monkeypatch.setattr(
+        wandb,
+        "init",
+        lambda *a, **k: SimpleNamespace(
+            project=k.get("project"), entity=k.get("entity"), finish=lambda: None
+        ),
+    )
+    result = _execute(_edited_copy(tmp_path), tmp_path, "--yes")
+    assert result.exit_code == 0, result.output
     assert f"skipped (status: candidate): {_PLATE_PRIMARY}" in result.output
+    assert seeded and _PLATE_PRIMARY not in seeded
+
+
+def test_verify_with_an_edited_matrix_copy_checks_a_packaged_candidate_as_barred(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    seen = {}
+
+    def fake_verify(cfg, expected, api=None, **kw):
+        seen["expected"] = list(expected)
+        seen["barred"] = list(kw["barred_collections"])
+        return _verify_report(present=expected)
+
+    monkeypatch.setattr(publish, "verify_registry", fake_verify)
+    result = _invoke(["--selection-matrix", str(_edited_copy(tmp_path)), "--verify"])
+    assert result.exit_code == 0, result.output
+    assert _PLATE_PRIMARY in seen["barred"]
+    assert _PLATE_PRIMARY not in seen["expected"]
+
+
+def test_a_dry_run_with_an_edited_matrix_copy_marks_a_packaged_candidate(tmp_path):
+    result = _invoke(
+        [
+            "--selection-matrix",
+            str(_edited_copy(tmp_path)),
+            "--models-root",
+            str(tmp_path),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    (line,) = [ln for ln in result.output.splitlines() if ln.startswith(_PLATE_PRIMARY)]
+    assert line.endswith("(status: candidate)")
+
+
+def test_verify_echo_requires_its_report_keys(monkeypatch, tmp_path):
+    # `barred_clear` is read only by the CLI echo, not by verify_failed.
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    report = _verify_report(present=["s-p"])
+    del report["barred_clear"]
+    monkeypatch.setattr(publish, "verify_registry", lambda *a, **k: report)
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
+    assert result.exit_code != 0, result.output
+
+
+def test_a_broken_packaged_matrix_is_a_clean_cli_error(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
+):
+    from sleap_roots_training.registry import chooser
+
+    real = chooser.load_selection_matrix
+
+    def load(path=None):
+        if path is None:
+            raise ValueError("packaged matrix: row 0: broken")
+        return real(path)
+
+    monkeypatch.setattr(chooser, "load_selection_matrix", load)
+    calls = _spy_everything(monkeypatch)
+    result = _execute(_status_matrix(tmp_path), stub_models_root, "--yes")
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit)
+    assert "packaged matrix: row 0: broken" in result.output
+    assert calls == [] and API_CALLS == []
