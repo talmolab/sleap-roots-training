@@ -328,7 +328,29 @@ indistinguishable from the refusal.
     - Unicode-normalising archive names: today's model names are ASCII.
     - Adding `desktop.ini` to the shared junk set: it would change extraction too, and needs its own
       change.
-    - Rejecting unknown matrix keys: a broader loader change.
+    - Rejecting unknown matrix keys: a broader loader change. (Reversed for row keys in 9.6.)
+- [ ] 9.6 Post-PR `/review-pr 82` fixes (5 reviewers, no blockers), each test-first, RED then GREEN:
+  - Loader: reject unknown **row** keys. A misspelled `status` (`stauts`, `Status`) loaded the plate
+    row as production, and the first-link refusal then pointed the operator at `--promote`.
+    Top-level matrix keys are unchanged.
+  - CLI: under the default alias, a collection that is `candidate` in the **packaged** matrix is
+    candidate whatever `--selection-matrix` says. An edited copy plus `--promote` linked it.
+  - Verify: `verify_failed` and `_run_verify` index the report keys, so a missing failure key raises
+    instead of passing; the test fakes return full reports.
+  - `build_model_zip`: refuse an existing `<out>.partial` without deleting it (it deleted another
+    build's file); pin the `file_size`-before-stream line against `writestr` under a lowered ZIP64
+    threshold.
+  - Docs (`docs/arabidopsis-plate-models.md`), from the archives' own files:
+    - the metrics are over matched instances; state ground-truth and predicted counts and OKS
+      mAP/mAR;
+    - the split is a random 10% of frames, not held out by plate or session;
+    - `R1` is the base and `R8` the tip (owner; every validation instance has `R1` above `R8`), and
+      both skeletons are linear chains;
+    - both models resize to 1500×1616; the lateral runs at scale 1.0;
+    - the page says "to be published" until 10.9 records the published versions.
+  - Declined, with reasons: the remaining suggestions (alias NFKC folding, a library-level guard in
+    `publish_card`, lazy-pagination fakes, symlink refusal, type and naming clean-ups) do not change
+    what this PR publishes; they are noted on the PR.
 
 ## 10. After merge: smoke test and publish under `candidate` (owner approves each write)
 
@@ -369,7 +391,8 @@ indistinguishable from the refusal.
   Then close #3 with a comment linking the record and #NEW.
 - [ ] 10.8 Send Benfica the doc link and the two collection ids, and confirm her registry access.
 - [ ] 10.9 Follow-up PR, after its own `/review-pr`, with two commits:
-  - the record plus the ticks for 10.x;
+  - the record plus the ticks for 10.x, and `docs/arabidopsis-plate-models.md` updated to say the
+    cards are published, with each artifact's version, digest and the smoke-test result;
   - `chore(openspec): archive add-arabidopsis-plate-candidate-cards`. At archive time, amend the spec
     Purpose line to "…linked under each row's status".
 - [ ] 10.10 Cross-repo, owner: a PR to the sleap-roots-pipeline `docs/bloom-integration/roadmap.md`

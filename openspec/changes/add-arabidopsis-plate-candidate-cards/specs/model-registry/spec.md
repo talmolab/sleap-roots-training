@@ -9,6 +9,12 @@ a row-numbered error naming the two allowed values. That includes `null`, an emp
 non-string, a differently cased spelling and a whitespace-padded one. The status check SHALL run after
 the row's `source` check and before `origins` coverage.
 
+A row SHALL hold only the known row keys: `species`, `mode`, `age`, `primary_model_id`,
+`lateral_model_id`, `crown_model_id`, `source` and `status`. Any other key SHALL be rejected at load
+time with a row-numbered error naming it and the known keys. Because a missing `status` means
+`production`, a misspelled `status` key (`stauts`, `Status`) would otherwise load a candidate row as
+production without a word.
+
 Each card SHALL carry the status of the rows it was expanded from. A model referenced by rows of
 different status SHALL be rejected during card expansion with an error naming the model, alongside the
 other cross-row expansion checks (see Per-Physical-Model, Per-Root-Type Card Expansion). One collection
@@ -32,6 +38,11 @@ metadata SHALL be identical to what it would be if its row had no `status` key.
 
 - **WHEN** a matrix row's `status` is `staging`, `null`, `""`, `1`, `Candidate` or `" candidate "`
 - **THEN** loading fails with an error naming the row index and both allowed values
+
+#### Scenario: A misspelled status key is rejected
+
+- **WHEN** a matrix row carries `stauts: candidate` or `Status: candidate` instead of `status`
+- **THEN** loading fails with an error naming the row index and that key, and no card is produced
 
 #### Scenario: A model under rows of mixed status is rejected
 
@@ -62,8 +73,11 @@ Under the **default** alias, `seed-registry --execute` SHALL never publish a car
   promoting one requires changing its row's `status` in a reviewed change to the committed matrix,
   and that a production re-seed should name only production-status collections.
 
-Neither `--promote` nor `--force` SHALL override this. The decision SHALL be made from the matrix
-alone. It SHALL run after:
+Neither `--promote` nor `--force` SHALL override this. The packaged matrix is the authority for a
+row's status: when `--selection-matrix` names another matrix, a collection whose row in the
+**packaged** matrix is `candidate`-status SHALL be treated as candidate-status as well, so an edited
+copy cannot promote what the reviewed matrix keeps out of production. The decision SHALL be made from
+the matrices alone. It SHALL run after:
 
 - the blank-alias check;
 - the matrix load;
@@ -98,6 +112,13 @@ A refused run therefore makes no wandb call. These SHALL NOT be refused or narro
 
 - **WHEN** the refused invocation above is repeated with `--force`, or without `--promote`
 - **THEN** it is refused in the same way, by this check and not by the promotion check
+
+#### Scenario: An edited copy of the matrix cannot promote a packaged candidate
+
+- **WHEN** a copy of the packaged matrix with `status: candidate` removed from a row is passed as
+  `--selection-matrix`, and `seed-registry --execute --yes --only <that row's collection> --promote`
+  runs under the default alias
+- **THEN** it is refused by this check, naming that collection, before any wandb call
 
 #### Scenario: Losing the candidate alias variable cannot publish a candidate row
 
@@ -180,7 +201,14 @@ The script SHALL refuse, exiting non-zero and writing nothing, in these cases:
 - the output already exists.
 
 The script SHALL write the archive to a temporary file and move it into place only when it is
-complete. A failed build therefore leaves no archive at the output path.
+complete. A failed build therefore leaves no archive at the output path. When that temporary file
+already exists (left by a killed build, or in use by another one), the script SHALL refuse, exiting
+non-zero with a message naming it, and SHALL NOT delete or modify it: it removes only a temporary
+file it created.
+
+Each entry's size SHALL be declared before its data is streamed, as `ZipFile.writestr` does, so the
+ZIP64 decision, and with it the bytes, match an archive written whole. Otherwise a model file above
+the ZIP64 threshold would be archived differently.
 
 #### Scenario: Two builds are byte-identical
 
@@ -206,6 +234,18 @@ complete. A failed build therefore leaves no archive at the output path.
 
 - **WHEN** reading a source file fails part-way through a build
 - **THEN** the error propagates and nothing exists at the output path
+
+#### Scenario: A leftover temporary file is refused, not deleted
+
+- **WHEN** `<output>.partial` already exists and the script is run for `<output>`
+- **THEN** it exits non-zero naming that file, nothing exists at the output path, and the temporary
+  file's bytes are unchanged
+
+#### Scenario: Streaming matches writing whole above the ZIP64 threshold
+
+- **WHEN** the ZIP64 threshold is lowered below the size of a file in the source
+- **THEN** the script's archive is byte-identical to one written with `ZipFile.writestr` using the
+  same entry headers
 
 #### Scenario: The archive resolves as a pinned model
 
@@ -293,6 +333,10 @@ check SHALL behave as follows:
 - Each collection found not linked, including one absent from the registry, SHALL be reported as
   such. A passing check is then a positive statement, not silence.
 
+The pass/fail decision SHALL require every report key it reads. A report missing one of them SHALL
+raise rather than count as passing, so a change that stops producing a failure category cannot
+silently turn verification green.
+
 Verification SHALL additionally report, for each expected collection whose aliased artifact is present,
 whether that artifact's metadata is the current `selectors`-bearing shape or the legacy flat shape. It
 SHALL exit non-zero when an expected collection is present but carries the legacy shape. Alias presence
@@ -357,6 +401,12 @@ collection as current.
 - **WHEN** reading a `candidate`-status collection's versions raises during a default-alias `--verify`
 - **THEN** it reports that collection as unreadable, with the error's type and message, and the
   command exits non-zero
+
+#### Scenario: A report missing a failure key does not pass
+
+- **WHEN** the pass/fail decision is given a report without `unexpected_production` or
+  `barred_unreadable`
+- **THEN** it raises instead of returning a pass
 
 #### Scenario: Verify --only splits production and candidate collections
 
