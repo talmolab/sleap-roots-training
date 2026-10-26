@@ -101,9 +101,10 @@ def seed_registry_command(
     ``--verify`` re-runs the consumer read path against the live registry. ``--only``
     scopes every mode to the named collection(s) for canary seeding.
 
-    Two guards keep a publish from going live by accident: under a non-default alias,
+    Three guards keep a publish from going live by accident: under a non-default alias,
     ``--execute`` requires ``--only``; under the default alias, linking ``production`` to
-    a collection for the first time requires ``--promote`` (which requires ``--only``).
+    a collection for the first time requires ``--promote`` (which requires ``--only``);
+    and a card from a ``status: candidate`` row is never linked to ``production`` at all.
     """
     cfg = config.resolve_registry_config()
     # First output, in every mode: which registry and alias this run acts on, and where
@@ -121,6 +122,16 @@ def seed_registry_command(
         raise click.ClickException(
             f"{config.ALIAS_ENV} is set but blank. Unset it to use the default "
             f"'{config.DEFAULT_ALIAS}', or set the alias you mean; nothing done."
+        )
+    # Every guard keys on `alias == "production"`, so a variant that differs only in case
+    # or invisible characters would pass them all as a "non-default" alias with --only.
+    if cfg.alias != config.DEFAULT_ALIAS and _looks_like(
+        cfg.alias, config.DEFAULT_ALIAS
+    ):
+        raise click.ClickException(
+            f"{config.ALIAS_ENV} is {ascii(cfg.alias)}, which differs from "
+            f"'{config.DEFAULT_ALIAS}' only in case or invisible characters. Unset it to "
+            "use the default, or set the alias you mean; nothing done."
         )
     # The loader's messages are carefully row-numbered ("row 0: unknown mode 'teacup'
     # (expected one of [...])") and the spec promises them to operators — but raw they
@@ -179,94 +190,32 @@ def seed_registry_command(
     # unnamed, it is out of an unscoped run's scope. Decided from the matrix alone, so it
     # runs before the credential check and every wandb call. `--verify` wins over
     # `--execute` below, so it is exempt; so are a dry run and a non-default alias.
-    if execute and not verify and cfg.alias == config.DEFAULT_ALIAS:
-        candidates = sorted(
-            cards.collection_id(card)
-            for card in all_cards
-            if card.status != config.DEFAULT_ALIAS
-        )
+    skipped_by_status: list = []
+    if execute and not verify:
+        candidates = _candidate_collections(all_cards, cfg.alias)
         if candidates and only:
             raise click.ClickException(
                 f"{len(candidates)} collection(s) come from rows with status "
-                f"'candidate' and are never linked to {ascii(cfg.alias)}: {candidates}. "
-                "To promote one, change its row's `status` in a reviewed change to the "
-                "committed matrix first; to re-seed production, name only "
-                "production-status collections with --only. Nothing published."
+                f"{chooser.CANDIDATE_STATUS!r} and are never linked to "
+                f"{ascii(cfg.alias)}: {candidates}. To promote one, change its row's "
+                "`status` in a reviewed change to the committed matrix first; to "
+                "re-seed production, name only production-status collections with "
+                "--only. Nothing published."
             )
         for collection in candidates:
-            click.echo(f"skipped (status: candidate): {collection}")
-        all_cards = [c for c in all_cards if c.status == config.DEFAULT_ALIAS]
+            click.echo(f"skipped (status: {chooser.CANDIDATE_STATUS}): {collection}")
+        if candidates:
+            skipped_by_status = candidates
+            all_cards = [c for c in all_cards if c.status == config.DEFAULT_ALIAS]
+            if not all_cards:
+                click.echo(
+                    "nothing in scope: every card is candidate-status under "
+                    f"{ascii(cfg.alias)}; nothing published."
+                )
+                return
 
     if verify:
-        # Under the default alias a candidate collection must NOT carry it, so it is
-        # checked as barred, never expected -- even when --only names it. Otherwise the
-        # expected set is the rows whose status is the alias (all named ones under --only).
-        barred = (
-            sorted(
-                cards.collection_id(c)
-                for c in all_cards
-                if c.status != config.DEFAULT_ALIAS
-            )
-            if cfg.alias == config.DEFAULT_ALIAS
-            else []
-        )
-        if only:
-            verify_expected = [c for c in expected if c not in barred]
-        else:
-            verify_expected = sorted(
-                cards.collection_id(c) for c in all_cards if c.status == cfg.alias
-            )
-            if not verify_expected:
-                # A mistyped alias variable must not produce a passing verification.
-                raise click.ClickException(
-                    f"no matrix row has status {ascii(cfg.alias)}, so there is nothing "
-                    "to verify under that alias; check SLEAP_ROOTS_MODEL_ALIAS, or name "
-                    "collections with --only."
-                )
-        _require_api_key()
-        # `--only` scopes `expected` above, so orphan reporting has to be suppressed
-        # under it: otherwise a one-collection canary reports every OTHER collection
-        # in the registry as orphaned.
-        report = publish.verify_registry(
-            cfg,
-            verify_expected,
-            report_orphans=not only,
-            matrix_collections=matrix_collections,
-            barred_collections=barred,
-        )
-        for collection in report["present"]:
-            click.echo(f"present: {collection}")
-        for collection in report["missing"]:
-            click.echo(f"missing: {collection}")
-        for collection in report["legacy"]:
-            click.echo(
-                f"LEGACY METADATA: {collection} (an upgraded consumer cannot read it)"
-            )
-        for collection in report["orphans"]:
-            click.echo(
-                f"orphan: {collection} ({ascii(cfg.alias)}-aliased, no longer in the "
-                "matrix)"
-            )
-        for collection in report["indeterminate"]:
-            click.echo(f"indeterminate: {collection} (could not read its aliases)")
-        for collection in report.get("unexpected_production", []):
-            click.echo(
-                f"UNEXPECTED PRODUCTION LINK: {collection} (row status is candidate)"
-            )
-        for collection in report.get("barred_unreadable", []):
-            click.echo(
-                f"unreadable: {collection} (could not check that it is not linked to "
-                f"{ascii(cfg.alias)})"
-            )
-        if report["orphans_suppressed"]:
-            click.echo(
-                "note: orphan reporting is suppressed under --only; "
-                "run --verify without --only for the orphan report."
-            )
-        # Orphans and indeterminate collections are reported, not acted on, and do not
-        # fail: an orphan is expected for the whole migration window.
-        if publish.verify_failed(report):
-            ctx.exit(1)
+        _run_verify(ctx, cfg, all_cards, expected, only, matrix_collections)
         return
 
     if models_root is None:
@@ -370,6 +319,8 @@ def seed_registry_command(
         "promote": promote,
         "alias_source": config.ALIAS_ENV if alias_from_env else "default",
         "first_production_links": first_links,
+        # Candidate-status cards an unscoped default-alias run left out of its scope.
+        "skipped_by_status": skipped_by_status,
     }
     if lineage_config["git_dirty"]:
         click.echo(
@@ -421,6 +372,98 @@ def seed_registry_command(
     if report["failed"]:
         click.echo(f"FAILED ({len(report['failed'])}): {report['failed']}")
     if report["failed"] or report["stale"]:
+        ctx.exit(1)
+
+
+def _looks_like(alias: str, target: str) -> bool:
+    """Return whether ``alias`` equals ``target`` once case and invisible chars are ignored."""
+    visible = "".join(ch for ch in alias if ch.isprintable() and not ch.isspace())
+    return visible.casefold() == target.casefold()
+
+
+def _candidate_collections(cards_, alias: str) -> list[str]:
+    """Return the candidate-status collections among ``cards_``, under the default alias.
+
+    These must never carry ``alias``. Under any other alias nothing is barred: a
+    candidate row is published there.
+    """
+    if alias != config.DEFAULT_ALIAS:
+        return []
+    return sorted(
+        cards.collection_id(card)
+        for card in cards_
+        if card.status != config.DEFAULT_ALIAS
+    )
+
+
+def _run_verify(ctx, cfg, all_cards, expected, only, matrix_collections) -> None:
+    """Run ``seed-registry --verify``: report the live registry against the matrix.
+
+    Without ``--only`` the expected set is the cards whose row status equals the alias.
+    Under the default alias a candidate collection is checked as barred -- it must not
+    carry the alias -- and never as expected, even when ``--only`` names it.
+    """
+    barred = _candidate_collections(all_cards, cfg.alias)
+    if only:
+        verify_expected = [c for c in expected if c not in set(barred)]
+    else:
+        verify_expected = sorted(
+            cards.collection_id(c) for c in all_cards if c.status == cfg.alias
+        )
+        if not verify_expected:
+            # A mistyped alias variable must not produce a passing verification.
+            raise click.ClickException(
+                f"no matrix row has status {ascii(cfg.alias)}, so there is nothing "
+                "to verify under that alias; check SLEAP_ROOTS_MODEL_ALIAS, or name "
+                "collections with --only."
+            )
+    _require_api_key()
+    # `--only` narrows the expected set, so orphan reporting has to be suppressed under
+    # it: otherwise a one-collection canary reports every OTHER collection in the
+    # registry as orphaned.
+    report = publish.verify_registry(
+        cfg,
+        verify_expected,
+        report_orphans=not only,
+        matrix_collections=matrix_collections,
+        barred_collections=barred,
+    )
+    for collection in report["present"]:
+        click.echo(f"present: {collection}")
+    for collection in report["missing"]:
+        click.echo(f"missing: {collection}")
+    for collection in report["legacy"]:
+        click.echo(
+            f"LEGACY METADATA: {collection} (an upgraded consumer cannot read it)"
+        )
+    for collection in report["orphans"]:
+        click.echo(
+            f"orphan: {collection} ({ascii(cfg.alias)}-aliased, no longer in the "
+            "matrix)"
+        )
+    for collection in report["indeterminate"]:
+        click.echo(f"indeterminate: {collection} (could not read its aliases)")
+    for collection in report.get("barred_clear", []):
+        click.echo(f"not linked (status: {chooser.CANDIDATE_STATUS}): {collection}")
+    for collection in report.get("unexpected_production", []):
+        click.echo(
+            f"UNEXPECTED PRODUCTION LINK: {collection} "
+            f"(row status is {chooser.CANDIDATE_STATUS})"
+        )
+    errors = report.get("barred_errors", {})
+    for collection in report.get("barred_unreadable", []):
+        click.echo(
+            f"unreadable: {collection} (could not check that it is not linked to "
+            f"{ascii(cfg.alias)}: {errors.get(collection, 'unknown error')})"
+        )
+    if report["orphans_suppressed"]:
+        click.echo(
+            "note: orphan reporting is suppressed under --only; "
+            "run --verify without --only for the orphan report."
+        )
+    # Orphans and indeterminate collections are reported, not acted on, and do not
+    # fail: an orphan is expected for the whole migration window.
+    if publish.verify_failed(report):
         ctx.exit(1)
 
 

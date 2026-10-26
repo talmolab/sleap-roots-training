@@ -245,6 +245,7 @@ def test_a_row_backs_a_card_only_through_the_cards_own_slot(tmp_path):
         root_type="primary",
         selectors=(),
         source_model_id="x/1",
+        status="production",
     )
     lin = lineage.build_lineage("0" * 64, [card], matrix, CFG)
     assert [r["species"] for r in lin["row_sources"]] == ["soybean"]

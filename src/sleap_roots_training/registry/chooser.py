@@ -112,11 +112,14 @@ MODE_VOCAB: frozenset[str] = _vocab_from_contract_literal(
 ROOT_TYPE_VOCAB: frozenset[str] = _vocab_from_contract_literal(
     RootType, "sleap_roots_contracts.RootType", "ROOT_TYPE_VOCAB"
 )
-#: The values a row's optional ``status`` may take, the first being the default. A
-#: ``candidate`` row is published under the ``candidate`` alias and never linked to
-#: ``production``; ``seed-registry`` and ``--verify`` read it, the published card never
-#: carries it. Exact strings: nothing is stripped or case-folded.
-ROW_STATUSES: tuple[str, ...] = (DEFAULT_ALIAS, "candidate")
+#: The status of a row that may be published under a non-default alias (normally
+#: ``candidate``) but is never linked to ``production``.
+CANDIDATE_STATUS = "candidate"
+#: The values a row's optional ``status`` may take, the first being the default.
+#: ``seed-registry`` and ``--verify`` read it; the published card never carries it. Each
+#: value is deliberately also an alias name: ``--verify`` expects a card under the alias
+#: equal to its status. Exact strings: nothing is stripped or case-folded.
+ROW_STATUSES: tuple[str, ...] = (DEFAULT_ALIAS, CANDIDATE_STATUS)
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"

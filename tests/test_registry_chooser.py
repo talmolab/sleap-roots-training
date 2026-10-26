@@ -705,8 +705,8 @@ def test_an_explicit_status_loads_as_written(tmp_path, status):
 
 @pytest.mark.parametrize(
     "status",
-    ["staging", None, "", 1, "Candidate", " candidate "],
-    ids=["unknown", "null", "empty", "not-a-string", "cased", "padded"],
+    ["staging", None, "", 1, True, "Candidate", " candidate "],
+    ids=["unknown", "null", "empty", "not-a-string", "yaml-bool", "cased", "padded"],
 )
 def test_an_invalid_status_is_rejected_naming_both_values(tmp_path, status):
     # Nothing is normalized: the alias strip in config.py is for environment variables,

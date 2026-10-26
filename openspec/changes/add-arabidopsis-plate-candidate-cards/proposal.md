@@ -77,11 +77,12 @@ Each item was verified in code on 2026-10-22:
 ## Impact
 
 - **Spec `model-registry`:**
-  - ADDED: Per-Row Publication Status; Candidate Rows Are Never Linked to Production; Reproducible Model
-    Archive Build; Committed Matrix Totals; Committed Arabidopsis Plate Row.
+  - ADDED: Per-Row Publication Status; Candidate Rows Are Never Linked to Production; Aliases That
+    Only Look Like Production Are Refused (from the pre-PR review); Reproducible Model Archive
+    Build; Committed Matrix Totals; Committed Arabidopsis Plate Row.
   - MODIFIED: Registry Verification Command; Orphaned Collection Reporting; Registry Seeding CLI with
     Confirmed Execution; First-Time Production Link Requires Promotion; Committed Wheat and Sorghum
-    Rows.
+    Rows; Seed Run Lineage (`invocation.skipped_by_status`, from the pre-PR review).
   - The spec's Purpose line is amended at archive time.
 - **Code:**
   - `registry/chooser.py`, `registry/cards.py`, `registry/publish.py`, `cli.py`

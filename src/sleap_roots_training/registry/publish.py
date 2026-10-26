@@ -348,16 +348,18 @@ def verify_registry(
             ``--only`` scopes the expected set, so every out-of-scope collection would
             otherwise be reported as an orphan.
         matrix_collections: Every collection the matrix produces, whatever its row
-            status; none of them is ever an orphan. ``expected`` is always included.
+            status; none of them is ever an orphan. The union with
+            ``expected_collections`` is used, so callers need not repeat them.
         barred_collections: Collections that must NOT carry ``cfg.alias`` (candidate
             rows, under the default alias). One that does is an unexpected production
             link; one absent from the registry is not read at all.
 
     Returns:
         A report with ``present`` / ``missing`` / ``legacy`` / ``orphans`` /
-        ``indeterminate`` / ``unexpected_production`` / ``barred_unreadable`` (all
-        sorted) and ``orphans_suppressed``. Use :func:`verify_failed` for the exit code
-        rather than reading the buckets.
+        ``indeterminate`` / ``unexpected_production`` / ``barred_unreadable`` /
+        ``barred_clear`` (all sorted), ``barred_errors`` (each unreadable barred
+        collection's ``"<Type>: <message>"``) and ``orphans_suppressed``. Use
+        :func:`verify_failed` for the exit code rather than reading the buckets.
     """
     if api is None:
         import wandb
@@ -389,17 +391,20 @@ def verify_registry(
     # indeterminate. An absent collection is not linked, and wandb 0.28 raises when asked
     # for its versions, so it is never read.
     unexpected: list = []
-    barred_unreadable: list = []
+    barred_errors: dict = {}
+    barred_clear: list = []
     for collection in barred_collections:
         if collection not in existing:
+            barred_clear.append(collection)
             continue
         try:
             linked = _aliased_artifact(api, project, collection, cfg.alias) is not None
-        except Exception:  # noqa: BLE001 - any read failure must fail the check
-            barred_unreadable.append(collection)
+        except (
+            Exception
+        ) as error:  # noqa: BLE001 - any read failure must fail the check
+            barred_errors[collection] = f"{type(error).__name__}: {error}"
             continue
-        if linked:
-            unexpected.append(collection)
+        (unexpected if linked else barred_clear).append(collection)
 
     produced = set(expected) | set(matrix_collections)
     orphans: list = []
@@ -424,7 +429,9 @@ def verify_registry(
         "indeterminate": sorted(indeterminate),
         "orphans_suppressed": not report_orphans,
         "unexpected_production": sorted(unexpected),
-        "barred_unreadable": sorted(barred_unreadable),
+        "barred_unreadable": sorted(barred_errors),
+        "barred_errors": barred_errors,
+        "barred_clear": sorted(barred_clear),
     }
 
 

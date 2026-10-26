@@ -25,6 +25,7 @@ def _card(root_type, source_model_id, *selectors):
             for s, m, lo, hi in selectors
         ),
         source_model_id=source_model_id,
+        status="production",
     )
 
 
@@ -935,3 +936,27 @@ def test_collections_the_matrix_produces_are_never_orphans():
     # a candidate-aliased collection the matrix does not produce is still an orphan.
     assert report["orphans"] == [stranger]
     assert report["present"] == [CAND]
+
+
+def test_a_barred_read_error_keeps_its_cause_and_a_clear_candidate_is_named():
+    api = _FakeApi(
+        collections=[PROD, CAND, "b-l"],
+        arts_by_name={
+            f"{PROJECT}/{PROD}": [_FakeArt(["production"])],
+            f"{PROJECT}/b-l": [_FakeArt(["candidate"])],
+        },
+        fail_names=[CAND],
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND, "b-l"],
+        barred_collections=[CAND, "b-l", "absent"],
+    )
+    assert report["barred_unreadable"] == [CAND]
+    assert report["barred_errors"] == {
+        CAND: "ConnectionError: transient registry error"
+    }
+    # Checked and not linked -- including one not yet in the registry at all.
+    assert report["barred_clear"] == ["absent", "b-l"]

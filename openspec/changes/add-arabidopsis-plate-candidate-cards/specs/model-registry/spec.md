@@ -52,12 +52,15 @@ Under the **default** alias, `seed-registry --execute` SHALL never publish a car
 `candidate`:
 
 - **Without `--only`**, candidate-status cards SHALL be out of the run's scope. The run SHALL print
-  each one as `skipped (status: candidate)`, and SHALL publish the production-status cards exactly as
-  before.
+  each one as `skipped (status: candidate)`, SHALL publish the production-status cards exactly as
+  before, and SHALL record the skipped collections in its lineage (see Seed Run Lineage). If no
+  card is left in scope, the run SHALL say so and stop, exiting zero, before the credential check,
+  so that it creates no wandb run.
 - **With `--only` naming one or more candidate-status collections**, the command SHALL refuse with
-  exit status 1, as a CLI error, publishing nothing. The error SHALL name those collections, and say
-  that promoting one requires changing its row's `status` in a reviewed change to the committed
-  matrix, and that a production re-seed should name only production-status collections.
+  exit status 1, as a CLI error, publishing nothing. That holds even when production-status
+  collections are named alongside them. The error SHALL name those collections, and say that
+  promoting one requires changing its row's `status` in a reviewed change to the committed matrix,
+  and that a production re-seed should name only production-status collections.
 
 Neither `--promote` nor `--force` SHALL override this. The decision SHALL be made from the matrix
 alone. It SHALL run after:
@@ -108,7 +111,20 @@ A refused run therefore makes no wandb call. These SHALL NOT be refused or narro
   `--only`, over a matrix with a candidate-status row
 - **THEN** each candidate-status card is printed as `skipped (status: candidate)`, and is not checked
   for promotion, resolved or published
-- **AND** the production-status cards proceed exactly as they would over a matrix without that row
+- **AND** the production-status cards proceed exactly as they would over a matrix without that row,
+  so the run's `row_sources` and `model_origins` hold no candidate row or model
+- **AND** the run's `invocation` records the skipped collections as `skipped_by_status`
+
+#### Scenario: A scope of only candidate cards publishes nothing
+
+- **WHEN** the same unscoped command runs over a matrix whose every row is candidate-status
+- **THEN** it prints the skipped cards and that nothing is in scope, and exits zero
+- **AND** no credential check, `wandb.Api`, confirmation prompt or `wandb.init` happens
+
+#### Scenario: Naming production and candidate collections together is refused whole
+
+- **WHEN** `--execute --only <production id> --only <candidate id>` runs under the default alias
+- **THEN** it is refused naming only the candidate collection, and nothing is published
 
 #### Scenario: Candidate rows publish under the candidate alias
 
@@ -122,6 +138,24 @@ A refused run therefore makes no wandb call. These SHALL NOT be refused or narro
   with a candidate-status row
 - **THEN** this check does not refuse it
 - **AND** the dry run lists the candidate-status cards marked `status: candidate`
+
+### Requirement: Aliases That Only Look Like Production Are Refused
+
+`seed-registry` SHALL refuse, in every mode, an alias that differs from `production` only in letter
+case or invisible characters (for example `Production`, or `production` followed by a zero-width
+space). The refusal SHALL be a CLI error naming the variable, and SHALL come after the blank-alias
+check and before any wandb call. Every guard against an accidental production link keys on the alias
+being exactly `production`, so such an alias would otherwise pass all of them as a "non-default"
+alias.
+
+#### Scenario: A case or invisible-character variant of production is refused
+
+- **WHEN** `SLEAP_ROOTS_MODEL_ALIAS` is `Production`, `PRODUCTION`, `production​` or
+  `​production`, and `seed-registry --execute --yes --only <candidate-status collection>` or
+  `seed-registry --verify` runs
+- **THEN** it exits with status 1 naming `SLEAP_ROOTS_MODEL_ALIAS`
+- **AND** no credential check, `wandb.Api`, promotion check, confirmation prompt or `wandb.init`
+  happens
 
 ### Requirement: Reproducible Model Archive Build
 
@@ -252,10 +286,12 @@ check SHALL behave as follows:
 
 - A collection absent from the registry's collection listing is not linked, and its versions SHALL NOT
   be read. The wandb client raises when asked for the versions of a collection that does not exist.
-- A read error while checking a collection SHALL be reported for that collection, and SHALL make the
-  command exit non-zero, so that the check fails closed.
+- A read error while checking a collection SHALL be reported for that collection, with the error's
+  type and message, and SHALL make the command exit non-zero, so that the check fails closed.
 - An unexpected production link SHALL make the command exit non-zero, because it means a model the
   matrix keeps out of production is live for the consumer.
+- Each collection found not linked, including one absent from the registry, SHALL be reported as
+  such. A passing check is then a positive statement, not silence.
 
 Verification SHALL additionally report, for each expected collection whose aliased artifact is present,
 whether that artifact's metadata is the current `selectors`-bearing shape or the legacy flat shape. It
@@ -293,7 +329,8 @@ collection as current.
   collections either carry only `candidate` or are absent from the registry, and a default-alias
   `--verify` is run without `--only`
 - **THEN** it reports the `production`-status collections as present, and exits zero
-- **AND** it does not report the `candidate`-status collections as missing, orphaned or linked
+- **AND** it reports each `candidate`-status collection as not linked, never as missing, orphaned or
+  linked
 - **AND** it reads no versions of an absent collection
 
 #### Scenario: Candidate-alias verify checks the candidate rows
@@ -318,7 +355,14 @@ collection as current.
 #### Scenario: A read error on the candidate check fails closed
 
 - **WHEN** reading a `candidate`-status collection's versions raises during a default-alias `--verify`
-- **THEN** it reports that collection as unreadable, and the command exits non-zero
+- **THEN** it reports that collection as unreadable, with the error's type and message, and the
+  command exits non-zero
+
+#### Scenario: Verify --only splits production and candidate collections
+
+- **WHEN** a default-alias `--verify --only <production id> --only <candidate id>` runs
+- **THEN** the production collection is checked as expected and the candidate collection only as
+  barred
 
 ### Requirement: Orphaned Collection Reporting
 
@@ -655,3 +699,77 @@ than silently re-pointing a card. Matrix-wide counts are pinned by Committed Mat
   (`sorghum`, `cylinder`, 3, 14)
 - **AND** the wheat origin has `snapshot` `null`, and both sorghum origins have `snapshot` `"20250204"`
 - **AND** all three have status `production`, and the original 8 cards' selectors are unchanged
+
+### Requirement: Seed Run Lineage
+
+The seed SHALL record run-level lineage in the wandb run config for traceability: the
+`sleap-roots-training` git SHA, a dirty-working-tree flag, the **SHA256 content hash of the actually
+loaded `model_selection.yaml`** (so the exact matrix used is pinned independently of git cleanliness —
+the per-model SHA256 anchor now lives in that tracked file), the provenance of the run's in-scope cards
+(published or skipped), the registry target the run links under (`registry_target`: entity, registry
+and alias — so a candidate publish and its later promotion are distinguishable after the fact), and
+the `sleap-roots-training` / `wandb` / `sleap-roots-contracts` versions.
+Provenance SHALL be read from the loaded matrix, never from constants in code, and SHALL be scoped to
+the run's in-scope cards (narrowed by `--only`), as two lists of records:
+
+- `row_sources`: one `{species, mode, age, source}` record (`age` being the row's raw string) per matrix
+  row that backs at least one in-scope card, in matrix file order — a row backs a card when it
+  contributes one of that card's selectors;
+- `model_origins`: one `{model_id, snapshot, location, pinned_by}` record per in-scope card's model,
+  sorted by `model_id`.
+
+The lineage SHALL NOT carry a single selection-matrix source, verification date or models-downloader
+snapshot for the whole run, since rows and models come from more than one source. Git-SHA resolution
+SHALL be robust — it SHALL prefer an explicit env override, otherwise resolve from a `.git` anchored at
+the installed package (never the current working directory), otherwise fall back to the package
+version, and SHALL never raise or abort the seed; tool/contract versions come from
+`importlib.metadata`. A dirty working tree under `--execute` SHALL emit a warning (the recorded matrix
+content hash makes the exact inputs recoverable regardless). Lineage SHALL NOT be written into
+per-artifact metadata (which stays exactly the selection keys).
+
+So that W&B alone can answer which run made a card live, the seed SHALL also record:
+
+- in the run config, an `invocation` record of `--only`, `--force`, `--promote`, the alias source,
+  `first_production_links` (the collections being linked to `production` for the first time,
+  or `None` under a non-default alias), and `skipped_by_status` (the candidate-status collections
+  an unscoped default-alias run left out of its scope, otherwise empty);
+- in the run summary, before the run is closed, the per-collection outcome (`published`,
+  `skipped`, `failed`, `stale`).
+
+Failing to record the outcome SHALL only warn. It SHALL NOT change the seed's reported result.
+
+#### Scenario: Run records producer lineage
+
+- **WHEN** a real seed runs
+- **THEN** the run config records the git SHA (or a documented fallback sentinel), the dirty flag,
+  the loaded `model_selection.yaml` content hash, `row_sources`, `model_origins`,
+  `registry_target` (entity, registry, alias), and the tool/contract versions
+- **AND** it records no `selection_matrix_source`, `selection_matrix_date` or `models_snapshot` key
+- **AND** no per-artifact metadata carries lineage keys
+
+#### Scenario: Lineage provenance is scoped to the in-scope cards
+
+- **WHEN** lineage is built for the three wheat and sorghum cards alone (as under `--only`)
+- **THEN** `model_origins` holds exactly those three models' origins, the wheat one with
+  `snapshot` `None`, and `row_sources` holds exactly the wheat and sorghum rows with their `source`
+- **AND WHEN** it is built for the
+  `canola_pennycress_arabidopsis/primary/240611_102513.multi_instance.n=743` card alone
+- **THEN** `row_sources` holds the four rows that name it and `model_origins` holds one record
+- **AND WHEN** it is built for every committed card
+- **THEN** it holds every matrix row and every origin
+- **AND** the lineage mapping round-trips through JSON unchanged
+
+#### Scenario: The run records how it was invoked and what it did
+
+- **WHEN** a seed runs under `candidate` with `--only` for the three wheat and sorghum cards
+- **THEN** the run config's `invocation` records those ids, `force` and `promote` false, the alias
+  source, `first_production_links` `None` and an empty `skipped_by_status`
+- **AND** the run summary records the three as `published` before the run is closed
+- **AND WHEN** a seed runs with `--promote` under the default alias
+- **THEN** `first_production_links` lists exactly the collections linked to `production` for the
+  first time
+
+#### Scenario: Git SHA resolves without a repository
+
+- **WHEN** the git SHA is resolved from an installed package with no `.git` and no env override
+- **THEN** it returns the package-version fallback (or `"unknown"`) without raising

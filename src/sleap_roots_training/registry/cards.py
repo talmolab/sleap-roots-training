@@ -61,7 +61,7 @@ class Card:
     root_type: str
     selectors: tuple[Selector, ...]
     source_model_id: str
-    status: str = "production"
+    status: str
 
 
 def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
@@ -111,7 +111,7 @@ def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
             # explicit total order. Doing both means neither step has to be trusted alone.
             selectors=tuple(sorted(dict.fromkeys(selectors), key=_selector_key)),
             source_model_id=model_id,
-            status=next(iter(statuses_by_model[model_id])),
+            status=_single_status(statuses_by_model[model_id]),
         )
         for (model_id, root_type), selectors in collected.items()
     ]
@@ -137,6 +137,12 @@ def _reject_models_spanning_root_types(
             "a model must resolve to exactly one root type, but "
             f"{detail} — one card cannot describe weights of two root types"
         )
+
+
+def _single_status(statuses: set[str]) -> str:
+    """Return a model's one status; mixed status was rejected before this is called."""
+    (status,) = statuses
+    return status
 
 
 def _reject_models_of_mixed_status(statuses_by_model: dict[str, set[str]]) -> None:

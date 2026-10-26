@@ -465,6 +465,7 @@ def test_every_accepted_mode_round_trips_through_the_real_modelcard(mode):
         root_type="primary",
         selectors=(Selector(species="rice", mode=mode, age_min=2, age_max=14),),
         source_model_id="r/p",
+        status="production",
     )
     meta = cards.card_to_metadata(card)
     model_card = ModelCard.model_validate(
