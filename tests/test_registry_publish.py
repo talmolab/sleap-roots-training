@@ -960,3 +960,19 @@ def test_a_barred_read_error_keeps_its_cause_and_a_clear_candidate_is_named():
     }
     # Checked and not linked -- including one not yet in the registry at all.
     assert report["barred_clear"] == ["absent", "b-l"]
+
+
+@pytest.mark.parametrize(
+    "key", ["missing", "legacy", "unexpected_production", "barred_unreadable"]
+)
+def test_a_report_missing_a_failure_key_raises_rather_than_passing(key):
+    # A refactor that stopped producing a failure category must not turn verify green.
+    report = {
+        "missing": [],
+        "legacy": [],
+        "unexpected_production": [],
+        "barred_unreadable": [],
+    }
+    del report[key]
+    with pytest.raises(KeyError, match=key):
+        publish.verify_failed(report)

@@ -731,6 +731,15 @@ def test_the_status_check_reports_before_origins_coverage(tmp_path):
         _load(tmp_path, override={("row", 0, "status"): "staging"}, origins={})
 
 
+@pytest.mark.parametrize("key", ["stauts", "Status", "notes"])
+def test_an_unknown_row_key_is_rejected_naming_it(tmp_path, key):
+    # A missing `status` means production, so a misspelled one would otherwise load a
+    # candidate row as production without a word (PR #82 review).
+    with pytest.raises(ValueError, match=rf"row 0.*{key!r}") as excinfo:
+        _load(tmp_path, override={("row", 0, key): "candidate"})
+    assert "'status'" in str(excinfo.value)  # the known keys are listed
+
+
 # --- the arabidopsis plate row (talmolab/sleap-roots-training#3) ---
 
 PLATE_PRIMARY = "arabidopsis_plates/primary/230804_133809.multi_instance.n=606"

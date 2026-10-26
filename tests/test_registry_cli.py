@@ -2081,3 +2081,68 @@ def test_execute_only_mixing_production_and_candidate_ids_is_refused_whole(
     assert result.exit_code == 1, result.output
     assert "a-p" in result.output and "['s-p'" not in result.output
     assert calls == [] and API_CALLS == []
+
+
+@pytest.mark.parametrize("key", ["unexpected_production", "barred_unreadable"])
+def test_verify_with_a_report_missing_a_safety_key_does_not_pass(
+    monkeypatch, tmp_path, key
+):
+    monkeypatch.setenv("WANDB_API_KEY", "secret")
+    report = _verify_report(present=["s-p"], barred_clear=["a-p"])
+    del report[key]
+    monkeypatch.setattr(publish, "verify_registry", lambda *a, **k: report)
+    result = _invoke(["--selection-matrix", str(_status_matrix(tmp_path)), "--verify"])
+    assert result.exit_code != 0, result.output
+
+
+def _packaged_matrix_text():
+    from importlib.resources import files
+
+    return (
+        files("sleap_roots_training.registry.data")
+        .joinpath("model_selection.yaml")
+        .read_text(encoding="utf-8")
+    )
+
+
+_PLATE_PRIMARY = "arabidopsis_plates-primary-230804_133809.multi_instance.n-606"
+
+
+def test_an_edited_matrix_copy_cannot_promote_a_packaged_candidate(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
+):
+    # The packaged matrix is the authority for status: a copy with `status: candidate`
+    # deleted must not let --promote link the plate model (PR #82 review).
+    text = _packaged_matrix_text()
+    assert "status: candidate" in text
+    edited = tmp_path / "edited.yaml"
+    edited.write_text(
+        "\n".join(
+            line for line in text.splitlines() if line.strip() != "status: candidate"
+        ),
+        encoding="utf-8",
+    )
+    calls = _spy_everything(monkeypatch)
+    result = _execute(
+        edited, stub_models_root, "--yes", "--only", _PLATE_PRIMARY, "--promote"
+    )
+    assert result.exit_code == 1, result.output
+    assert _PLATE_PRIMARY in result.output and "status" in result.output
+    assert "Pass --promote" not in result.output
+    assert calls == [] and API_CALLS == [] and PROMOTION_CHECKS == []
+
+
+def test_an_edited_matrix_copy_still_skips_a_packaged_candidate_unscoped(
+    monkeypatch, isolate_wandb_env, tmp_path, stub_models_root
+):
+    text = _packaged_matrix_text()
+    edited = tmp_path / "edited.yaml"
+    edited.write_text(
+        "\n".join(
+            line for line in text.splitlines() if line.strip() != "status: candidate"
+        ),
+        encoding="utf-8",
+    )
+    _spy_everything(monkeypatch)
+    result = _execute(edited, stub_models_root, "--yes")
+    assert f"skipped (status: candidate): {_PLATE_PRIMARY}" in result.output

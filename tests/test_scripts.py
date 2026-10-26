@@ -590,3 +590,40 @@ def test_a_failed_build_leaves_no_archive_behind(tmp_path, monkeypatch, capsys):
     monkeypatch.undo()
     assert reads and not out.exists()
     assert list(out.parent.glob("m.zip*")) == []
+
+
+def test_a_leftover_partial_is_refused_and_left_untouched(tmp_path, capsys):
+    # It may be another build's work in progress; deleting it is not this build's call.
+    model = _model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    partial = tmp_path / "m.zip.partial"
+    partial.write_bytes(b"another build")
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert partial.read_bytes() == b"another build"
+    assert not out.exists()
+    assert "m.zip.partial" in capsys.readouterr().err
+
+
+def test_streaming_matches_writestr_above_the_zip64_threshold(
+    tmp_path, monkeypatch, capsys
+):
+    # The size is declared before streaming so the ZIP64 decision -- and the bytes --
+    # match an archive written whole; a large .h5 would otherwise archive differently.
+    import zipfile
+
+    model = _golden_model_dir(tmp_path)
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 4)
+    out = tmp_path / "m.zip"
+    assert build_model_zip.main(str(model), str(out)) == 0
+    reference = tmp_path / "ref.zip"
+    with zipfile.ZipFile(reference, "w") as archive:
+        for path in sorted(p for p in model.rglob("*") if p.is_file()):
+            info = zipfile.ZipInfo(
+                f"{model.name}/{path.relative_to(model).as_posix()}",
+                (1980, 1, 1, 0, 0, 0),
+            )
+            info.external_attr = 0o100644 << 16
+            info.create_system = 3
+            info.compress_type = zipfile.ZIP_STORED
+            archive.writestr(info, path.read_bytes())
+    assert out.read_bytes() == reference.read_bytes()
