@@ -15,7 +15,7 @@ GraviScan plate sections.
 | Selector | arabidopsis, plate, 2–7 DAG | arabidopsis, plate, 2–7 DAG |
 | Training labels | 545 train / 61 val frames; 166 train and 23 val frames are from an IAA-treated set | 34 train / 4 val frames, all imaged on one day (2023-09-08) |
 | Validation split | a random 10% of frames; **3 of the 61 val images are also train images** (labelled again in a second copy) | a random 10% of frames; **2 of the 4 val images are also train images** (labelled again in a second copy) |
-| Ages labelled | 2–7 DAG, from the day prefix of each image filename (owner); 293 of the 545 train frames are at 7 | 7 DAG (owner); the `day1` in the frame names is not the age |
+| Ages labelled | 2–7 DAG, read from the day prefix of each image filename (the owner counts these as DAG, including the IAA set's days from transplanting); 293 of the 545 train frames are at 7; six train frames named `day4` are day 3 by folder and date | 7 DAG (owner); the `day1` in the frame names is not read as the age |
 | Input | resized and padded to 1500 × 1616 (height × width), then scaled by 0.5 | resized and padded to 1500 × 1616 (height × width), scale 1.0 |
 | Val roots: labelled / paired / predicted | 305 / 304 / 426 | 52 / 45 / 52 |
 | Val dist p50 / p95, paired roots only | 11.9 / 118.9 px | 1.4 / 17.0 px |
@@ -58,16 +58,16 @@ models-downloader chooser table. They are not paths on disk.
   2–7 window.
 - **The primary's training data mixes treatments.** About a third of its frames (166 of 545 train, 23 of
   61 val) come from an IAA-treated set (IAA is an auxin, which alters root growth). The metrics above
-  are not separated by treatment. That set counts days from transplanting, which is usually the day
-  of germination, so its ages are DAG too.
+  are not separated by treatment. That set counts days from transplanting, which the owner says is
+  usually the day of germination, so its ages are taken as DAG.
 - **The metrics above come from each model's own validation split.** They are not comparable across the
   two models, and they are not a parity result against any other model. The primary's p95 is ten times
   its median: a minority of its points are far off. The pooled numbers also say little about ages 2–6,
-  since most of its labels are at 7.
+  since just over half of the primary's train frames (293 of 545) are at 7, and all the lateral's are.
 - **Age is clamped.** Predict serves a plate older than 7 DAG with these 2–7 cards and logs only a
-  warning, although neither model saw a plate older than 7. Sections at 8–14 DAG (the traits window)
-  would all be scored that way. A plate younger than 2 DAG gets no model. The lateral, trained only on
-  7 DAG plates, is served across the whole window.
+  warning, although neither model was labelled at an age above 7. Sections at 8–14 DAG (the traits
+  window) would all be scored that way. A plate younger than 2 DAG gets no model. The lateral, trained
+  only on images from a single 7 DAG imaging day, is served across the whole window.
 - **The window is not the old chooser table's.** The models-downloader table listed an arabidopsis plate
   row at 7–14 under the same `arabidopsis_plates/` namespace. These two runs were chosen from the
   owner's own training directories; no lineage to whatever that table once served is claimed.

@@ -18,8 +18,8 @@ the full-plate models on GraviScan plate sections. She needs them **there**, not
   found are older IAA runs, with n≤25.
 - **Window: 2–7.** The primary model's labels span 2–7 DAG (read from the day prefix of its image
   filenames), so 7–14 (the models-downloader chooser table) is not used. The lateral model is one
-  imaging session whose age is unconfirmed (7 DAG by its folder name, `day1` by its frame names), and
-  shares the row.
+  imaging session whose age is unconfirmed (7 DAG by its folder name, `day1` by its frame names; since
+  confirmed by the owner as 7 DAG, 2026-10-27), and shares the row.
 - **Status:** `candidate` only. The row carries `status: candidate`, so the default `--verify` keeps
   meaning "exit 1 = real production drift".
 - **Issue #3** is closed after the publish, with a pointer to a new promotion-tracking issue that holds
