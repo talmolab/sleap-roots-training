@@ -3,8 +3,8 @@
 The cylinder rows are transcribed from an advisory source that says of itself "Query the
 Bloom database or check existing test data ... to confirm node counts", so these tests pin
 that a gap fails loudly rather than defaulting, and cross-check the parts of the table that
-have an independent source in this repo: the rice age split, which
-``registry/data/model_selection.yaml`` already encodes, and the arabidopsis plate row,
+have an independent source in this repo: the rice age split and the arabidopsis plate window,
+which ``registry/data/model_selection.yaml`` also encodes, and the arabidopsis plate row,
 which the committed label inventory (``inventory/label-inventory.csv``) evidences.
 
 The verification against the eight published collections lives at the bottom, marked
@@ -998,3 +998,23 @@ def test_the_cached_rows_cannot_be_mutated_by_a_caller():
     assert isinstance(rows, tuple)
     with pytest.raises(Exception):
         rows[0].node_count = 99
+
+
+def test_the_plate_window_agrees_between_the_two_tables():
+    """The plate primary skeleton row and the plate matrix row cover the same ages.
+
+    The primary model's training labels span 2-7 DAG, and so does the verified skeleton
+    row. There is no plate lateral skeleton row (that model is 3 nodes), so only the
+    primary is cross-checked.
+    """
+    (plate,) = [
+        r
+        for r in load_selection_matrix().rows
+        if (r.species, r.mode) == ("arabidopsis", "plate")
+    ]
+    assert parse_age_window(plate.age) == _plate_row().age_window == (2, 7)
+    assert not [
+        r
+        for r in load_skeleton_table()
+        if (r.species, r.mode, r.root_type) == ("arabidopsis", "plate", "lateral")
+    ]

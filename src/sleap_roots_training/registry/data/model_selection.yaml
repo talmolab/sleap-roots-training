@@ -1,5 +1,9 @@
-# Production model selection matrix for the sleap-roots pipeline: 9 rows over 11
-# physical models.
+# Model selection matrix for the sleap-roots pipeline: 10 rows over 13 physical models.
+#
+# A row's optional `status` is `production` (the default) or `candidate`. A candidate
+# row is published under the `candidate` alias only and is never linked to `production`:
+# `seed-registry` refuses it there, and `--verify` fails if one is found linked. Status is
+# never part of the published card.
 #
 # Each row selects models for one (species, mode, age window). Rows come from more than
 # one place, so provenance is recorded per row and per model rather than claimed once
@@ -27,9 +31,10 @@
 # `weights_checksum` (the whole-artifact digest) is deterministic. Regenerate with
 # scripts/regen_model_checksums.py against a root holding every `<model_id>.zip`.
 #
-# The arabidopsis `plate` row (arabidopsis_plates/primary + /lateral) is OMITTED:
-# those models are absent from the snapshot and have no concrete `.n=` id.
-# Tracked by talmolab/sleap-roots-training#3.
+# The arabidopsis `plate` row is `candidate` (talmolab/sleap-roots-training#3): Bloom has
+# no plate dispatch and traits rejects plate pipelines at scan grain (sleap-roots#252), so
+# nothing in production can use it yet. Its zips are not in any snapshot; they are built
+# byte-reproducibly from the model directories by scripts/build_model_zip.py.
 
 models:
   - species: soybean
@@ -111,6 +116,19 @@ models:
     crown_model_id: null
     source: "owner decision 2026-10-02 (talmolab/sleap-roots-pipeline#118): the pair five past sorghum production runs pinned"
 
+  # Full-plate models, for trying on GraviScan plate sections; not linked to production.
+  # 2-7 is the primary model's training span as read from its image filenames' day prefixes
+  # (not the chooser table's 7-14); the lateral model is one imaging session of unconfirmed
+  # age and shares the row.
+  - species: arabidopsis
+    mode: plate
+    age: "2, 3, 4, 5, 6, 7"
+    primary_model_id: arabidopsis_plates/primary/230804_133809.multi_instance.n=606
+    lateral_model_id: arabidopsis_plates/lateral/231130_135922.multi_instance.n=38
+    crown_model_id: null
+    status: candidate
+    source: "owner decision 2026-10-22 (talmolab/sleap-roots-training#3): the owner's curated plate primary and lateral models, window 2-7 from the primary's training labels"
+
 # SHA256 of each distinct source `<model_id>.zip`.
 checksums:
   soybean/primary/221003_111420.multi_instance.n=1389: 13c9a4f23234297473ae683d876bbda7af298b0c04bfd462772198020bbdb668
@@ -124,6 +142,8 @@ checksums:
   20250401_wheat_models/250328_095645.multi_instance.n=1658: 650fe30ba2d61e0a292c6dbeaac531a655e811e551bae8c4d9bef0b5f51ba13f
   20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689: 7c2cd05ded5b3f80163ccd171f3b4abb074ba609f4d52473799162ab763a7c07
   20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590: f694d6da5a71b17ad72a48c308916ea7d95c5cb9a5c7fcdfe619e59c90130028
+  arabidopsis_plates/primary/230804_133809.multi_instance.n=606: ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721
+  arabidopsis_plates/lateral/231130_135922.multi_instance.n=38: f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265
 
 # Where each `<model_id>.zip` came from, and what pinned that exact file.
 origins:
@@ -171,3 +191,11 @@ origins:
     snapshot: "20250204"
     location: "models-downloader 20250204_models/"
     pinned_by: "models_downloader_output/model_paths.csv of all five past sorghum runs (July 2024 diversity screen, BSB vs Torin2 EXP1, WEEP June 2025, WEEP Aug 2025, SbTx430 WEEP Dec 2025); zip bytes checked identical in the first three"
+  arabidopsis_plates/primary/230804_133809.multi_instance.n=606:
+    snapshot: null
+    location: "owner's curated PLATE_arabidopsis copy (2025-07-09), primary_root/labels/models/"
+    pinned_by: "owner selection 2026-10-22 (talmolab/sleap-roots-training#3); zip built by scripts/build_model_zip.py, byte-reproducible from that directory"
+  arabidopsis_plates/lateral/231130_135922.multi_instance.n=38:
+    snapshot: null
+    location: "owner's curated PLATE_arabidopsis copy (2025-07-09), lateral_roots/labels/models/"
+    pinned_by: "owner selection 2026-10-22 (talmolab/sleap-roots-training#3); zip built by scripts/build_model_zip.py, byte-reproducible from that directory"

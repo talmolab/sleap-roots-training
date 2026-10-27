@@ -52,7 +52,7 @@ Defaults live in `registry/config.py`; the species/mode vocabulary lives in
 `registry/chooser.py` — reference those rather than re-hardcoding.
 
 **Cross-repo invariant:** `SLEAP_ROOTS_MODEL_REGISTRY` here must equal the consumer's
-`SRP_WANDB_REGISTRY` (which has **no default** — the operator must set it), and the entity
+`SRP_WANDB_MODEL_REGISTRY` (default `sleap-roots-models`, the same as here), and the entity
 default is shared with `SRP_WANDB_ENTITY` across both repos. The consumer reads its alias from
 `SRP_WANDB_MODEL_ALIAS`, default `production` (`sleap_roots_predict/model_registry.py`), and no
 deployment sets it — so production predict sees only `production`-aliased cards. Cards published
@@ -69,9 +69,9 @@ after the git checkout's directory (a worktree name, here), so two folder-named 
 
 | Project | Holds | If deleted |
 |---|---|---|
-| `migrate-model-card-selectors` | the sources of all 8 `production` links (verified 2026-09-30) | every production link breaks, and prediction with it |
+| `migrate-model-card-selectors` | the sources of the original 8 `production` links (verified 2026-09-30) | those production links break, and prediction with them |
 | `sleap-roots-training-talmolab` | the sources of the 13 flat collections retired on 2026-09-29 (#68) | the rollback of that retirement becomes impossible |
-| `sleap-roots-training` | every seed since the pin, including the wheat and sorghum `candidate` sources (#72), which become `production` sources when promoted | their candidate links break now, and their production links after promotion |
+| `sleap-roots-training` | every seed since the pin: the wheat and sorghum sources (#72, `production` since 2026-10-05) and the arabidopsis plate `candidate` sources (#3) | the wheat and sorghum production links and the plate candidate links break |
 
 **Do not delete or "clean up" either project**, however disposable its name looks. The same
 applies to the source artifact versions and seed runs inside them, and to the registry
@@ -123,8 +123,11 @@ checks, read-only, which in-scope collections have never carried `production`, a
 (exit 1) unless `--promote` is given. `--promote` requires `--only`, so a promotion always names
 its collections. This holds under `--force` too. Consequences:
 
-- While any matrix card is unpromoted (for example a `candidate` card awaiting its gates), a full
-  default-alias `--execute` is refused. Re-seed the promoted ones with `--only <their ids>`.
+- While any `production`-status card is unpromoted (published under `candidate` but not yet
+  linked), a full default-alias `--execute` is refused. Re-seed the promoted ones with
+  `--only <their ids>`.
+- Cards from `status: candidate` rows are never in a default-alias run's scope (see
+  [Row status](#row-status-production-or-candidate)), so they do not block a full re-seed.
 - A re-run after a partial promotion repeats the same `--only … --promote`.
 
 **`--force` is not evidence that metadata was refreshed.** Artifact metadata is not part of
@@ -134,6 +137,35 @@ back after linking and, where the metadata is stale, refreshes it in place; a co
 still does not take is reported in a distinct `failed` bucket and exits non-zero, with the
 remaining cards still attempted. Use that report, not the presence of `--force`, to decide
 whether a collection is migrated.
+
+### Row status: production or candidate
+
+A matrix row may carry `status: candidate` (absent means `production`). Status decides which
+alias a card may be linked under; it is never part of the published card.
+
+- **Under the default alias**, an unscoped `--execute` skips candidate cards and prints
+  `skipped (status: candidate): <id>`. Naming one with `--only` is refused (exit 1) before any
+  wandb call, even with `--promote` or `--force`. A dry run marks them `(status: candidate)`.
+  If nothing else is in scope, the run says so and stops before the credential check. The run's
+  `invocation` records the skipped ids as `skipped_by_status`.
+- **A row may hold only the known keys** (`species`, `mode`, `age`, the three model ids,
+  `source`, `status`). Any other key, such as a misspelled `stauts`, is rejected at load time:
+  otherwise the row would silently be `production`.
+- **The packaged matrix decides status.** A collection that is `candidate` there stays barred
+  from `production` even when `--selection-matrix` names an edited copy.
+- **An alias that only looks like `production`** (`Production`, or `production` plus an
+  invisible character) is refused in every mode: it would otherwise pass every guard.
+- **`--verify` expects each card under its own status.** Without `--only`, a default `--verify`
+  checks the `production` cards, and `SLEAP_ROOTS_MODEL_ALIAS=candidate … --verify` checks the
+  `candidate` cards. An alias no row carries (a typo) is refused (exit 1).
+- **A default `--verify` fails on a candidate card that carries `production`**
+  (`UNEXPECTED PRODUCTION LINK`), or one whose link it cannot read (`unreadable`, with the
+  error). Each candidate it finds unlinked is listed as `not linked (status: candidate)`; one
+  that does not exist yet is not read.
+- **No collection the matrix produces is an orphan**, whatever its status.
+
+The arabidopsis plate cards are the current candidate row; see
+[docs/arabidopsis-plate-models.md](docs/arabidopsis-plate-models.md).
 
 ### Rollout (canary-first)
 
@@ -148,8 +180,8 @@ otherwise be reported as orphaned. Run a full `--verify` (no `--only`) for the o
 
 ### Publishing under a non-default alias
 
-To put cards in the registry without making them live — for example the wheat and sorghum cards
-awaiting parity and trait checks (#72) — publish under another alias:
+To put cards in the registry without making them live, for example the arabidopsis plate cards
+(#3), publish under another alias:
 
 ```bash
 SLEAP_ROOTS_MODEL_ALIAS=candidate sleap-roots-training seed-registry \
@@ -161,13 +193,17 @@ afterwards with `Remove-Item Env:SLEAP_ROOTS_MODEL_ALIAS`. Check the target line
 
 - **`--only` is required.** Under a non-default alias no card counts as seeded, so an unscoped
   `--execute` would re-publish every card in the matrix; it is refused (exit 2).
-- **Verify under the same alias:** `SLEAP_ROOTS_MODEL_ALIAS=candidate … --verify --only <ids>`.
-- **A default `--verify` reports those cards `missing` and exits 1** until they are promoted. That
-  is the expected state — read the missing list, do not ignore the exit code.
-- **If the alias variable is lost,** the same command runs under `production` and the promotion
-  check refuses it (those collections have never carried `production`).
-- **Promote** later with the default alias: `--only <ids> --promote --execute`, from the same seed
-  project and the same staged archives, then confirm on read-back that no new version was made.
+- **Verify under the same alias:** `SLEAP_ROOTS_MODEL_ALIAS=candidate … --verify`.
+- **Mark long-lived candidates `status: candidate` in the matrix.** A default `--verify` then
+  ignores them and keeps exit 1 meaning real production drift. A `production`-status row published
+  under `candidate` only (a short window before promotion, as wheat and sorghum had) is reported
+  `missing` with exit 1 until it is promoted.
+- **If the alias variable is lost,** the same command runs under `production` and is refused: a
+  candidate-status row by the status check, a production-status row by the promotion check (its
+  collection has never carried `production`).
+- **Promote** a candidate row in two steps: a reviewed PR that drops its `status: candidate`, then
+  the default alias with `--only <ids> --promote --execute`, from the same seed project and the
+  same staged archives. Confirm on read-back that no new version was made.
 - **Roll back** a card by fetching its registry link, asserting `is_link`, and calling `unlink()`.
   Never `save()` the source artifact: it reports success and leaves the alias live.
 

@@ -94,20 +94,24 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   (#39), down from the 13 the original per-row expansion produced (the registry also holds ~87
   non-production training-run/sweep collections; the curated, `ModelCard`-stamped subset is the
   small one). Each is stamped with `ModelCard` metadata (`sleap-roots-contracts`) — so the
-  `WandbRegistrySource` in `talmolab/sleap-roots-predict` has something to fetch. The live registry
-  carries the old 13 until the re-seed migration runs.
+  `WandbRegistrySource` in `talmolab/sleap-roots-predict` has something to fetch. The re-seed
+  migration ran in September 2026, and the 13 flat collections were retired on 2026-09-29 (#68).
 - **This is registry curation, not training.** The weights are legacy and are uploaded as-is. It
   does not advance the keypoint or mask tiers below.
 - **Why later tiers care:** seeding fixed the **publishing surface** — the `ModelCard` metadata
   schema, the `production` alias, and the registry path — that this repo's future `sleap-nn`-trained
   models will reuse, whether the weights are legacy or native.
 - **Wheat and sorghum (#72, step 1 of talmolab/sleap-roots-pipeline#118; PR #73):** the matrix carries a
-  wheat crown and a sorghum primary + lateral row (11 physical models), with per-row and per-model
-  provenance. They are published under the `candidate` alias only; linking `production` is a
-  separate, gated step that `seed-registry` refuses without `--only … --promote`.
-- **Open follow-ups:** #3 (seed the deferred arabidopsis plate models — one card per physical plate
-  model, not one per matrix row), #7 (accept a
-  `wandb login` session, not just `WANDB_API_KEY`; mirrors to `talmolab/sleap-roots-predict`).
+  wheat crown and a sorghum primary + lateral row, with per-row and per-model provenance. Published
+  under `candidate` first, then linked to `production` on 2026-10-05 (#118 step 6), so production
+  holds **11** cards.
+- **Arabidopsis plate (#3; change `add-arabidopsis-plate-candidate-cards`):** one plate row (primary
+  + lateral, window 2–7) marked `status: candidate`. It is published under `candidate` only, for
+  trying the full-plate models on GraviScan sections (`docs/arabidopsis-plate-models.md`).
+  Promotion is gated: parity, plate support in traits (sleap-roots#252) and in Bloom dispatch, and
+  the age window against the traits chooser (sleap-roots#274). It is tracked in the promotion issue
+  linked from #3.
+- **Closed follow-up:** #7 (accept a `wandb login` session, not just `WANDB_API_KEY`).
 
 ## Tier 0 — Scaffold `talmolab/sleap-roots-training` *(prerequisite — not OpenSpec)*
 

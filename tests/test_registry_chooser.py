@@ -4,10 +4,10 @@ from conftest import write_matrix
 from sleap_roots_training.registry import chooser
 
 
-def test_load_selection_matrix_has_nine_rows():
+def test_load_selection_matrix_has_ten_rows():
     matrix = chooser.load_selection_matrix()
-    # 9 selection rows over 11 distinct model ids -> 11 cards (plate row omitted).
-    assert len(matrix.rows) == 9
+    # 10 selection rows over 13 distinct model ids -> 13 cards.
+    assert len(matrix.rows) == 10
     # spot-check the shared primary + a crown-only row.
     by_species_mode = {(r.species, r.mode): r for r in matrix.rows}
     canola = by_species_mode[("canola", "cylinder")]
@@ -18,8 +18,8 @@ def test_load_selection_matrix_has_nine_rows():
     assert canola.crown_model_id is None
     rice_old = by_species_mode[("rice", "cylinder")]  # last rice row wins in dict
     assert rice_old.primary_model_id is None and rice_old.lateral_model_id is None
-    # 11 distinct checksums, all 64-hex.
-    assert len(matrix.checksums) == 11
+    # 13 distinct checksums, all 64-hex.
+    assert len(matrix.checksums) == 13
 
 
 def test_parse_age_window_range():
@@ -688,3 +688,86 @@ def test_row_model_ids_maps_each_root_type_to_its_slot():
         "rice", "cylinder", "2", "p/1", None, "c/1", source="test row"
     )
     assert row.model_ids() == {"primary": "p/1", "lateral": None, "crown": "c/1"}
+
+
+# --- per-row publication status -----------------------------------------------------------
+
+
+def test_a_row_without_status_is_production(tmp_path):
+    assert _load(tmp_path).rows[0].status == "production"
+
+
+@pytest.mark.parametrize("status", ["production", "candidate"])
+def test_an_explicit_status_loads_as_written(tmp_path, status):
+    matrix = _load(tmp_path, override={("row", 0, "status"): status})
+    assert matrix.rows[0].status == status
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["staging", None, "", 1, True, "Candidate", " candidate "],
+    ids=["unknown", "null", "empty", "not-a-string", "yaml-bool", "cased", "padded"],
+)
+def test_an_invalid_status_is_rejected_naming_both_values(tmp_path, status):
+    # Nothing is normalized: the alias strip in config.py is for environment variables,
+    # and a committed matrix that says " candidate " is a typo to fix, not to forgive.
+    with pytest.raises(ValueError, match=r"row 0.*status") as excinfo:
+        _load(tmp_path, override={("row", 0, "status"): status})
+    assert "'production'" in str(excinfo.value)
+    assert "'candidate'" in str(excinfo.value)
+
+
+def test_the_source_check_reports_before_the_status_check(tmp_path):
+    with pytest.raises(ValueError, match="source"):
+        _load(
+            tmp_path,
+            override={("row", 0, "status"): "staging"},
+            drop=[("row", 0, "source")],
+        )
+
+
+def test_the_status_check_reports_before_origins_coverage(tmp_path):
+    with pytest.raises(ValueError, match="status"):
+        _load(tmp_path, override={("row", 0, "status"): "staging"}, origins={})
+
+
+@pytest.mark.parametrize("key", ["stauts", "Status", "notes"])
+def test_an_unknown_row_key_is_rejected_naming_it(tmp_path, key):
+    # A missing `status` means production, so a misspelled one would otherwise load a
+    # candidate row as production without a word (PR #82 review).
+    with pytest.raises(ValueError, match=rf"row 0.*{key!r}") as excinfo:
+        _load(tmp_path, override={("row", 0, key): "candidate"})
+    assert "'status'" in str(excinfo.value)  # the known keys are listed
+
+
+# --- the arabidopsis plate row (talmolab/sleap-roots-training#3) ---
+
+PLATE_PRIMARY = "arabidopsis_plates/primary/230804_133809.multi_instance.n=606"
+PLATE_LATERAL = "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38"
+
+
+def test_the_arabidopsis_plate_source_zips_are_pinned_to_their_measured_digests():
+    # Built by scripts/build_model_zip.py from the owner's curated copy on 2026-10-26;
+    # byte-reproducible, so these re-derive from the model directories.
+    checksums = chooser.load_selection_matrix().checksums
+    assert checksums[PLATE_PRIMARY] == (
+        "ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721"
+    )
+    assert checksums[PLATE_LATERAL] == (
+        "f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265"
+    )
+
+
+def test_the_plate_models_ship_in_no_snapshot_and_say_who_pinned_them():
+    origins = chooser.load_selection_matrix().origins
+    for model_id in (PLATE_PRIMARY, PLATE_LATERAL):
+        assert origins[model_id].snapshot is None
+        assert origins[model_id].pinned_by.strip()
+
+
+def test_only_the_plate_row_is_candidate():
+    statuses = {
+        (r.species, r.mode): r.status for r in chooser.load_selection_matrix().rows
+    }
+    assert statuses.pop(("arabidopsis", "plate")) == "candidate"
+    assert set(statuses.values()) == {"production"}

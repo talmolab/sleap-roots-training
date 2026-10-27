@@ -37,6 +37,7 @@ def _load(name: str):
 clean_pkg = _load("clean_pkg")
 dump_val_metrics = _load("dump_val_metrics")
 regen_model_checksums = _load("regen_model_checksums")
+build_model_zip = _load("build_model_zip")
 
 
 # --- fakes for clean_pkg (no sleap_io needed) --------------------------------------------------
@@ -400,7 +401,7 @@ def test_regen_model_checksums_enumerates_every_physical_model(tmp_path, capsys)
     assert captured.out.startswith("checksums:")
     # Every distinct physical model is enumerated, one line each, deduped and sorted.
     missing = [ln for ln in captured.err.splitlines() if "MISSING" in ln]
-    assert len(missing) == 11, captured.err
+    assert len(missing) == 13, captured.err
     assert missing == sorted(missing)
 
 
@@ -421,3 +422,208 @@ def test_regen_model_checksums_hashes_a_present_archive(tmp_path, capsys):
     captured = capsys.readouterr()
     assert f"  {model_id}: {expected}" in captured.out
     assert model_id not in captured.err  # not reported missing
+
+
+# --- build_model_zip --------------------------------------------------------------------------
+
+
+def _model_dir(tmp_path: Path) -> Path:
+    model = tmp_path / "src" / "230804_133809.multi_instance.n=606"
+    (model / "viz").mkdir(parents=True)
+    (model / "best_model.h5").write_bytes(b"weights")
+    (model / "training_config.json").write_text("{}")
+    (model / "viz" / "a.png").write_bytes(b"png")
+    (model / ".DS_Store").write_bytes(b"junk")
+    return model
+
+
+def test_build_model_zip_is_byte_reproducible(tmp_path, capsys):
+    # The committed checksum must be re-derivable from the source directory, so two builds
+    # differing only in when they ran (and in the files' mtimes) must hash identically.
+    import os
+
+    model = _model_dir(tmp_path)
+    first, second = tmp_path / "a" / "m.zip", tmp_path / "b" / "m.zip"
+    assert build_model_zip.main(str(model), str(first)) == 0
+    for path in model.rglob("*"):
+        os.utime(path, (1_700_000_000, 1_700_000_000))
+    assert build_model_zip.main(str(model), str(second)) == 0
+    assert first.read_bytes() == second.read_bytes()
+    printed = capsys.readouterr().out.split()
+    assert printed[0] == printed[1] == regen_model_checksums._sha256_of_file(first)
+
+
+def test_build_model_zip_layout_is_stored_sorted_and_timestamp_free(tmp_path):
+    import zipfile
+
+    model = _model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    assert build_model_zip.main(str(model), str(out)) == 0
+    with zipfile.ZipFile(out) as zf:
+        infos = zf.infolist()
+    names = [info.filename for info in infos]
+    assert names == sorted(names)
+    # OS junk never enters the archive, so the digest cannot depend on the build host.
+    assert names == [
+        f"{model.name}/best_model.h5",
+        f"{model.name}/training_config.json",
+        f"{model.name}/viz/a.png",
+    ]
+    assert {info.compress_type for info in infos} == {zipfile.ZIP_STORED}
+    assert {info.date_time for info in infos} == {(1980, 1, 1, 0, 0, 0)}
+
+
+def test_build_model_zip_archive_resolves_as_a_pinned_model(tmp_path, capsys):
+    from sleap_roots_training.registry.models import resolve_model_dir
+
+    model = _model_dir(tmp_path)
+    model_id = f"arabidopsis_plates/primary/{model.name}"
+    root = tmp_path / "models_root"
+    assert build_model_zip.main(str(model), str(root / f"{model_id}.zip")) == 0
+    sha = capsys.readouterr().out.strip()
+    resolved = resolve_model_dir(
+        model_id, root, {model_id: sha}, require_pinned=True, cache_root=tmp_path / "c"
+    )
+    assert (resolved / "best_model.h5").read_bytes() == b"weights"
+    assert (resolved / "training_config.json").is_file()
+
+
+def test_build_model_zip_refuses_to_overwrite(tmp_path, capsys):
+    model = _model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    out.write_bytes(b"keep me")
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert out.read_bytes() == b"keep me"
+    assert "exists" in capsys.readouterr().err
+
+
+def test_build_model_zip_refuses_a_missing_source(tmp_path, capsys):
+    assert build_model_zip.main(str(tmp_path / "nope"), str(tmp_path / "m.zip")) == 1
+    assert not (tmp_path / "m.zip").exists()
+
+
+#: SHA256 of the archive of `_golden_model_dir`, measured on Windows (Python 3.11). CI
+#: re-derives it on Ubuntu, Windows and macOS under 3.11 and 3.12.
+GOLDEN_DIGEST = "f7e29252194060bdfdea578dfa821372e0467c0df13a08c5f44e86e855a6ff3f"
+
+
+def _golden_model_dir(tmp_path: Path) -> Path:
+    """A fixed tree whose archive digest is pinned below (no junk, fixed bytes)."""
+    model = tmp_path / "golden" / "m.multi_instance.n=1"
+    (model / "viz").mkdir(parents=True)
+    (model / "best_model.h5").write_bytes(b"weights")
+    (model / "training_config.json").write_bytes(b"{}")
+    (model / "viz" / "a.png").write_bytes(b"png")
+    return model
+
+
+def test_build_model_zip_digest_is_host_and_version_independent(tmp_path, capsys):
+    # The committed matrix checksums were measured on Windows and must re-derive on any
+    # CI host and Python: pin the exact bytes of a fixed tree, and the header fields that
+    # would otherwise default per host (create_system) or leak the file mode.
+    import zipfile
+
+    out = tmp_path / "g.zip"
+    assert build_model_zip.main(str(_golden_model_dir(tmp_path)), str(out)) == 0
+    with zipfile.ZipFile(out) as zf:
+        headers = {(i.create_system, i.external_attr) for i in zf.infolist()}
+    assert headers == {(3, 0o100644 << 16)}
+    assert capsys.readouterr().out.strip() == GOLDEN_DIGEST
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod only toggles read-only")
+def test_build_model_zip_ignores_file_permissions(tmp_path, capsys):
+    model = _golden_model_dir(tmp_path)
+    (model / "best_model.h5").chmod(0o755)
+    assert build_model_zip.main(str(model), str(tmp_path / "g.zip")) == 0
+    assert capsys.readouterr().out.strip() == GOLDEN_DIGEST
+
+
+def test_build_model_zip_resolves_a_relative_source(tmp_path, monkeypatch, capsys):
+    # `.` has an empty name; unresolved it would write rooted `/best_model.h5` entries
+    # and a different digest for the same tree.
+    model = _golden_model_dir(tmp_path)
+    monkeypatch.chdir(model)
+    assert build_model_zip.main(".", str(tmp_path / "g.zip")) == 0
+    assert capsys.readouterr().out.strip() == GOLDEN_DIGEST
+
+
+@pytest.mark.parametrize("contents", [(), (".DS_Store",), ("best_model.h5",)])
+def test_build_model_zip_refuses_a_source_that_is_not_a_model(
+    tmp_path, capsys, contents
+):
+    model = tmp_path / "not_a_model"
+    model.mkdir()
+    for name in contents:
+        (model / name).write_bytes(b"x")
+    out = tmp_path / "m.zip"
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert not out.exists()
+    assert "training_config.json" in capsys.readouterr().err
+
+
+def test_build_model_zip_refuses_an_output_inside_the_source(tmp_path, capsys):
+    # A zip left in the model directory would be archived by the next build.
+    model = _golden_model_dir(tmp_path)
+    out = model / "self.zip"
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert not out.exists()
+
+
+def test_a_failed_build_leaves_no_archive_behind(tmp_path, monkeypatch, capsys):
+    # A half-written zip is still a valid zip (its central directory is written on
+    # close), so a failure must not leave one where an operator would hash it.
+    model = _golden_model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    real_open = open
+    reads = []
+
+    def failing_open(path, *a, **k):
+        if str(path).endswith("training_config.json"):
+            reads.append(path)
+            raise OSError("share went away")
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", failing_open)
+    with pytest.raises(OSError):
+        build_model_zip.main(str(model), str(out))
+    monkeypatch.undo()
+    assert reads and not out.exists()
+    assert list(out.parent.glob("m.zip*")) == []
+
+
+def test_a_leftover_partial_is_refused_and_left_untouched(tmp_path, capsys):
+    # It may be another build's work in progress; deleting it is not this build's call.
+    model = _model_dir(tmp_path)
+    out = tmp_path / "m.zip"
+    partial = tmp_path / "m.zip.partial"
+    partial.write_bytes(b"another build")
+    assert build_model_zip.main(str(model), str(out)) == 1
+    assert partial.read_bytes() == b"another build"
+    assert not out.exists()
+    assert "m.zip.partial" in capsys.readouterr().err
+
+
+def test_streaming_matches_writestr_above_the_zip64_threshold(
+    tmp_path, monkeypatch, capsys
+):
+    # The size is declared before streaming so the ZIP64 decision -- and the bytes --
+    # match an archive written whole; a large .h5 would otherwise archive differently.
+    import zipfile
+
+    model = _golden_model_dir(tmp_path)
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 4)
+    out = tmp_path / "m.zip"
+    assert build_model_zip.main(str(model), str(out)) == 0
+    reference = tmp_path / "ref.zip"
+    with zipfile.ZipFile(reference, "w") as archive:
+        for path in sorted(p for p in model.rglob("*") if p.is_file()):
+            info = zipfile.ZipInfo(
+                f"{model.name}/{path.relative_to(model).as_posix()}",
+                (1980, 1, 1, 0, 0, 0),
+            )
+            info.external_attr = 0o100644 << 16
+            info.create_system = 3
+            info.compress_type = zipfile.ZIP_STORED
+            archive.writestr(info, path.read_bytes())
+    assert out.read_bytes() == reference.read_bytes()

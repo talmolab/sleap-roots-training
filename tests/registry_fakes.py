@@ -137,12 +137,16 @@ class _FakeApi:
         fail=False,
         aliases_by_collection=None,
         on_version_walk=None,
+        fail_names=(),
     ):
         self._collections = list(collections)
         self._arts = arts_by_name or {}
         self._fail = fail
         self._aliases = aliases_by_collection or {}
         self._on_version_walk = on_version_walk
+        # Collections whose version read raises, as a transient server error would.
+        self._fail_names = set(fail_names)
+        self.version_reads: list = []
 
     def artifact_collections(self, project_name, type_name):
         if self._fail:
@@ -164,6 +168,9 @@ class _FakeApi:
         reads a collection without first checking it exists would fail live. Returning
         ``[]`` here hid exactly that.
         """
+        self.version_reads.append(name.rsplit("/", 1)[-1])
+        if name.rsplit("/", 1)[-1] in self._fail_names:
+            raise ConnectionError("transient registry error")
         if name in self._arts:
             return self._arts[name]
         if name.rsplit("/", 1)[-1] in self._collections:
