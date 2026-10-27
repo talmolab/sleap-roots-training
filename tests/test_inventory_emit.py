@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 
 import pytest
 import wandb
@@ -500,10 +501,13 @@ def _assert_redacted(out, tmp_path, section):
     for line in _entries(section):
         for quoted in line.split("`")[1::2]:
             assert quoted.startswith("<ROOT>/"), quoted
+    # Whole tokens, not only `/segment/`: the leak this guards against put a folder
+    # name above the root into the species column as a bare value (#78).
     for name in (emit.TABLE_FILENAME, emit.REPORT_FILENAME):
-        text = (out / name).read_text(encoding="utf-8")
+        tokens = set(re.split(r"[^A-Za-z0-9_-]+", (out / name).read_text("utf-8")))
         for segment in tmp_path.parts[1:]:
-            assert f"/{segment}/" not in text, segment
+            if len(segment) >= 4:
+                assert segment not in tokens, segment
 
 
 def _emit(tmp_path, root):
@@ -578,6 +582,7 @@ def test_a_pooled_family_is_listed_not_resolved(tmp_path):
         "arabidopsis, canola, pennycress (filename)",
     ]
     assert "split per species or matched to per-species files" in " ".join(section)
+    assert "None." not in _section(report, "## Name derivation")
     _assert_redacted(out, tmp_path, section)
 
 
@@ -599,6 +604,7 @@ def test_folder_disagreements_are_grouped_by_directory(tmp_path):
         "- `<ROOT>/SLEAP_wheat/x`: 1 family; wheat → rice (1)",
     ]
     assert "filename's species was used" in " ".join(section)
+    assert "None." not in _section(report, "## Name derivation")
     _assert_redacted(out, tmp_path, section)
 
 
@@ -612,6 +618,7 @@ def test_two_capture_words_are_listed(tmp_path):
     assert _entries(section) == [
         "- `<ROOT>/plates/cyl_x/labels.v001.slp` names cylinder, plate"
     ]
+    assert "None." not in _section(report, "## Name derivation")
     _assert_redacted(out, tmp_path, section)
 
 
@@ -715,7 +722,7 @@ def test_the_name_derivation_section_says_names_are_not_evidence(tmp_path):
 
     _, report = _emit(tmp_path, root)
 
-    assert "not evidence" in " ".join(_section(report, "## Name derivation"))
+    assert "names, not evidence" in " ".join(_section(report, "## Name derivation"))
 
 
 def test_a_partial_scan_message_is_deduplicated_and_capped(tmp_path, monkeypatch):
@@ -766,3 +773,24 @@ def test_a_partial_scan_names_the_root_and_an_unknown_path_plainly(
     assert "<ROOT>/." not in message
     assert "<ROOT>/<unknown>" not in message
     assert "<ROOT>, <unknown>" in message
+
+
+def test_exactly_twenty_unreadable_directories_are_all_named(tmp_path, monkeypatch):
+    """The cap's boundary: twenty fit, with no "and 0 more"."""
+    root = tmp_path / "share"
+    write_labels(root / "SLEAP_soybean" / "labels.v001.slp")
+    real_walk = emit.discover.walk
+
+    def _twenty(path):
+        result = real_walk(path)
+        result.unreadable_paths.extend(root / f"d{index:02d}" for index in range(20))
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _twenty)
+
+    with pytest.raises(emit.PartialScan) as raised:
+        emit.build(root)
+
+    message = str(raised.value)
+    assert "<ROOT>/d19" in message
+    assert "more" not in message

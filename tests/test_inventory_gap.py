@@ -16,11 +16,23 @@ from sleap_roots_training.inventory import discover, gap, read
 from sleap_roots_training.labeling.skeletons import SkeletonRow
 
 
-def _observe(path):
-    """Pair one file with its family, the way a scan does."""
+def _observe(path, root):
+    """Pair one file with its family and derive it below ``root``, as the scan does.
+
+    Deriving from the absolute path would let the host's temp directory supply a
+    species, mode or root type (#78); `emit.build` derives below the scan root, and so
+    does this.
+    """
     candidate = discover.Candidate(path=path, parsed=discover.parse_version(path))
     family = discover.group([candidate])[0]
-    return gap.Observed(family=family, facts=read.read_facts(path))
+    below = discover.Family(
+        directory=family.directory.relative_to(root),
+        stem=family.stem,
+        suffix=family.suffix,
+    )
+    return gap.Observed(
+        family=family, facts=read.read_facts(path), derived=gap.derive(below)
+    )
 
 
 def _family(rel):
@@ -64,7 +76,7 @@ def test_an_observed_mode_with_no_row_is_reported(tmp_path):
         node_names=_nodes(3),
     )
 
-    report = gap.build_report([_observe(path)], table=table)
+    report = gap.build_report([_observe(path, tmp_path)], table=table)
 
     assert len(report.mode_gaps) == 1
     found = report.mode_gaps[0]
@@ -105,7 +117,9 @@ def test_a_mode_with_its_own_row_is_not_a_gap(tmp_path, monkeypatch):
         node_names=_nodes(8),
     )
 
-    report = gap.build_report([_observe(cylinder), _observe(plate)], table=table)
+    report = gap.build_report(
+        [_observe(cylinder, tmp_path), _observe(plate, tmp_path)], table=table
+    )
 
     assert report.families_analysed == 2
     assert report.mode_gaps == []
@@ -121,7 +135,7 @@ def test_an_uncovered_species_is_not_a_mode_gap(tmp_path):
         node_names=_nodes(3),
     )
 
-    report = gap.build_report([_observe(path)], table=table)
+    report = gap.build_report([_observe(path, tmp_path)], table=table)
 
     assert "medicago" in report.uncovered_species
     assert report.mode_gaps == []
@@ -136,7 +150,7 @@ def test_a_covered_species_whose_root_type_has_no_row_is_neither(tmp_path):
         node_names=_nodes(4),
     )
 
-    report = gap.build_report([_observe(path)], table=table)
+    report = gap.build_report([_observe(path, tmp_path)], table=table)
 
     assert report.families_analysed == 1
     assert report.mode_gaps == []
@@ -155,7 +169,9 @@ def test_a_mode_gap_aggregates_node_counts_across_families(tmp_path):
         node_names=_nodes(4),
     )
 
-    report = gap.build_report([_observe(three), _observe(four)], table=table)
+    report = gap.build_report(
+        [_observe(three, tmp_path), _observe(four, tmp_path)], table=table
+    )
 
     assert len(report.mode_gaps) == 1
     assert report.mode_gaps[0].node_counts == (3, 4)
@@ -178,7 +194,9 @@ def test_a_disagreeing_node_count_is_reported(tmp_path):
         node_names=_nodes(7),
     )
 
-    report = gap.build_report([_observe(agrees), _observe(disagrees)], table=table)
+    report = gap.build_report(
+        [_observe(agrees, tmp_path), _observe(disagrees, tmp_path)], table=table
+    )
 
     assert report.mode_gaps == []
     assert len(report.node_count_disagreements) == 1
@@ -209,7 +227,9 @@ def test_counts_matching_any_window_of_the_mode_are_not_a_disagreement(tmp_path)
         tmp_path / "cyl_rice_crown_b" / "labels.v001.slp", node_names=_nodes(9)
     )
 
-    report = gap.build_report([_observe(six), _observe(nine)], table=table)
+    report = gap.build_report(
+        [_observe(six, tmp_path), _observe(nine, tmp_path)], table=table
+    )
 
     assert report.families_analysed == 2
     assert report.node_count_disagreements == []
@@ -235,7 +255,7 @@ def test_a_species_with_no_row_is_reported(tmp_path):
         skeleton_names=("Skeleton-1",),
     )
 
-    report = gap.build_report([_observe(path)], table=table)
+    report = gap.build_report([_observe(path, tmp_path)], table=table)
 
     assert "wheat" in report.uncovered_species
 
@@ -260,7 +280,7 @@ def test_an_auto_generated_skeleton_name_is_unparseable(tmp_path):
         skeleton_names=("Skeleton-1", "Skeleton-2"),
     )
 
-    report = gap.build_report([_observe(path)])
+    report = gap.build_report([_observe(path, tmp_path)])
 
     assert report.unparseable_skeletons
     entry = report.unparseable_skeletons[0]
@@ -274,7 +294,7 @@ def test_a_parseable_skeleton_name_is_not_flagged(tmp_path):
         tmp_path / "SLEAP_soybean" / "primary_6nodes" / "labels.v001.slp",
         skeleton_names=("soybean_primary",),
     )
-    assert not gap.build_report([_observe(path)]).unparseable_skeletons
+    assert not gap.build_report([_observe(path, tmp_path)]).unparseable_skeletons
 
 
 def test_species_mode_and_root_type_are_labelled_name_derived(tmp_path):
@@ -283,7 +303,7 @@ def test_species_mode_and_root_type_are_labelled_name_derived(tmp_path):
         tmp_path / "cyl_soybean_primary_6nodes" / "labels.v001.slp",
         skeleton_names=("soybean_primary",),
     )
-    derived = gap.derive(_observe(path).family)
+    derived = _observe(path, tmp_path).derived
 
     assert (derived.species, derived.mode, derived.root_type) == (
         "soybean",
@@ -326,7 +346,7 @@ def test_mode_is_derived_from_the_whole_path_not_the_last_three_parts(tmp_path):
     )
     write_labels(deep, skeleton_names=("arabidopsis_primary",))
 
-    assert gap.derive(_observe(deep).family).mode == "plate"
+    assert _observe(deep, tmp_path).derived.mode == "plate"
 
 
 def test_soy_is_soybean(tmp_path):
@@ -336,7 +356,7 @@ def test_soy_is_soybean(tmp_path):
     read off a path", alongside 49 listed as `soybean`.
     """
     path = write_labels(tmp_path / "SLEAP_Soy" / "lateral" / "labels.v001.slp")
-    assert gap.derive(_observe(path).family).species == "soybean"
+    assert _observe(path, tmp_path).derived.species == "soybean"
 
 
 def test_a_zero_node_skeleton_is_not_silently_dropped(tmp_path):
@@ -349,7 +369,7 @@ def test_a_zero_node_skeleton_is_not_silently_dropped(tmp_path):
         skeleton_names=("soybean_primary",),
         node_names=(),
     )
-    facts = _observe(path).facts
+    facts = _observe(path, tmp_path).facts
     assert facts.skeleton_state != read.NO_SKELETON
     assert facts.node_count == 0
 
@@ -365,7 +385,7 @@ def test_the_report_states_how_much_of_the_corpus_it_analysed(tmp_path):
         tmp_path / "unknowable" / "labels.v001.slp", skeleton_names=("Skeleton-1",)
     )
 
-    report = gap.build_report([_observe(one), _observe(two)])
+    report = gap.build_report([_observe(one, tmp_path), _observe(two, tmp_path)])
 
     assert report.families_considered == 2
     assert report.families_analysed == 1
@@ -591,7 +611,9 @@ def test_a_name_that_says_too_much_is_skipped_by_its_own_reason(tmp_path):
         node_names=_nodes(6),
     )
 
-    report = gap.build_report([_observe(pooled), _observe(two_modes)], table=())
+    report = gap.build_report(
+        [_observe(pooled, tmp_path), _observe(two_modes, tmp_path)], table=()
+    )
 
     assert report.families_skipped_reasons == {
         "multi-species": 1,
@@ -607,7 +629,7 @@ def test_a_crowded_capture_family_is_a_gap_not_a_match(tmp_path):
         node_names=_nodes(6),
     )
 
-    report = gap.build_report([_observe(path)], table=table)
+    report = gap.build_report([_observe(path, tmp_path)], table=table)
 
     assert len(report.mode_gaps) == 1
     assert report.mode_gaps[0].mode == "multiplant cylinder"
@@ -631,7 +653,9 @@ def test_pooled_names_still_count_as_uncovered(tmp_path):
         node_names=_nodes(6),
     )
 
-    report = gap.build_report([_observe(by_filename), _observe(by_folder)], table=table)
+    report = gap.build_report(
+        [_observe(by_filename, tmp_path), _observe(by_folder, tmp_path)], table=table
+    )
 
     assert "pennycress" in report.uncovered_species
     assert report.families_skipped_reasons["multi-species"] == 2

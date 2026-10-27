@@ -1022,8 +1022,8 @@ def test_the_plate_row_survives_filename_first_derivation():
     for row in rows:
         if not row["node_count"] or int(row["user_instances"] or 0) <= 0:
             continue
-        # `<ROOT>` becomes the token `root`, which names nothing.
-        derived = gap.derive(_family(row["path"]))
+        # Below the root, as `emit.build` derives it.
+        derived = gap.derive(_family(row["path"].removeprefix("<ROOT>/")))
         if (derived.species, derived.mode, derived.root_type) == (
             "arabidopsis",
             "plate",
