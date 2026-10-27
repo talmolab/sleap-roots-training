@@ -11,7 +11,7 @@ GraviScan plate sections.
 | | primary | lateral |
 |---|---|---|
 | Collection | `arabidopsis_plates-primary-230804_133809.multi_instance.n-606` | `arabidopsis_plates-lateral-231130_135922.multi_instance.n-38` |
-| Nodes | 8, a linear chain `R1` (base) → `R8` (tip) | 3, a linear chain `r1` → `r3`; base first is inferred |
+| Nodes | 8, a linear chain `R1` (base) → `R8` (tip) | 3, a linear chain `r1` (base) → `r3` (tip) |
 | Selector | arabidopsis, plate, 2–7 DAG | arabidopsis, plate, 2–7 DAG |
 | Training labels | 545 train / 61 val frames; 166 train and 23 val frames are from an IAA-treated set | 34 train / 4 val frames, all imaged on one day (2023-09-08) |
 | Validation split | a random 10% of frames; **3 of the 61 val images are also train images** (labelled again in a second copy) | a random 10% of frames; **2 of the 4 val images are also train images** (labelled again in a second copy) |
@@ -38,10 +38,10 @@ sleap-nn, which is what predict runs these weights with.
   predicted 426 roots on frames with 305 labelled ones, so roughly 120 of its predictions pair with no
   labelled root (extra or split roots). The lateral left 7 of its 52 labelled roots and 7 of its 52
   predictions unpaired. The OKS mAP and mAR count both kinds of error, and both are low.
-- **Base first.** The owner confirms the primary's `R1` is the base, and in all 304 of its validation
-  roots with both ends labelled `R1` lies above `R8`, by at least 179 px. The lateral's `r1` is above
-  `r3` in all 51 such roots too, but laterals run sideways (a median drop of 35 px, and as little as
-  0.3 px), so for the lateral the base is inferred rather than confirmed.
+- **Base first.** The owner confirms that the first node is the base in both models: the primary's
+  `R1` and the lateral's `r1`. The labels agree: in all 304 of the primary's validation roots with
+  both ends labelled, `R1` lies above `R8`, by at least 179 px; in all 51 such lateral roots, `r1`
+  lies above `r3`, though laterals run sideways (a median drop of 35 px, and as little as 0.3 px).
 
 A collection id is the source model id with `/` and `=` replaced by `-`. The model ids, such as
 `arabidopsis_plates/primary/230804_133809.multi_instance.n=606`, use a registry namespace taken from the

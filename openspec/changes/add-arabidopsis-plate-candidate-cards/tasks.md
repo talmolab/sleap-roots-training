@@ -347,7 +347,7 @@ indistinguishable from the refusal.
       again in a second copy (3 of 61 primary, 2 of 4 lateral), so the numbers are not held out;
     - the primary's labels include an IAA-treated set (166 of 545 train, 23 of 61 val frames);
     - the primary's `R1` is the base and `R8` the tip (owner; all 304 validation roots with both ends
-      labelled have `R1` above `R8`); the lateral's `r1`-as-base is inferred; both skeletons are
+      labelled have `R1` above `R8`); the lateral's `r1` is the base (owner, 2026-10-27); both skeletons are
       linear chains;
     - both models resize to 1500 × 1616 (height × width); the lateral runs at scale 1.0;
     - the page says "to be published" until 10.9 records the published versions.
@@ -358,8 +358,8 @@ indistinguishable from the refusal.
       the verify echo, not only `verify_failed`, requires its report keys (both killed by reverting
       the line they pin);
     - the page: some validation images are training images (3 of 61 primary, 2 of 4 lateral), so the
-      numbers are not held out; "paired" is not "found"; the IAA-treated share; the lateral's base is
-      inferred; one dimension order.
+      numbers are not held out; "paired" is not "found"; the IAA-treated share; the lateral's base
+      (then inferred, since confirmed by the owner); one dimension order.
     - Accepted: an edited copy that re-lists the same weights under a new model id gets past the
       collection-keyed bar; the bar guards against slips, not a determined operator.
   - Declined, with reasons: the remaining suggestions (alias NFKC folding, a library-level guard in
