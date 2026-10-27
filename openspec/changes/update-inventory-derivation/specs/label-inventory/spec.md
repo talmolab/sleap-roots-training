@@ -204,7 +204,7 @@ covered species whose root type has no row in any mode is reported as neither. A
 disagreement lists, per matched `(species, mode, root_type)`, the row node counts and each
 observed count outside them with its files. The report prints both and decides nothing.
 Age is not considered: it is not derivable from the path. Node counts are read from the files
-and the mode is name-derived from the family's **whole** path, so this report needs no scan
+and the mode is name-derived from the family's **whole** path below the scan root, so this report needs no scan
 metadata and no external service. A family is analysed only where species, root type, mode
 and node count are all derivable, so the report SHALL state how many families it analysed
 out of how many it saw, and why the rest were not. Each underivable field counts once under

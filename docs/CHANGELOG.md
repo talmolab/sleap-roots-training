@@ -165,9 +165,12 @@ All notable changes to this project are documented here. The format is based on
   for 228 families, 33 of them to empty: a filename or folder naming several species gets none,
   never the first. The table gains `species_named` and `flags` (`multi-species`,
   `folder-species-differs`, `ambiguous-mode`), and the report a "Name derivation" section listing
-  them. A literal `multiplant` path token derives `multiplant cylinder`. **BREAKING (CLI):** a scan
-  that cannot list every directory now writes nothing and exits non-zero, where it used to
-  overwrite `inventory/` and exit 0.
+  them. A literal `multiplant` path token derives `multiplant cylinder`. Only the path below the
+  scan root is read, so the directories above it no longer supply a species, mode or flag; a root
+  set at `…/SLEAP_wheat` no longer gives that folder's species to files whose names give none.
+  **BREAKING (CLI):** a scan that cannot list every directory now writes nothing and exits
+  non-zero, where it used to overwrite `inventory/` and exit 0. The error names each unreadable
+  directory once, relative to `<ROOT>`, the first 20 then how many more.
 - **The selection matrix rejects unknown row keys.** A missing `status` means `production`, so a
   misspelled one (`stauts`, `Status`) would have loaded a candidate row as production. Top-level
   matrix keys are unchanged.

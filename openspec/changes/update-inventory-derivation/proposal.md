@@ -127,9 +127,11 @@ used to write and exit 0.
   disagreements are flagged and grouped by directory. `only<species>` is recognised.
 - Resolving the multi-species files is a separate follow-up (#59).
 - A scan that cannot list every directory writes nothing and exits non-zero (2026-10-15).
-  This makes the approved re-scan command safe against partial scans as written. An
-  unreachable registry is not a partial scan: the command still writes, with every
-  `registry_status` `not-checked`, and only the manual gate in tasks 7.2 catches it.
+  This makes the approved re-scan command safe against partial scans as written. It covers
+  listing, not reading or the registry. A share that drops during the read phase gives
+  `UNREADABLE` rows in the `error` column and exits 0. An unreachable registry gives every
+  `registry_status` as `not-checked` and exits 0. Only the manual gate in tasks 7.2 catches
+  either.
 
 ### Why after `source` instead of after `root_type`?
 

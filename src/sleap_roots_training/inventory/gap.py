@@ -6,7 +6,9 @@ express is a mode the corpus uses with no row of its own, or a node count its ro
 have. The first scan's headline finding — the table had no ``mode`` at all, so a 6-node
 cylinder and an 8-node plate arabidopsis primary family selected one row — is what added
 the key. Node counts are read from the files; species, mode and root type are derived from
-the path and are labelled as such, because a name is not evidence.
+the path and are labelled as such, because a name is not evidence. :func:`derive` reads the
+family it is given; the scan gives it the path below the scan root, so the directories
+above the root never supply a value.
 
 Species is read from the filename before the folder (``Filename-First Species
 Derivation``): people put other crops' data in a crop's folder to train one model. The
@@ -228,7 +230,8 @@ class GapReport:
 def _tokens(family: discover.Family) -> list[str]:
     """Return the lowercase path tokens a family's identity can be read from.
 
-    The **whole** path, not a window on it. Reading only the last three directories for
+    The **whole** path of the family as given (the scan gives the path below its root),
+    not a window on it. Reading only the last three directories for
     mode while species read everything meant a `plates` token further up was invisible:
     on the measured corpus that hid four plate families outright and undercounted the
     8-node ones as 11 rather than 15.
@@ -401,7 +404,11 @@ def build_report(
     derived_species: set[str] = set()
 
     for observed in observations:
-        derived = observed.derived or derive(observed.family)
+        derived = (
+            observed.derived
+            if observed.derived is not None
+            else derive(observed.family)
+        )
         if derived.species:
             derived_species.add(derived.species)
         elif MULTI_SPECIES in derived.flags:

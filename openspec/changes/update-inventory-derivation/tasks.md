@@ -303,6 +303,31 @@ RED/GREEN pair, plus this reconciliation.
   - Widening the refusal to an unreachable registry: the owner decided partial scans only.
     The proposal now says so, and 7.2 gates the registry.
 
+## 6c. PR #81 review round
+
+`/review-pr 81` posted COMMENT, with nothing blocking. `main` (#82) was merged in first, and the
+CHANGELOG and `test_labeling_skeletons.py` conflicts were resolved by keeping both sides.
+
+- [x] 6c.1 `test(inventory): derive gap tests below their root, and pin what mutants slipped past`.
+  - `_observe(path, root)` derives below the root. Under a hostile `--basetemp`, failures went
+    from 13, 9 and 3 to 0.
+  - Mutants M8, M11 and M12 are now killed.
+  - The redaction check works on whole tokens.
+  - The plate-row projection strips `<ROOT>/`.
+- [x] 6c.2 `refactor(inventory): spell the derived fallback, and say the scan reads below the root`.
+  - `is not None` replaces `or` in `build_report`.
+  - The `gap.py` docstrings, the README staleness caveat, the `skeletons.yaml` tense, the
+    CHANGELOG (below-root reading, capped message), the spec's "whole path below the scan
+    root", and the proposal's caveat (it covers listing, not reading or the registry) are all
+    updated.
+- [x] 6c.3 Not taken, with reasons:
+  - Counting raw paths rather than labels in "N director(ies)": two unnamed errors are the same
+    `Path("<unknown>")`, so the counts are equal in practice.
+  - A sentinel object for `UNKNOWN_PATH`: the clash needs a POSIX directory literally named
+    `<unknown>` directly under a `.` root.
+  - Moving `_below_root` into `gap.derive(root=...)`: the scan is its only caller.
+  - A rules-version stamp in the artifacts: out of scope.
+
 ## 7. After merge: the re-scan PR, then the archive PR
 
 These are not part of this PR. They are two follow-up PRs, merged in this order, because the
