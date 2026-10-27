@@ -54,11 +54,14 @@ class Card:
         selectors: The (species, mode, age window) contexts this model serves,
             de-duplicated and in :func:`_selector_key` order. Never empty.
         source_model_id: The physical model id backing this card.
+        status: Its rows' status (``"production"`` or ``"candidate"``). Decides which
+            alias the card may be linked under; never part of the published metadata.
     """
 
     root_type: str
     selectors: tuple[Selector, ...]
     source_model_id: str
+    status: str
 
 
 def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
@@ -75,11 +78,14 @@ def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
         ValueError: If one model id appears under more than one root type (the design
             rests on ``root_type`` being intrinsic to the weights), or if two different
             models of the same root type claim an identical selector (which would put
-            two production cards in front of one consumer request).
+            two production cards in front of one consumer request), or if one model id
+            appears under rows of different status (one collection cannot be both
+            expected in production and kept out of it).
     """
     # (model_id, root_type) -> selectors, in first-seen order before the sort.
     collected: dict[tuple[str, str], list[Selector]] = {}
     root_types_by_model: dict[str, set[str]] = {}
+    statuses_by_model: dict[str, set[str]] = {}
 
     for row in rows:
         age_min, age_max = parse_age_window(row.age)
@@ -93,8 +99,10 @@ def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
                 continue
             collected.setdefault((model_id, root_type), []).append(selector)
             root_types_by_model.setdefault(model_id, set()).add(root_type)
+            statuses_by_model.setdefault(model_id, set()).add(row.status)
 
     _reject_models_spanning_root_types(root_types_by_model)
+    _reject_models_of_mixed_status(statuses_by_model)
 
     cards = [
         Card(
@@ -103,6 +111,7 @@ def expand_rows_to_cards(rows: Iterable[SelectionRow]) -> list[Card]:
             # explicit total order. Doing both means neither step has to be trusted alone.
             selectors=tuple(sorted(dict.fromkeys(selectors), key=_selector_key)),
             source_model_id=model_id,
+            status=_single_status(statuses_by_model[model_id]),
         )
         for (model_id, root_type), selectors in collected.items()
     ]
@@ -127,6 +136,30 @@ def _reject_models_spanning_root_types(
         raise ValueError(
             "a model must resolve to exactly one root type, but "
             f"{detail} — one card cannot describe weights of two root types"
+        )
+
+
+def _single_status(statuses: set[str]) -> str:
+    """Return a model's one status; mixed status was rejected before this is called."""
+    (status,) = statuses
+    return status
+
+
+def _reject_models_of_mixed_status(statuses_by_model: dict[str, set[str]]) -> None:
+    """Fail the seed if one physical model is referenced by rows of different status."""
+    mixed = {
+        model_id: sorted(statuses)
+        for model_id, statuses in statuses_by_model.items()
+        if len(statuses) > 1
+    }
+    if mixed:
+        detail = "; ".join(
+            f"{model_id!r} under status {statuses}"
+            for model_id, statuses in sorted(mixed.items())
+        )
+        raise ValueError(
+            f"a model's rows must share one status, but {detail} — one collection "
+            "cannot be both expected in production and kept out of it"
         )
 
 

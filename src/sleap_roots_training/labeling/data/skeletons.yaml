@@ -59,8 +59,8 @@
 #
 # `age` is the native chooser comma-list (DAG), matching
 # `registry/data/model_selection.yaml`; `null` means the row applies at every age. Rice
-# splits by age, cross-checked against `model_selection.yaml` by a test; arabidopsis plate
-# primary splits at the window its evidence covers.
+# splits by age, and arabidopsis plate primary covers the window its evidence covers (2-7);
+# both are cross-checked against `model_selection.yaml` by a test.
 #
 # Node names are always `r1`, `r2`, ... `rN` — r1 is the base, the last node is the tip,
 # evenly spaced along the root (`build-labeling-package.md:53`). The convention is fixed,

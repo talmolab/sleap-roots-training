@@ -25,6 +25,7 @@ def _card(root_type, source_model_id, *selectors):
             for s, m, lo, hi in selectors
         ),
         source_model_id=source_model_id,
+        status="production",
     )
 
 
@@ -120,7 +121,7 @@ def test_seed_publishes_all_distinct(monkeypatch, tmp_path):
     report = publish.seed_registry(
         _resolved(_all_cards(), tmp_path), CFG, run=object(), api=api
     )
-    assert len(calls) == 11 and len(set(calls)) == 11  # one per physical model
+    assert len(calls) == 13 and len(set(calls)) == 13  # one per physical model
     assert sorted(report["published"]) == sorted(calls) and report["skipped"] == []
 
 
@@ -154,8 +155,8 @@ def test_the_committed_model_ids_slug_to_distinct_collections():
     # does not bite the committed matrix. Asserted so a future matrix edit that DOES
     # collide fails here rather than at `--execute` time.
     all_cards = _all_cards()
-    assert len(all_cards) == 11
-    assert len({collection_id(c) for c in all_cards}) == 11
+    assert len(all_cards) == 13
+    assert len({collection_id(c) for c in all_cards}) == 13
 
 
 def test_seed_idempotent_skip_and_force(monkeypatch, tmp_path):
@@ -828,3 +829,150 @@ def test_unpromoted_reads_the_configured_alias_not_production():
     )
     # Every collection carries `production`, none carries `candidate`.
     assert publish.unpromoted_collections(cfg, cards_, api=api) == sorted(ids)
+
+
+# --- status-aware verify: barred (candidate) collections and matrix-wide orphans ---
+
+PROD = "soy-p"
+CAND = "a-p"
+
+
+def test_a_candidate_absent_from_the_registry_is_neither_read_nor_reported():
+    # The real pre-publish state: the plate collections do not exist yet. wandb 0.28
+    # raises on the versions of an absent collection, so it must not be read at all.
+    api = _FakeApi(
+        collections=[PROD],
+        arts_by_name={f"{PROJECT}/{PROD}": [_FakeArt(["production"])]},
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["present"] == [PROD]
+    assert report["unexpected_production"] == [] and report["barred_unreadable"] == []
+    assert CAND not in report["missing"] + report["orphans"] + report["indeterminate"]
+    assert CAND not in api.version_reads
+    assert publish.verify_failed(report) is False
+
+
+def test_a_candidate_linked_to_production_is_an_unexpected_link_and_fails():
+    api = _FakeApi(
+        collections=[PROD, CAND],
+        aliases_by_collection={PROD: ["production"], CAND: ["production", "candidate"]},
+        arts_by_name={
+            f"{PROJECT}/{PROD}": [_FakeArt(["production"])],
+            f"{PROJECT}/{CAND}": [_FakeArt(["production", "candidate"])],
+        },
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["unexpected_production"] == [CAND]
+    # Reported once, as the safety failure, never also as present or orphaned.
+    assert CAND not in report["present"] + report["orphans"]
+    assert publish.verify_failed(report) is True
+
+
+def test_a_candidate_carrying_only_candidate_passes():
+    api = _FakeApi(
+        collections=[PROD, CAND],
+        aliases_by_collection={PROD: ["production"], CAND: ["candidate"]},
+        arts_by_name={
+            f"{PROJECT}/{PROD}": [_FakeArt(["production"])],
+            f"{PROJECT}/{CAND}": [_FakeArt(["candidate"])],
+        },
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["unexpected_production"] == [] and report["orphans"] == []
+    assert publish.verify_failed(report) is False
+
+
+def test_a_read_error_on_a_barred_collection_fails_closed():
+    api = _FakeApi(
+        collections=[PROD, CAND],
+        arts_by_name={f"{PROJECT}/{PROD}": [_FakeArt(["production"])]},
+        fail_names=[CAND],
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND],
+        barred_collections=[CAND],
+    )
+    assert report["barred_unreadable"] == [CAND]
+    assert publish.verify_failed(report) is True
+
+
+def test_collections_the_matrix_produces_are_never_orphans():
+    candidate_cfg = RegistryConfig("ent", "reg", "candidate")
+    leftover, stranger = "wheat-crown", "old-candidate"
+    api = _FakeApi(
+        collections=[CAND, leftover, stranger],
+        aliases_by_collection={
+            CAND: ["candidate"],
+            leftover: ["production", "candidate"],
+            stranger: ["candidate"],
+        },
+        arts_by_name={f"{PROJECT}/{CAND}": [_FakeArt(["candidate"])]},
+    )
+    report = publish.verify_registry(
+        candidate_cfg, [CAND], api=api, matrix_collections=[CAND, leftover]
+    )
+    # A promoted row still carrying `candidate` is a leftover of its candidate window;
+    # a candidate-aliased collection the matrix does not produce is still an orphan.
+    assert report["orphans"] == [stranger]
+    assert report["present"] == [CAND]
+
+
+def test_a_barred_read_error_keeps_its_cause_and_a_clear_candidate_is_named():
+    api = _FakeApi(
+        collections=[PROD, CAND, "b-l"],
+        arts_by_name={
+            f"{PROJECT}/{PROD}": [_FakeArt(["production"])],
+            f"{PROJECT}/b-l": [_FakeArt(["candidate"])],
+        },
+        fail_names=[CAND],
+    )
+    report = publish.verify_registry(
+        CFG,
+        [PROD],
+        api=api,
+        matrix_collections=[PROD, CAND, "b-l"],
+        barred_collections=[CAND, "b-l", "absent"],
+    )
+    assert report["barred_unreadable"] == [CAND]
+    assert report["barred_errors"] == {
+        CAND: "ConnectionError: transient registry error"
+    }
+    # Checked and not linked -- including one not yet in the registry at all.
+    assert report["barred_clear"] == ["absent", "b-l"]
+
+
+@pytest.mark.parametrize(
+    "key", ["missing", "legacy", "unexpected_production", "barred_unreadable"]
+)
+def test_a_report_missing_a_failure_key_raises_rather_than_passing(key):
+    # A refactor that stopped producing a failure category must not turn verify green.
+    report = {
+        "missing": [],
+        "legacy": [],
+        "unexpected_production": [],
+        "barred_unreadable": [],
+    }
+    del report[key]
+    with pytest.raises(KeyError, match=key):
+        publish.verify_failed(report)

@@ -22,6 +22,8 @@ from typing import Optional, get_args
 from omegaconf import OmegaConf
 from sleap_roots_contracts import Mode, RootType
 
+from sleap_roots_training.registry.config import DEFAULT_ALIAS
+
 
 def _vocab_from_contract_literal(
     alias: object, name: str, vocab_name: str
@@ -110,6 +112,29 @@ MODE_VOCAB: frozenset[str] = _vocab_from_contract_literal(
 ROOT_TYPE_VOCAB: frozenset[str] = _vocab_from_contract_literal(
     RootType, "sleap_roots_contracts.RootType", "ROOT_TYPE_VOCAB"
 )
+#: The status of a row that may be published under a non-default alias (normally
+#: ``candidate``) but is never linked to ``production``.
+CANDIDATE_STATUS = "candidate"
+#: The values a row's optional ``status`` may take, the first being the default.
+#: ``seed-registry`` and ``--verify`` read it; the published card never carries it. Each
+#: value is deliberately also an alias name: ``--verify`` expects a card under the alias
+#: equal to its status. Exact strings: nothing is stripped or case-folded.
+ROW_STATUSES: tuple[str, ...] = (DEFAULT_ALIAS, CANDIDATE_STATUS)
+#: Every key a matrix row may carry. Anything else is rejected: a missing ``status``
+#: means production, so a misspelled one would otherwise load a candidate row as
+#: production without a word.
+ROW_KEYS: frozenset[str] = frozenset(
+    {
+        "species",
+        "mode",
+        "age",
+        "primary_model_id",
+        "lateral_model_id",
+        "crown_model_id",
+        "source",
+        "status",
+    }
+)
 
 _DATA_PACKAGE = "sleap_roots_training.registry"
 _DATA_RESOURCE = "data/model_selection.yaml"
@@ -145,6 +170,7 @@ class SelectionRow:
         lateral_model_id: Relative lateral-root model id, or ``None`` if absent.
         crown_model_id: Relative crown-root model id, or ``None`` if absent.
         source: Why the row exists with its window (a chooser table, an owner decision).
+        status: ``"production"`` (the default) or ``"candidate"``; see ``ROW_STATUSES``.
     """
 
     species: str
@@ -154,6 +180,7 @@ class SelectionRow:
     lateral_model_id: Optional[str]
     crown_model_id: Optional[str]
     source: str
+    status: str = DEFAULT_ALIAS
 
     def model_ids(self) -> dict[str, Optional[str]]:
         """Return this row's model id in each root-type slot, keyed by root type.
@@ -299,6 +326,11 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
         for required in ("species", "mode", "age"):
             if required not in raw:
                 raise ValueError(f"row {index}: missing required key {required!r}")
+        unknown = sorted(set(raw) - ROW_KEYS, key=str)
+        if unknown:
+            raise ValueError(
+                f"row {index}: unknown key(s) {unknown} (known keys: {sorted(ROW_KEYS)})"
+            )
         species = raw["species"]
         mode = raw["mode"]
         if species not in SPECIES_VOCAB:
@@ -336,6 +368,15 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
                 f"exists, got {source!r}"
             )
 
+        # After `source`, before `origins` coverage. Only an absent key defaults; an explicit
+        # `status: null` arrives as None and is rejected rather than read as production.
+        status = raw.get("status", DEFAULT_ALIAS)
+        if not isinstance(status, str) or status not in ROW_STATUSES:
+            raise ValueError(
+                f"row {index}: `status` must be one of {list(ROW_STATUSES)}, "
+                f"got {status!r}"
+            )
+
         rows.append(
             SelectionRow(
                 species=species,
@@ -345,6 +386,7 @@ def _parse_matrix(matrix_path: Path) -> SelectionMatrix:
                 lateral_model_id=model_ids["lateral_model_id"],
                 crown_model_id=model_ids["crown_model_id"],
                 source=source,
+                status=status,
             )
         )
 

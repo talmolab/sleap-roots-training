@@ -14,8 +14,12 @@ CANOLA_LATERAL = "canola/lateral/240611_083419.multi_instance.n=631"
 ARABIDOPSIS_LATERAL = "arabidopsis/lateral/240130_140452.multi_instance.n=337"
 
 
-def _row(species, mode, age, primary=None, lateral=None, crown=None):
-    return SelectionRow(species, mode, age, primary, lateral, crown, source="test row")
+def _row(
+    species, mode, age, primary=None, lateral=None, crown=None, status="production"
+):
+    return SelectionRow(
+        species, mode, age, primary, lateral, crown, source="test row", status=status
+    )
 
 
 def _sel(card):
@@ -64,14 +68,14 @@ def test_all_null_slots_produce_no_card():
     assert cards.expand_rows_to_cards([row]) == []
 
 
-# --- 3.8: the real matrix collapses to exactly 11 cards ---
+# --- 3.8: the real matrix collapses to exactly 13 cards ---
 
 
-def test_real_matrix_yields_eleven_cards():
+def test_real_matrix_yields_thirteen_cards():
     all_cards = cards.expand_rows_to_cards(chooser.load_selection_matrix().rows)
-    assert len(all_cards) == 11, "9 committed rows over 11 physical models -> 11 cards"
+    assert len(all_cards) == 13, "10 committed rows over 13 physical models -> 13 cards"
     # One card per physical model is the whole design; assert it directly.
-    assert len({c.source_model_id for c in all_cards}) == 11
+    assert len({c.source_model_id for c in all_cards}) == 13
 
 
 def test_shared_primary_is_one_card_with_four_selectors():
@@ -150,6 +154,13 @@ EXPECTED_SELECTORS_BY_MODEL = {
     },
     "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590": {
         ("sorghum", "cylinder", 3, 14),
+    },
+    # talmolab/sleap-roots-training#3: candidate-only; 2-7 is the primary's training span.
+    "arabidopsis_plates/primary/230804_133809.multi_instance.n=606": {
+        ("arabidopsis", "plate", 2, 7),
+    },
+    "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38": {
+        ("arabidopsis", "plate", 2, 7),
     },
 }
 
@@ -454,6 +465,7 @@ def test_every_accepted_mode_round_trips_through_the_real_modelcard(mode):
         root_type="primary",
         selectors=(Selector(species="rice", mode=mode, age_min=2, age_max=14),),
         source_model_id="r/p",
+        status="production",
     )
     meta = cards.card_to_metadata(card)
     model_card = ModelCard.model_validate(
@@ -469,7 +481,7 @@ def test_every_committed_matrix_card_validates_against_the_real_modelcard():
     # a bad card would otherwise first be noticed, which is too late.
     matrix = chooser.load_selection_matrix()
     all_cards = cards.expand_rows_to_cards(matrix.rows)
-    assert len(all_cards) == 11
+    assert len(all_cards) == 13
 
     for card in all_cards:
         meta = cards.card_to_metadata(card)
@@ -556,6 +568,8 @@ EXPECTED_COLLECTION_BY_MODEL = {
     "20250401_wheat_models/250328_095645.multi_instance.n=1658": "20250401_wheat_models-250328_095645.multi_instance.n-1658",
     "20250204_sorghum_experimental/sorghum_soybean_primary_6nodes/250203_181521.multi_instance.n=1689": "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
     "20250204_sorghum_experimental/sorghum_soybean_lateral_4nodes/250203_214033.multi_instance.n=590": "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+    "arabidopsis_plates/primary/230804_133809.multi_instance.n=606": "arabidopsis_plates-primary-230804_133809.multi_instance.n-606",
+    "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38": "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
 }
 
 
@@ -577,8 +591,8 @@ def test_matrix_lock_model_to_selectors():
     all_cards = cards.expand_rows_to_cards(matrix.rows)
     got = {c.source_model_id: set(_sel(c)) for c in all_cards}
     assert got == EXPECTED_SELECTORS_BY_MODEL
-    assert len(got) == 11
-    assert len({cards.collection_id(c) for c in all_cards}) == 11  # ids stay unique
+    assert len(got) == 13
+    assert len({cards.collection_id(c) for c in all_cards}) == 13  # ids stay unique
 
 
 def test_every_collection_id_is_accepted_by_the_real_wandb_artifact():
@@ -651,3 +665,93 @@ def test_wheat_is_one_crown_card_and_sorghum_one_primary_and_one_lateral():
         ].root_type
         == "lateral"
     )
+
+
+# --- Row status carried onto cards ---
+
+
+def test_cards_inherit_their_rows_status():
+    result = cards.expand_rows_to_cards(
+        [
+            _row("soybean", "cylinder", "2, 3", primary="s/p"),
+            _row(
+                "arabidopsis",
+                "plate",
+                "2, 3, 4, 5, 6, 7",
+                primary="a/p",
+                status="candidate",
+            ),
+        ]
+    )
+    assert {c.source_model_id: c.status for c in result} == {
+        "s/p": "production",
+        "a/p": "candidate",
+    }
+
+
+def test_a_model_under_rows_of_mixed_status_is_rejected():
+    # One collection cannot be both expected in production and kept out of it.
+    with pytest.raises(ValueError, match=r"'s/p'.*status"):
+        cards.expand_rows_to_cards(
+            [
+                _row("soybean", "cylinder", "2, 3", primary="s/p"),
+                _row("canola", "cylinder", "2, 3", primary="s/p", status="candidate"),
+            ]
+        )
+
+
+def test_two_candidate_rows_sharing_a_model_give_one_candidate_card():
+    result = cards.expand_rows_to_cards(
+        [
+            _row(
+                "arabidopsis",
+                "plate",
+                "2, 3, 4, 5, 6, 7",
+                primary="a/p",
+                status="candidate",
+            ),
+            _row(
+                "canola", "plate", "2, 3, 4, 5, 6, 7", primary="a/p", status="candidate"
+            ),
+        ]
+    )
+    assert [(c.source_model_id, c.status, len(c.selectors)) for c in result] == [
+        ("a/p", "candidate", 2)
+    ]
+
+
+def test_status_is_never_published():
+    candidate = cards.expand_rows_to_cards(
+        [
+            _row(
+                "arabidopsis",
+                "plate",
+                "2, 3, 4, 5, 6, 7",
+                primary="a/p",
+                status="candidate",
+            )
+        ]
+    )[0]
+    production = cards.expand_rows_to_cards(
+        [_row("arabidopsis", "plate", "2, 3, 4, 5, 6, 7", primary="a/p")]
+    )[0]
+    metadata = cards.card_to_metadata(candidate)
+    assert "status" not in metadata
+    assert metadata == cards.card_to_metadata(production)
+
+
+# --- Committed Matrix Totals ---
+
+PLATE_PRIMARY = "arabidopsis_plates/primary/230804_133809.multi_instance.n=606"
+PLATE_LATERAL = "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38"
+
+
+def test_committed_matrix_totals_and_status_split():
+    matrix = chooser.load_selection_matrix()
+    all_cards = cards.expand_rows_to_cards(matrix.rows)
+    assert (len(matrix.rows), len(matrix.checksums), len(all_cards)) == (10, 13, 13)
+    candidates = {
+        c.source_model_id: c.root_type for c in all_cards if c.status == "candidate"
+    }
+    assert candidates == {PLATE_PRIMARY: "primary", PLATE_LATERAL: "lateral"}
+    assert sum(c.status == "production" for c in all_cards) == 11
