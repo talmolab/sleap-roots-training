@@ -118,8 +118,8 @@ models:
 
   # Full-plate models, for trying on GraviScan plate sections; not linked to production.
   # 2-7 is the primary model's training span as read from its image filenames' day prefixes
-  # (not the chooser table's 7-14); the lateral model is one imaging session of unconfirmed
-  # age and shares the row.
+  # (not the chooser table's 7-14); the lateral model is one imaging session at 7 DAG (owner)
+  # and shares the row.
   - species: arabidopsis
     mode: plate
     age: "2, 3, 4, 5, 6, 7"
