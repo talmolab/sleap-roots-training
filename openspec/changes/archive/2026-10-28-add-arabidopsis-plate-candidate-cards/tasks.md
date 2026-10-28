@@ -368,25 +368,26 @@ indistinguishable from the refusal.
 
 ## 10. After merge: smoke test and publish under `candidate` (owner approves each write)
 
-- [ ] 10.1 Load smoke test, local and with no wandb. Extract both archives with `resolve_model_dir`.
+- [x] 10.1 Load smoke test, local and with no wandb. Extract both archives with `resolve_model_dir`.
   Then, in a `sleap-roots-predict` checkout environment, call `make_predictor([<extracted dir>])` for
   each model, and run one prediction on one plate image from its `labels_gt.val.slp`. Record the
   output instance counts.
-- [ ] 10.2 Set up a detached worktree at the squash SHA.
+- [x] 10.2 Set up a detached worktree at the squash SHA. Used `d1ca4fb` (#83's squash, then the head
+  of main): #83 changed a comment in the matrix, so the recorded matrix hash matches main.
   - Run `uv sync --locked`, and confirm a clean status.
   - Confirm `SLEAP_ROOTS_MODEL_ALIAS` is unset.
-- [ ] 10.3 Read-only pre-publish checks:
+- [x] 10.3 Read-only pre-publish checks:
   - A default `--verify` shows 11 present, nothing unexpected, and exit 0. The plate collections do not
     exist yet, so this exercises the absent-collection path.
   - Refusal check, with **no `--models-root` and no `--yes`**: `seed-registry --only <2 ids> --promote
     --execute` under the default alias. It must exit 1 naming `status`. An exit 2 for a missing
     `--models-root` would mean the guard is absent; nothing is at risk either way.
-- [ ] 10.4 Publish:
+- [x] 10.4 Publish:
   `SLEAP_ROOTS_MODEL_ALIAS=candidate seed-registry --models-root <scratch> --only <2 ids> --execute --yes`.
-- [ ] 10.5 Verify:
+- [x] 10.5 Verify:
   - `SLEAP_ROOTS_MODEL_ALIAS=candidate seed-registry --verify` shows 2 present and exits 0.
   - A default `--verify` still shows 11 present, nothing unexpected, and exit 0.
-- [ ] 10.6 Read both artifacts back. Write
+- [x] 10.6 Read both artifacts back. Write
   `docs/migration/<publish date>-arabidopsis-plate-candidate-publish-record.json`, using the same
   schema as `2026-10-04-wheat-sorghum-candidate-publish-record.json`. Also record:
   - the smoke-test result and the rollback (`unlink()` the `candidate` alias);
@@ -394,7 +395,7 @@ indistinguishable from the refusal.
     the curated copy later changes;
   - the SHA256 of each original training-run `best_model.h5` it was compared against (task 1.3).
   - Before committing, grep the record for `:\`, `\\`, `hpi`, `users/` and a leading `/`.
-- [ ] 10.7 Open "Promote arabidopsis plate cards to production (gated)" (#NEW) with these gates:
+- [x] 10.7 Open "Promote arabidopsis plate cards to production (gated)" (#84) with these gates:
   - parity on the candidate alias, with a plate prefix mapping in predict's `run_parity_harness.py`;
   - sleap-roots#252;
   - plate dispatch in bloomctl and contracts;
@@ -402,12 +403,17 @@ indistinguishable from the refusal.
   - a PR that drops `status: candidate` and MODIFIES *Committed Arabidopsis Plate Row*;
   - `--only … --promote --execute`.
 
-  Then close #3 with a comment linking the record and #NEW.
+  Then close #3 with a comment linking the record and #84.
 - [ ] 10.8 Send Benfica the doc link and the two collection ids, and confirm her registry access.
-- [ ] 10.9 Follow-up PR, after its own `/review-pr`, with two commits:
+- [x] 10.9 Follow-up PR (#85), after its own `/review-pr`, with two commits:
   - the record plus the ticks for 10.x, and `docs/arabidopsis-plate-models.md` updated to say the
     cards are published, with each artifact's version, digest and the smoke-test result;
   - `chore(openspec): archive add-arabidopsis-plate-candidate-cards`. At archive time, amend the spec
     Purpose line to "…linked under each row's status".
 - [ ] 10.10 Cross-repo, owner: a PR to the sleap-roots-pipeline `docs/bloom-integration/roadmap.md`
-  changing "plate models deferred (training #3)" to point at the candidate cards and #NEW.
+  changing "plate models deferred (training #3)" to point at the candidate cards and #84.
+
+Archived with 10.8 (the Benfica handoff, sent by the owner) and 10.10 (the sleap-roots-pipeline
+roadmap PR) still open; both are outside this repository's code.
+The spec Purpose was worded more precisely than 10.9 quotes, after review: artifacts are linked
+under the alias a run targets, and a `candidate` row is never linked to `production`.

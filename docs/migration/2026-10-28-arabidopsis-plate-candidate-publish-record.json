@@ -1,0 +1,350 @@
+{
+  "description": "add-arabidopsis-plate-candidate-cards group 10 (talmolab/sleap-roots-training#3): the arabidopsis plate primary and lateral cards published under the `candidate` alias only. Read-only snapshot.",
+  "captured_utc": "2026-10-28T18:55:27+00:00",
+  "registry": "eberrigan-salk-institute-for-biological-studies-org/wandb-registry-sleap-roots-models",
+  "seed_run": {
+    "path": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/h46fipfo",
+    "url": "https://wandb.ai/eberrigan-salk-institute-for-biological-studies/sleap-roots-training/runs/h46fipfo",
+    "config": {
+      "git_sha": "d1ca4fb76e8770da9a69139153b99789ef0e28f5",
+      "git_dirty": false,
+      "invocation": {
+        "only": [
+          "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
+          "arabidopsis_plates-primary-230804_133809.multi_instance.n-606"
+        ],
+        "force": false,
+        "promote": false,
+        "alias_source": "SLEAP_ROOTS_MODEL_ALIAS",
+        "skipped_by_status": [],
+        "first_production_links": null
+      },
+      "row_sources": [
+        {
+          "age": "2, 3, 4, 5, 6, 7",
+          "mode": "plate",
+          "source": "owner decision 2026-10-22 (talmolab/sleap-roots-training#3): the owner's curated plate primary and lateral models, window 2-7 from the primary's training labels",
+          "species": "arabidopsis"
+        }
+      ],
+      "model_origins": [
+        {
+          "location": "owner's curated PLATE_arabidopsis copy (2025-07-09), lateral_roots/labels/models/",
+          "model_id": "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38",
+          "snapshot": null,
+          "pinned_by": "owner selection 2026-10-22 (talmolab/sleap-roots-training#3); zip built by scripts/build_model_zip.py, byte-reproducible from that directory"
+        },
+        {
+          "location": "owner's curated PLATE_arabidopsis copy (2025-07-09), primary_root/labels/models/",
+          "model_id": "arabidopsis_plates/primary/230804_133809.multi_instance.n=606",
+          "snapshot": null,
+          "pinned_by": "owner selection 2026-10-22 (talmolab/sleap-roots-training#3); zip built by scripts/build_model_zip.py, byte-reproducible from that directory"
+        }
+      ],
+      "registry_target": {
+        "alias": "candidate",
+        "entity": "eberrigan-salk-institute-for-biological-studies",
+        "registry": "sleap-roots-models"
+      },
+      "matrix_content_sha256": "485940836c2f10850a5ac4a9a8498feba10799eaec6ddf7ab2b4fb9538cfafa0",
+      "sleap_roots_training_version": "0.0.1a0",
+      "sleap_roots_contracts_version": "0.1.0a8"
+    },
+    "rawconfig_only": {
+      "wandb_version": "0.28.0"
+    },
+    "summary": {
+      "published": [
+        "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
+        "arabidopsis_plates-primary-230804_133809.multi_instance.n-606"
+      ],
+      "skipped": [],
+      "failed": [],
+      "stale": []
+    }
+  },
+  "collections": [
+    {
+      "collection": "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
+      "source_model_id": "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38",
+      "source_zip_sha256": "f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265",
+      "source_zip_sha256_staged": "f42c4d06fe46c53c07150a95e308fcbfeadbf0771b6657bbe85346604b0ec265",
+      "archive_members": [
+        {
+          "name": "231130_135922.multi_instance.n=38/best_model.h5",
+          "size": 61883700,
+          "sha256": "b80cdaafc20d5b913450d72bc8d610fe890e9765e512a23080373994e8de86bd"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/initial_config.json",
+          "size": 6497,
+          "sha256": "408cdd6ae31234e30340787d35656cf82633a08ab0a4888baccd6a7ca6e328d8"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/labels_gt.train.slp",
+          "size": 94978,
+          "sha256": "c545f32cad9efad7838cda17d968685714571dc68ebbfd782d110ca26b32d3a6"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/labels_gt.val.slp",
+          "size": 32182,
+          "sha256": "5480fc82d2b027f0d2f1b2afc2ee054606d42a69a9f01975af859c060f6515a3"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/labels_pr.train.slp",
+          "size": 108174,
+          "sha256": "0c208dfadf35ef475ca808a4ceaa9c2615a43540994972d93c679f0c5a34284e"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/labels_pr.val.slp",
+          "size": 23060,
+          "sha256": "b60986bc0fd68d0a1dc3c5a00d68d97c525a400a853b562102fba934e5b12b30"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/metrics.train.npz",
+          "size": 23102,
+          "sha256": "22aad69f7d472db69f385840b90d2ead118ffacca54dfa9178918f97f5970734"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/metrics.val.npz",
+          "size": 4271,
+          "sha256": "c7ed65032a654ae5a27d530ff427401e8b9c4d3c4c0a5e7f0e84cca83a126521"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/training_config.json",
+          "size": 10229,
+          "sha256": "15a83ce7b3bcfd8613b860b5e5bc8ec5073a53233664e8d1f73ac59730b0b5b9"
+        },
+        {
+          "name": "231130_135922.multi_instance.n=38/training_log.csv",
+          "size": 5344,
+          "sha256": "d8857de014601259507646da86a2a8b17d46d6eb9a6975dd2f50b02100a12284"
+        }
+      ],
+      "original_best_model_h5_sha256": "b80cdaafc20d5b913450d72bc8d610fe890e9765e512a23080373994e8de86bd",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/arabidopsis_plates-lateral-231130_135922.multi_instance.n-38:v0",
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "fefe41995d7480375e2de55300707aeb",
+          "aliases": [
+            "candidate",
+            "latest"
+          ],
+          "metadata_equals_card": true,
+          "metadata": {
+            "root_type": "lateral",
+            "selectors": [
+              {
+                "mode": "plate",
+                "age_max": 7,
+                "age_min": 2,
+                "species": "arabidopsis"
+              }
+            ],
+            "source_model_id": "arabidopsis_plates/lateral/231130_135922.multi_instance.n=38"
+          },
+          "artifact_files": [
+            "best_model.h5",
+            "initial_config.json",
+            "labels_gt.train.slp",
+            "labels_gt.val.slp",
+            "labels_pr.train.slp",
+            "labels_pr.val.slp",
+            "metrics.train.npz",
+            "metrics.val.npz",
+            "training_config.json",
+            "training_log.csv"
+          ]
+        }
+      ],
+      "production_resolves": false
+    },
+    {
+      "collection": "arabidopsis_plates-primary-230804_133809.multi_instance.n-606",
+      "source_model_id": "arabidopsis_plates/primary/230804_133809.multi_instance.n=606",
+      "source_zip_sha256": "ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721",
+      "source_zip_sha256_staged": "ed1a939058e7989f938720b5461b795dc75d1c081b41e1d928284c09ad0ab721",
+      "archive_members": [
+        {
+          "name": "230804_133809.multi_instance.n=606/best_model.h5",
+          "size": 61898760,
+          "sha256": "9a6f12e866f2da3641d7d69e6159e3474cbabad9aa6ff6247d4fcb10197c595e"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/initial_config.json",
+          "size": 5806,
+          "sha256": "cc9aa8ea87561ee089f697ba96f32e8fadd2c0fa36e9150f4bac86822982cd69"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/labels_gt.train.slp",
+          "size": 815324,
+          "sha256": "9c03083cd8dd871e472e27146462415be298cfbd1add45e446cbb12705112820"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/labels_gt.val.slp",
+          "size": 310442,
+          "sha256": "8efb88490e7784ae531193b57ef2e8ff27a546acda65c2a2ef4dc119f6523ef4"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/labels_pr.train.slp",
+          "size": 1179080,
+          "sha256": "54480b04c4731f2ec9422478402208c976a938d5b557fb3574453f0106fbc534"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/labels_pr.val.slp",
+          "size": 151872,
+          "sha256": "a43868b9c6a6dbd3a096760265ffdd2c469dd8b4a07999e7ce9b54ba45df5dc9"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/metrics.train.npz",
+          "size": 202032,
+          "sha256": "d3066ed0f5b32bbf910c58a83aeafc98214cb954895d9fc5065f24ef4273bb57"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/metrics.val.npz",
+          "size": 24457,
+          "sha256": "4164b3e79e347d2ef4d08bff0680e4030b1c7e8e29b96cb7afa609cd5fe15d30"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/training_config.json",
+          "size": 28266,
+          "sha256": "691c8ed30ded29815861ef3edfbdf14036fd2dde94b4354a972589fc21e92b76"
+        },
+        {
+          "name": "230804_133809.multi_instance.n=606/training_log.csv",
+          "size": 5958,
+          "sha256": "86198be18b2c62468ff0765dca6f22d61b3a0ee64410abdf8ee2445551384c01"
+        }
+      ],
+      "original_best_model_h5_sha256": "9a6f12e866f2da3641d7d69e6159e3474cbabad9aa6ff6247d4fcb10197c595e",
+      "seed_artifact": "eberrigan-salk-institute-for-biological-studies/sleap-roots-training/arabidopsis_plates-primary-230804_133809.multi_instance.n-606:v0",
+      "versions": [
+        {
+          "version": "v0",
+          "digest": "fd461dffcb9b8e71e5882e3cc3f2c157",
+          "aliases": [
+            "candidate",
+            "latest"
+          ],
+          "metadata_equals_card": true,
+          "metadata": {
+            "root_type": "primary",
+            "selectors": [
+              {
+                "mode": "plate",
+                "age_max": 7,
+                "age_min": 2,
+                "species": "arabidopsis"
+              }
+            ],
+            "source_model_id": "arabidopsis_plates/primary/230804_133809.multi_instance.n=606"
+          },
+          "artifact_files": [
+            "best_model.h5",
+            "initial_config.json",
+            "labels_gt.train.slp",
+            "labels_gt.val.slp",
+            "labels_pr.train.slp",
+            "labels_pr.val.slp",
+            "metrics.train.npz",
+            "metrics.val.npz",
+            "training_config.json",
+            "training_log.csv"
+          ]
+        }
+      ],
+      "production_resolves": false
+    }
+  ],
+  "registry_state": {
+    "model_collections": 113,
+    "production": [
+      "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+      "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+      "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+      "arabidopsis-lateral-240130_140452.multi_instance.n-337",
+      "canola-lateral-240611_083419.multi_instance.n-631",
+      "canola_pennycress_arabidopsis-primary-240611_102513.multi_instance.n-743",
+      "rice-older-crown-221208_113552.multi_instance.n-574",
+      "rice-younger-crown-220821_163331.multi_instance.n-867",
+      "rice-younger-primary-230104_182346.multi_instance.n-720",
+      "soybean-lateral-lateral_root_221006_172103.multi_instance.n-482",
+      "soybean-primary-221003_111420.multi_instance.n-1389"
+    ],
+    "candidate": [
+      "20250204_sorghum_experimental-sorghum_soybean_lateral_4nodes-250203_214033.multi_instance.n-590",
+      "20250204_sorghum_experimental-sorghum_soybean_primary_6nodes-250203_181521.multi_instance.n-1689",
+      "20250401_wheat_models-250328_095645.multi_instance.n-1658",
+      "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
+      "arabidopsis_plates-primary-230804_133809.multi_instance.n-606"
+    ]
+  },
+  "pre_publish_checks": {
+    "default_verify": "11 production collections present, nothing unexpected; both plate collections reported 'not linked (status: candidate)'; exit 0",
+    "promote_refusal": "seed-registry --only <2 ids> --promote --execute under the default alias, with no --models-root and no --yes: exit 1, \"2 collection(s) come from rows with status 'candidate' and are never linked to 'production' ... Nothing published.\""
+  },
+  "post_publish_checks": {
+    "candidate_verify": "both plate collections present; exit 0",
+    "default_verify": "the same 11 production collections present, nothing unexpected; both plate collections still 'not linked (status: candidate)'; exit 0"
+  },
+  "smoke_test": {
+    "environment": "sleap-roots-predict bf2baf9, sleap-nn 0.3.0, sleap-io 0.8.0, CPU; archives extracted with resolve_model_dir(require_pinned=True); make_predictor([<extracted dir>], device='cpu') with its defaults (peak_threshold 0.2, batch_size 4), then predict_on_video on one validation image each, with no wandb",
+    "results": [
+      {
+        "collection": "arabidopsis_plates-primary-230804_133809.multi_instance.n-606",
+        "image": "7_20230313-093929_043.tif",
+        "image_shape_hwc": [
+          1500,
+          1616,
+          3
+        ],
+        "nodes": [
+          "R1",
+          "R2",
+          "R3",
+          "R4",
+          "R5",
+          "R6",
+          "R7",
+          "R8"
+        ],
+        "predicted_instances": 8,
+        "labelled_instances": 5,
+        "tf_predicted_instances_at_training": 7,
+        "also_a_training_image": false
+      },
+      {
+        "collection": "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
+        "image": "_set1_day1_20230908-092700_010.tif",
+        "image_shape_hwc": [
+          1500,
+          1616,
+          3
+        ],
+        "nodes": [
+          "r1",
+          "r2",
+          "r3"
+        ],
+        "predicted_instances": 8,
+        "labelled_instances": 8,
+        "tf_predicted_instances_at_training": 8,
+        "also_a_training_image": true
+      }
+    ],
+    "verdict": "both load and predict. The primary predicted 8 roots on a frame with 5 labelled, where its own TensorFlow prediction at training time (labels_pr.val.slp) had 7: a small difference between backends on one frame, not a parity result. The lateral's image is one of its two validation images that are also training images, so its 8 of 8 shows only that it loads and runs, not accuracy."
+  },
+  "rollback": "unlink() the `candidate` alias from each plate collection's v0 (Api().artifact('<registry>/<collection>:candidate').unlink()); nothing is linked to `production`, so the production pipeline is unaffected either way.",
+  "notes": [
+    "`wandb_version` is stored on the run, but the public API lists it under `run.rawconfig`, not `run.config` (wandb 0.28 internal key). Hence `seed_run.rawconfig_only`.",
+    "`source_zip_sha256` is the matrix-pinned value; `source_zip_sha256_staged` is the hash of the zip actually published from, re-measured for this record. The publish refused to proceed unless each staged zip hashed to the pinned value (resolve_model_dir with require_pinned=True).",
+    "`archive_members` lists every file in each zip with its size and SHA256, so what was published is reconstructable even if the curated copy later changes. The zips are byte-reproducible with scripts/build_model_zip.py.",
+    "`original_best_model_h5_sha256` is the training run's own best_model.h5 (outside the curated copy); it equals the archived best_model.h5 for both models.",
+    "`metadata_equals_card` compares each artifact's metadata with cards.card_to_metadata for the committed matrix at the seed run's git_sha.",
+    "The run was invoked as `seed-registry --models-root <temporary local copy of the two pinned zips> --only <2 ids> --execute --yes` under SLEAP_ROOTS_MODEL_ALIAS=candidate, from a clean worktree at the git_sha above. The models-root path and the image locations are deliberately not recorded (public repo). No pre-publish collection count was captured; `registry_state` is post-publish.",
+    "`production_resolves` is false when `<registry>/<collection>:production` does not resolve; it was read back after the publish.",
+    "`artifact_files` lists the published artifact's manifest entries. The registry stores the extracted files, not the zip, so `source_zip_sha256` cannot be checked from the registry; the link is that each manifest entry's MD5 equals the MD5 of the same zip member.",
+    "`pre_publish_checks`, `post_publish_checks`, `smoke_test` and `rollback` are not in the 2026-10-04 record's schema; they were added for this publish (task 10.6)."
+  ]
+}

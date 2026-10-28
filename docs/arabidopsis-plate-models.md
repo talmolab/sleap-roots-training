@@ -1,10 +1,21 @@
 # Arabidopsis plate models
 
-Two full-plate SLEAP models for arabidopsis, to be published to the `sleap-roots-models` wandb registry
-under the **`candidate`** alias (#3) once this change merges. This page is updated with each
-artifact's version and digest when they are. They are never linked to `production`, so the production
-pipeline and Bloom never select them. They are here so they can be tried elsewhere, starting with
-GraviScan plate sections.
+Two full-plate SLEAP models for arabidopsis, published to the `sleap-roots-models` wandb registry
+under the **`candidate`** alias on 2026-10-28 (#3). They are not linked to `production`, so the
+production pipeline and Bloom never select them. They are here so they can be tried elsewhere, starting
+with GraviScan plate sections.
+
+| Collection | Version | Digest |
+|---|---|---|
+| `arabidopsis_plates-primary-230804_133809.multi_instance.n-606` | v0 | `fd461dffcb9b8e71e5882e3cc3f2c157` |
+| `arabidopsis_plates-lateral-231130_135922.multi_instance.n-38` | v0 | `fefe41995d7480375e2de55300707aeb` |
+
+Before publishing, both were loaded and run through sleap-roots-predict (sleap-nn 0.3.0) on one
+validation image each, to check that they load and predict. The primary predicted 8 roots on a frame
+with 5 labelled roots; its own TensorFlow prediction at training time had 7 there. The lateral predicted
+8 where 8 are labelled, but that image is also one of its training images, so this says nothing about
+accuracy. The publish record, with every archived file's SHA256, is
+[docs/migration/2026-10-28-arabidopsis-plate-candidate-publish-record.json](migration/2026-10-28-arabidopsis-plate-candidate-publish-record.json).
 
 ## The models
 
@@ -101,6 +112,6 @@ wheat and sorghum cards from their earlier candidate window. They never match a 
 ## Promotion to production
 
 Not planned yet. The gates (parity, plate support in traits and in Bloom dispatch, and the age-window
-mismatch with the traits chooser) are tracked in the promotion issue linked from #3. The mechanics are
+mismatch with the traits chooser) are tracked in #84. The mechanics are
 in the README, under
 [Publishing under a non-default alias](../README.md#publishing-under-a-non-default-alias).
