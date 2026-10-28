@@ -11,8 +11,10 @@ with GraviScan plate sections.
 | `arabidopsis_plates-lateral-231130_135922.multi_instance.n-38` | v0 | `fefe41995d7480375e2de55300707aeb` |
 
 Before publishing, both were loaded and run through sleap-roots-predict (sleap-nn 0.3.0) on one
-validation image each: the primary predicted 8 roots where 5 are labelled, and the lateral 8 where 8
-are labelled. The publish record, with every archived file's SHA256, is
+validation image each, to check that they load and predict. The primary predicted 8 roots on a frame
+with 5 labelled roots; its own TensorFlow prediction at training time had 7 there. The lateral predicted
+8 where 8 are labelled, but that image is also one of its training images, so this says nothing about
+accuracy. The publish record, with every archived file's SHA256, is
 [docs/migration/2026-10-28-arabidopsis-plate-candidate-publish-record.json](migration/2026-10-28-arabidopsis-plate-candidate-publish-record.json).
 
 ## The models

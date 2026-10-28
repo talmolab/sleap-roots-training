@@ -3,8 +3,9 @@
 ## Purpose
 
 Turn the committed model selection matrix into the set of model artifacts that
-`sleap-roots-predict` selects from, linked under each row's status (`production` by default,
-`candidate` for rows marked so), and keep the two in agreement over time.
+`sleap-roots-predict` selects from, linked under the alias a run targets (`production` by default),
+with rows marked `status: candidate` never linked to `production`, and keep the two in agreement
+over time.
 
 This capability owns the producer half of the model-selection contract: expanding the matrix
 into one `ModelCard` per **physical model**, stamping each with the selection metadata a

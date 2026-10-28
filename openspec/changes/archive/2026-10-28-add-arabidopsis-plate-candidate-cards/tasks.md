@@ -405,10 +405,15 @@ indistinguishable from the refusal.
 
   Then close #3 with a comment linking the record and #84.
 - [ ] 10.8 Send Benfica the doc link and the two collection ids, and confirm her registry access.
-- [ ] 10.9 Follow-up PR, after its own `/review-pr`, with two commits:
+- [x] 10.9 Follow-up PR (#85), after its own `/review-pr`, with two commits:
   - the record plus the ticks for 10.x, and `docs/arabidopsis-plate-models.md` updated to say the
     cards are published, with each artifact's version, digest and the smoke-test result;
   - `chore(openspec): archive add-arabidopsis-plate-candidate-cards`. At archive time, amend the spec
     Purpose line to "…linked under each row's status".
 - [ ] 10.10 Cross-repo, owner: a PR to the sleap-roots-pipeline `docs/bloom-integration/roadmap.md`
-  changing "plate models deferred (training #3)" to point at the candidate cards and #NEW.
+  changing "plate models deferred (training #3)" to point at the candidate cards and #84.
+
+Archived with 10.8 (the Benfica handoff, sent by the owner) and 10.10 (the sleap-roots-pipeline
+roadmap PR) still open; both are outside this repository's code.
+The spec Purpose was worded more precisely than 10.9 quotes, after review: artifacts are linked
+under the alias a run targets, and a `candidate` row is never linked to `production`.

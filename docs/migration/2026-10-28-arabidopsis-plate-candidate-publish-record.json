@@ -289,7 +289,7 @@
     "default_verify": "the same 11 production collections present, nothing unexpected; both plate collections still 'not linked (status: candidate)'; exit 0"
   },
   "smoke_test": {
-    "environment": "sleap-roots-predict bf2baf9, sleap-nn 0.3.0, sleap-io 0.8.0, CPU; archives extracted with resolve_model_dir(require_pinned=True); make_predictor([<extracted dir>]) then predict_on_video on one validation image each, with no wandb",
+    "environment": "sleap-roots-predict bf2baf9, sleap-nn 0.3.0, sleap-io 0.8.0, CPU; archives extracted with resolve_model_dir(require_pinned=True); make_predictor([<extracted dir>], device='cpu') with its defaults (peak_threshold 0.2, batch_size 4), then predict_on_video on one validation image each, with no wandb",
     "results": [
       {
         "collection": "arabidopsis_plates-primary-230804_133809.multi_instance.n-606",
@@ -310,7 +310,9 @@
           "R8"
         ],
         "predicted_instances": 8,
-        "labelled_instances": 5
+        "labelled_instances": 5,
+        "tf_predicted_instances_at_training": 7,
+        "also_a_training_image": false
       },
       {
         "collection": "arabidopsis_plates-lateral-231130_135922.multi_instance.n-38",
@@ -326,10 +328,12 @@
           "r3"
         ],
         "predicted_instances": 8,
-        "labelled_instances": 8
+        "labelled_instances": 8,
+        "tf_predicted_instances_at_training": 8,
+        "also_a_training_image": true
       }
     ],
-    "verdict": "both load (legacy TensorFlow weights mapped in full) and predict; the primary's over-prediction matches its validation counts (426 predicted for 305 labelled)"
+    "verdict": "both load and predict. The primary predicted 8 roots on a frame with 5 labelled, where its own TensorFlow prediction at training time (labels_pr.val.slp) had 7: a small difference between backends on one frame, not a parity result. The lateral's image is one of its two validation images that are also training images, so its 8 of 8 shows only that it loads and runs, not accuracy."
   },
   "rollback": "unlink() the `candidate` alias from each plate collection's v0 (Api().artifact('<registry>/<collection>:candidate').unlink()); nothing is linked to `production`, so the production pipeline is unaffected either way.",
   "notes": [
@@ -338,6 +342,9 @@
     "`archive_members` lists every file in each zip with its size and SHA256, so what was published is reconstructable even if the curated copy later changes. The zips are byte-reproducible with scripts/build_model_zip.py.",
     "`original_best_model_h5_sha256` is the training run's own best_model.h5 (outside the curated copy); it equals the archived best_model.h5 for both models.",
     "`metadata_equals_card` compares each artifact's metadata with cards.card_to_metadata for the committed matrix at the seed run's git_sha.",
-    "The run was invoked as `seed-registry --models-root <temporary local copy of the two pinned zips> --only <2 ids> --execute --yes` under SLEAP_ROOTS_MODEL_ALIAS=candidate, from a clean worktree at the git_sha above. The models-root path and the image locations are deliberately not recorded (public repo). No pre-publish collection count was captured; `registry_state` is post-publish."
+    "The run was invoked as `seed-registry --models-root <temporary local copy of the two pinned zips> --only <2 ids> --execute --yes` under SLEAP_ROOTS_MODEL_ALIAS=candidate, from a clean worktree at the git_sha above. The models-root path and the image locations are deliberately not recorded (public repo). No pre-publish collection count was captured; `registry_state` is post-publish.",
+    "`production_resolves` is false when `<registry>/<collection>:production` does not resolve; it was read back after the publish.",
+    "`artifact_files` lists the published artifact's manifest entries. The registry stores the extracted files, not the zip, so `source_zip_sha256` cannot be checked from the registry; the link is that each manifest entry's MD5 equals the MD5 of the same zip member.",
+    "`pre_publish_checks`, `post_publish_checks`, `smoke_test` and `rollback` are not in the 2026-10-04 record's schema; they were added for this publish (task 10.6)."
   ]
 }
