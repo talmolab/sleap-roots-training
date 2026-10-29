@@ -107,10 +107,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
   holds **11** cards.
 - **Arabidopsis plate (#3; change `add-arabidopsis-plate-candidate-cards`):** one plate row (primary
   + lateral, window 2–7) marked `status: candidate`. Published under `candidate` only on
-  2026-10-28 (both v0), for trying the full-plate models on GraviScan sections
+  2026-10-28 (both v0), for trying the full-plate models on GraviScan plates
   (`docs/arabidopsis-plate-models.md`). Promotion is gated: parity, plate support in traits
   (sleap-roots#252) and in Bloom dispatch, and the age window against the traits chooser
-  (sleap-roots#274). It is tracked in #84.
+  (sleap-roots#281, decided: traits changes to 2–7). It is tracked in #84.
 - **Closed follow-up:** #7 (accept a `wandb login` session, not just `WANDB_API_KEY`).
 
 ## Tier 0 — Scaffold `talmolab/sleap-roots-training` *(prerequisite — not OpenSpec)*
