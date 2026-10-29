@@ -60,12 +60,14 @@ models-downloader chooser table. They are not paths on disk.
 
 ## Caveats
 
-- **Inputs are resized to the training plates' size.** Both models were trained on whole-plate
-  images of 1500 × 1616 pixels (height × width), and both resize every input to fit that size, then
-  pad it. An image of a different size or resolution, such as a cropped section or a
-  higher-resolution scan, is scaled up or down, so its roots look larger or smaller than in
-  training, which may hurt accuracy. The primary model then runs at 0.5 scale; the lateral at full
-  scale.
+- **What matters is what the image shows, not its resolution.** Both models were trained on
+  whole-plate images of 1500 × 1616 pixels (height × width). At prediction, both scale every input
+  up or down to fit that size, keeping its aspect ratio, and pad the rest with black at the bottom
+  and right; sleap-nn logs a one-time warning when it does. A whole plate framed like the training
+  plates therefore comes out at the training scale, whatever its resolution. An image showing less
+  than a whole plate, such as a cropped section, is scaled up, so its roots look thicker than in
+  training, and an image of a different shape gets black padding the models never saw in training.
+  Either may hurt accuracy. The primary model then runs at 0.5 scale; the lateral at full scale.
 - **The lateral model rests on very little:** one day of imaging at 7 DAG, 38 labelled frames,
   and 4 validation frames, two of which it was trained on. Its 1.4 px median mostly measures images it
   has seen; it is not an estimate of performance on other plates, and it is served across the whole
@@ -79,10 +81,10 @@ models-downloader chooser table. They are not paths on disk.
   its median: a minority of its points are far off. The pooled numbers also say little about ages 2–6,
   since just over half of the primary's train frames (293 of 545) are at 7, and all the lateral's are.
 - **Age is clamped.** Predict serves a plate older than 7 DAG with these 2–7 cards and logs only a
-  warning, although neither model was labelled at an age above 7. Plates at 8–14 DAG (the traits
-  plate window, which is changing to 2–7 in talmolab/sleap-roots#281) would all be scored that
-  way. A plate younger than 2 DAG gets no model. The lateral, trained only on images from a single
-  7 DAG imaging day, is served across the whole window.
+  warning, although neither model was labelled at an age above 7. A plate younger than 2 DAG gets
+  no model. The lateral, trained only on images from a single 7 DAG imaging day, is served across
+  the whole window. The traits plate window is 7–14 today; the owner has decided it changes to 2–7
+  to match these cards (talmolab/sleap-roots#281).
 - **The window is not the old chooser table's.** The models-downloader table listed an arabidopsis plate
   row at 7–14 under the same `arabidopsis_plates/` namespace. These two runs were chosen from the
   owner's own training directories; no lineage to whatever that table once served is claimed.

@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format is based on
 - **The arabidopsis plate cards, as `candidate`** (#3). The matrix carries one arabidopsis `plate`
   row, window 2–7, with the full-plate primary (`arabidopsis_plates/primary/230804_133809.multi_instance.n=606`)
   and lateral (`arabidopsis_plates/lateral/231130_135922.multi_instance.n=38`) models, marked
-  `status: candidate`. They are for trying elsewhere (GraviScan plate sections first) and are never
+  `status: candidate`. They are for trying elsewhere (GraviScan plates first) and are never
   linked to `production`. Published under `candidate` on 2026-10-28 (both v0); promotion is gated in
   #84. See `docs/arabidopsis-plate-models.md` and the publish record in `docs/migration/`.
 - **Per-row `status` in the selection matrix:** `production` (the default) or `candidate`. A
