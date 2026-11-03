@@ -1003,9 +1003,11 @@ def test_the_cached_rows_cannot_be_mutated_by_a_caller():
 def test_the_plate_row_survives_filename_first_derivation():
     """The committed scan, re-derived under update-inventory-derivation, still agrees.
 
-    The four ``labels_wheat_2-3DAG*`` 6-node files leave arabidopsis, so the evidence
-    moves from 13/5/3 to 13/1/3 at 8/6/7 nodes. Re-deriving here shows that at PR time
-    rather than after the 40-minute re-scan.
+    The four ``labels_wheat_2-3DAG*`` 6-node files left arabidopsis, so the evidence
+    moved from 13/5/3 to 13/1/3 at 8/6/7 nodes. The committed scan was re-scanned under
+    this derivation (#89), so re-deriving here also guards it against a later rule
+    change. The lone 6-node family is ``day2and3 copy.slp``: its images are wheat, but
+    its name says nothing, so it stays arabidopsis by its folder (#59).
     """
     from sleap_roots_training.inventory import discover, gap
 
