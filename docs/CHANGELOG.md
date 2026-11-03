@@ -161,6 +161,10 @@ All notable changes to this project are documented here. The format is based on
   (integration-marked GPU smoke test, skipped without a CUDA device).
 
 ### Changed
+- **The committed `inventory/` is re-scanned** under the mode key and filename-first species
+  (#89): 656 families, the same coverage as #58, with `species` changed on the 228 projected.
+  A new test fails when a committed row's name-derived columns differ from a fresh derivation
+  of its path, so a stale table or an un-re-scanned derivation change no longer passes CI.
 - **The label inventory reads species from the filename before the folder (#59), and reports what
   names cannot settle (#65)** (`update-inventory-derivation`). The next scan changes `species`
   for 228 families, 33 of them to empty: a filename or folder naming several species gets none,
@@ -236,9 +240,8 @@ All notable changes to this project are documented here. The format is based on
   fails instead of silently getting the cylinder skeleton (no multiplant rows yet, #62); and the
   inventory's `ModeCollision` / `mode_collisions` are replaced by `ModeGap` / `mode_gaps` and
   `NodeCountDisagreement` / `node_count_disagreements`. The table's SHA256 changes, so packages
-  built before and after stay distinguishable. The committed `inventory/label-inventory.md`
-  predates this and still shows "Rows selected by more than one capture mode". The
-  published-collections check now queries `type="dataset"` (#61).
+  built before and after stay distinguishable. The published-collections check now queries
+  `type="dataset"` (#61).
 - Pinned `sleap-roots-contracts` to `0.1.0a8` and **reshaped the registry so one card describes one
   physical model** (#39). A card now carries a scalar `root_type` plus a `selectors` list — one
   entry per `(species, mode, age_min, age_max)` combination the weights were validated for —
