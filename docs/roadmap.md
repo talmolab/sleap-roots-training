@@ -249,7 +249,10 @@ code is discoverable and **Tier 2 doesn't re-invent a contract that already exis
      (rescoped 2026-09-15): Bloom's coverage of this corpus was never measured, and the headline
      finding — that `skeletons.yaml` had no `mode` key — needs no external service; the key was
      added by `add-skeleton-mode`. Species derived from a name is reported as name-derived and is
-     not treated as evidence.
+     not treated as evidence. `update-inventory-derivation` (#59, #65) reads species from the
+     filename first and lists the multi-species files — among them the pooled
+     `labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp` — rather than assigning one species;
+     resolving them (#59) comes before step 2.
   2. **#11 / #49** — **unsolved prerequisite:** `mode` is not derivable from the path for 515 of
      the 611 labelled families in the first scan, so a (species, mode, root_type) collection cannot
      be populated from names alone. It consumes that evidence and builds the cards, supplying

@@ -200,6 +200,11 @@ def _exclusion_rule(path: Path, root: Path) -> Optional[str]:
     return None
 
 
+#: Recorded for an unreadable directory whose error carries no filename. Not a path:
+#: rendered as is, never resolved against the working directory.
+UNKNOWN_PATH = "<unknown>"
+
+
 def walk(root: Path) -> ScanResult:
     """Enumerate ``.slp`` files beneath ``root``, excluding derived ones.
 
@@ -221,7 +226,7 @@ def walk(root: Path) -> ScanResult:
         # `OSError.filename` is None for several error shapes and `Path(None)` raises,
         # which would propagate out of `os.walk` and kill the scan from inside the one
         # callback whose purpose is to keep it alive.
-        result.unreadable_paths.append(Path(error.filename or "<unknown>"))
+        result.unreadable_paths.append(Path(error.filename or UNKNOWN_PATH))
 
     for directory, _subdirs, filenames in os.walk(
         root, onerror=_record_error, followlinks=False

@@ -139,3 +139,55 @@ def test_a_reachable_registry_fills_the_status_column(tmp_path, monkeypatch):
     table = (out / emit.TABLE_FILENAME).read_text(encoding="utf-8")
     assert verify.VERIFIED in table
     assert verify.UNREGISTERED in table
+
+
+def test_a_partially_readable_root_exits_non_zero_and_overwrites_nothing(
+    tmp_path, monkeypatch
+):
+    """The approved re-scan writes straight to inventory/, so the tool has to refuse."""
+    root = build_share_tree(tmp_path / "share", real=REAL)
+    out = tmp_path / "inventory"
+    out.mkdir()
+    (out / emit.TABLE_FILENAME).write_bytes(b"committed table\n")
+    (out / emit.REPORT_FILENAME).write_bytes(b"committed report\n")
+    real_walk = emit.discover.walk
+
+    def _half_blind(path):
+        result = real_walk(path)
+        result.unreadable_paths.append(root / "locked")
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _half_blind)
+
+    result = CliRunner().invoke(
+        main, ["inventory", "labels", str(root), "--output", str(out), "--no-registry"]
+    )
+
+    assert result.exit_code != 0
+    assert (out / emit.TABLE_FILENAME).read_bytes() == b"committed table\n"
+    assert (out / emit.REPORT_FILENAME).read_bytes() == b"committed report\n"
+    assert "<ROOT>/locked" in result.output
+
+
+def test_an_unlistable_root_is_a_clean_error(tmp_path, monkeypatch):
+    """The zero-candidate PartialScan escaped the CLI as a raw traceback."""
+    root = tmp_path / "share"
+    root.mkdir()
+    out = tmp_path / "inventory"
+    real_walk = emit.discover.walk
+
+    def _blind(path):
+        result = real_walk(path)
+        result.unreadable_paths.append(path)
+        return result
+
+    monkeypatch.setattr(emit.discover, "walk", _blind)
+
+    result = CliRunner().invoke(
+        main, ["inventory", "labels", str(root), "--output", str(out), "--no-registry"]
+    )
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, SystemExit), repr(result.exception)
+    assert not out.exists()
+    assert "could not be read" in result.output
