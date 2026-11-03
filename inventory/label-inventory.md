@@ -12,17 +12,81 @@ path is emitted relative to the root, which appears as `<ROOT>`.
 - directories that could not be read: 0
 - families: 656
 
+## Name derivation
+
+Species is read from the filename before the folder, and a filename or folder
+that names several species yields none. Only the path below the root is read.
+These are names, not evidence. What they cannot settle is listed here, and the
+tool assigns nothing to it.
+
+### Families naming more than one species
+
+Each must be split per species or matched to per-species files before it is
+registered. No species is assigned to any of them.
+
+- `<ROOT>/20250102_generalizability_experiment/primary/arabidopsis/labels_canola_pennycress_arabidopsis.v015.pkg.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/20250102_generalizability_experiment/primary/arabidopsis/labels_canola_pennycress_arabidopsis.v015.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/20250102_generalizability_experiment/primary/canola/labels_canola_pennycress_primary_6nodes.v000.slp` names canola, pennycress (filename)
+- `<ROOT>/20250415_primary_root_generalizability_experiment/arabidopsis/labels_canola_pennycress_arabidopsis.v015.pkg.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/20250415_primary_root_generalizability_experiment/arabidopsis/labels_canola_pennycress_arabidopsis.v015.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/20250415_primary_root_generalizability_experiment/canola/labels_canola_pennycress_primary_6nodes.v000.slp` names canola, pennycress (filename)
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/arabidopsis/labels_canola_pennycress_arabidopsis.v015.pkg.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/arabidopsis/labels_canola_pennycress_arabidopsis.v015.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/20250415_primary_root_generalizability_experiment_SETUP/canola/labels_canola_pennycress_primary_6nodes.v000.slp` names canola, pennycress (filename)
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/13do_lr_labels_hannah_v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/LR_13DO_KE.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/h5_files_for_LR_sleap_project/13_do/h5_files_13do/LR_13DO_KE.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/h5_files_for_LR_sleap_project/13_do/h5_files_13do/hannah/13do_lr_labels_hannah_v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/h5_files_for_LR_sleap_project/13_do/h5_files_13do/hannah/13do_pr_labels_hannah_v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/lateral_3_nodes/hc_lr_labels.v003.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/13do_pr_labels_hannah_v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/2_DO_PR_labels_KE.v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/AAP_primary_root_labels.v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/h5_files_for_PR_sleap_project/13_do/LR_13DO_KE.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/h5_files_for_PR_sleap_project/13_do/hannah/13do_lr_labels_hannah_v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/h5_files_for_PR_sleap_project/13_do/hannah/13do_pr_labels_hannah_v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_Canola_Pennycress/primary_root/h5_files_for_PR_sleap_project/2do/2_DO_PR_labels_KE.v001.slp` names canola, pennycress (folder)
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/3_nodes/labels_canola_pennycress_arabidopsis.v004.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/SLEAP_arabidopsis/primary_root/primary_6nodes/labels_canola_pennycress_arabidopsis.v015.pkg.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/SLEAP_arabidopsis/primary_root/primary_6nodes/labels_canola_pennycress_arabidopsis.v015.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/SLEAP_medicago/lateral_root/canola_pennycress_medicago_lateral_root_labels.v005.slp` names canola, medicago, pennycress (filename)
+- `<ROOT>/SLEAP_medicago/primary_root/labels_canola_pennycress_arabidopsis.v015.slp` names arabidopsis, canola, pennycress (filename)
+- `<ROOT>/SLEAP_sorghum/lateral_4nodes/labels_soybean_sorghum_lateral_roots_4nodes.v003.slp` names sorghum, soybean (filename)
+- `<ROOT>/SLEAP_sorghum/primary_6nodes/labels_soybean_sorghum_primary_6nodes.v009.pkg.slp` names sorghum, soybean (filename)
+- `<ROOT>/SLEAP_sorghum/primary_6nodes/labels_soybean_sorghum_primary_6nodes.v009.slp` names sorghum, soybean (filename)
+- `<ROOT>/SLEAP_wheat/primary/labels_primary_wheat_5DAG_rice_3DAG.v002.slp` names rice, wheat (filename)
+- `<ROOT>/SLEAP_wheat/seminal/labels_seminal_wheat_5-14DAG_rice_3-10DAG.v005.slp` names rice, wheat (filename)
+- `<ROOT>/generalizability_exp_01142023/primary_root/arabidopsis_primary/labels_canola_pennycress_arabidopsis.v014.slp` names arabidopsis, canola, pennycress (filename)
+
+### Folder and filename disagree on species
+
+The filename's species was used.
+
+- `<ROOT>/SLEAP_arabidopsis/lateral_root/3_nodes`: 1 family; arabidopsis → canola (1)
+- `<ROOT>/SLEAP_arabidopsis/primary_root/primary_6nodes`: 1 family; arabidopsis → canola (1)
+- `<ROOT>/SLEAP_arabidopsis_plates/PLATE_arabidopsis/PLATE_arabidopsis/primary_root/labels`: 2 families; arabidopsis → wheat (2)
+- `<ROOT>/SLEAP_arabidopsis_plates/labels/primary_8nodes`: 2 families; arabidopsis → wheat (2)
+- `<ROOT>/SLEAP_medicago/lateral_root`: 1 family; medicago → canola (1)
+- `<ROOT>/SLEAP_sorghum/lateral_4nodes`: 1 family; sorghum → soybean (1)
+- `<ROOT>/SLEAP_sorghum/primary_6nodes`: 1 family; sorghum → soybean (1)
+- `<ROOT>/SLEAP_wheat/primary`: 1 family; wheat → rice (1)
+- `<ROOT>/SLEAP_wheat/seminal`: 2 families; wheat → rice (2)
+
 ## Skeleton table
 
 Analysed 76 of 656 families. A family is analysed only where
 species, root type, mode and a node count are all derivable; the rest are
 counted below, not silently dropped.
 
-- not analysed: 522 no-mode, 10 no-node-count, 146 no-root-type, 3 no-species
+- not analysed: 33 multi-species, 522 no-mode, 10 no-node-count, 146 no-root-type, 3 no-species
 
-### Rows selected by more than one capture mode
+### Capture modes with no row
 
-- `(arabidopsis, primary, age: null)` is selected by cylinder, plate, whose files carry 6, 7, 8 nodes. One row cannot describe both.
+- `(arabidopsis, plate, lateral)`: 10 families at 3 nodes; the table has it only in cylinder.
+
+### Node counts that disagree with their row
+
+- `(arabidopsis, plate, primary)`: row says 8, observed 6, 7 in `<ROOT>/SLEAP_arabidopsis_plates/PLATE_arabidopsis/PLATE_arabidopsis/primary_root/labels/day2and3 copy.slp`, `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/primary_root_8nodes/7_dap/labels/labels.v002_labels.slp`, `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/primary_root_8nodes/7_dap/labels/labels.v002_labels_copy.slp`, `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/primary_root_8nodes/7_dap/labels/labels.v004.slp`, `<ROOT>/SLEAP_arabidopsis_plates/SLEAP_models_arabidopsis_plates_20250708/SLEAP_models_arabidopsis_plates/primary_root_8nodes/7_dap/labels/labels.v005_preds.slp`. Not resolved here.
 
 ### Species with no row
 
@@ -32,11 +96,11 @@ counted below, not silently dropped.
 - sorghum
 - wheat
 
-Derivation is open by design, so a crop nobody has heard of is not
+Folder names are read openly, so a crop nobody has heard of is not
 hidden — which means directory names that are not crops also land here.
 These are **not** species; they are tokens read off a path:
 
-- circumnutation, cropping, multiple, packages, pest, shoots
+- circumnutation, cropping, pest, shoots
 
 ### Skeleton names the existing check cannot resolve
 
