@@ -273,12 +273,7 @@ def build(
             {
                 "path": emitted.text,
                 "version": "" if candidate.version is None else candidate.version,
-                "species": derived.species or "",
-                "species_source": derived.source,
-                "species_named": json.dumps(list(derived.species_named)),
-                "flags": " ".join(derived.flags),
-                "mode": derived.mode or "",
-                "root_type": derived.root_type or "",
+                **_name_derived_cells(derived),
                 "node_count": "" if facts.node_count is None else facts.node_count,
                 "frames": "" if facts.frame_count is None else facts.frame_count,
                 "user_instances": (
@@ -362,6 +357,22 @@ def build(
         folder_disagreements=folder_disagreements,
         ambiguous_modes=sorted(ambiguous_modes, key=lambda entry: entry.path),
     )
+
+
+def _name_derived_cells(derived: gap.Derived) -> dict[str, str]:
+    """Return the table cells read off a family's path, as ``build`` writes them.
+
+    One serializer for the row and for the test that pins the committed table to the
+    code, so a change here without a re-scan fails that test.
+    """
+    return {
+        "species": derived.species or "",
+        "species_source": derived.source,
+        "species_named": json.dumps(list(derived.species_named)),
+        "flags": " ".join(derived.flags),
+        "mode": derived.mode or "",
+        "root_type": derived.root_type or "",
+    }
 
 
 def _below_root(family: discover.Family, root: Path) -> discover.Family:
