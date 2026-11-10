@@ -62,7 +62,8 @@ jobs:
           - os: windows
             runs-on: windows-latest
           - os: mac
-            runs-on: macos-14
+            # Pinned, not -latest: macos-14 was retired 2026-11-10 (run 42885992425).
+            runs-on: macos-15
 
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.runs-on }}
