@@ -89,7 +89,7 @@ These commands mirror `.github/workflows/ci.yml`:
 - **Lint job step 2**: `uv run ruff check src/sleap_roots_training`
 - **Test job**: `uv run pytest --cov=src/sleap_roots_training --cov-report=xml --durations=-1 tests/`
 
-CI runs on: ubuntu-latest, windows-latest, macos-14 with Python 3.11 and 3.12.
+CI runs on: ubuntu-latest, windows-latest, macos-15 with Python 3.11 and 3.12.
 
 ## When to Use
 
