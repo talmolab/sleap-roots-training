@@ -62,7 +62,7 @@ jobs:
           - os: windows
             runs-on: windows-latest
           - os: mac
-            runs-on: macos-14
+            runs-on: macos-15
 
     name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.runs-on }}
