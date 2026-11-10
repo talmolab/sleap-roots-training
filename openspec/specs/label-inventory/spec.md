@@ -3,11 +3,11 @@
 ## Purpose
 Enumerate the labelled `.slp` corpus under a share root, grouped into version families, with
 per-file facts read from the files, registry verification by per-file digest, and the places
-`skeletons.yaml` cannot express what was found. Species, capture mode and root type are read off
-the path below the root, filename before folder; they are names, not evidence, and where names
-cannot settle them (several species, a folder naming another crop, several modes) the family is
-listed, not resolved. A scan that cannot list every directory writes nothing. The committed scan in `inventory/` is the
-evidence #11/#49 and the skeleton table cite; the tool prints what it cannot decide and stops.
+`skeletons.yaml` cannot express what was found. Species, capture mode and root type are names
+read off the path below the root, not evidence; species comes from the filename before the
+folder. A scan that cannot list every directory writes nothing. The committed scan in
+`inventory/` is the evidence #11/#49 and the skeleton table cite; the tool prints what it
+cannot decide and stops.
 
 ## Requirements
 
