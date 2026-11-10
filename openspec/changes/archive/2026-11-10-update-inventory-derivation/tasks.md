@@ -334,19 +334,19 @@ These are not part of this PR. They are two follow-up PRs, merged in this order,
 squash merge keeps "its own commit" only if the commit is its own PR. If eberrigan is away,
 hand both off explicitly rather than leaving §7 unticked in an unarchived change.
 
-- [ ] 7.1 **PR B, `chore(inventory): re-scan with filename-first species (#59, #65)`**, from a
+- [x] 7.1 **PR B, `chore(inventory): re-scan with filename-first species (#59, #65)`**, from a
   branch off `main`. Run the approved command exactly:
   `uv run sleap-roots-training inventory labels "Z:/users/eberrigan/SLEAP"` (read-only,
   about 40 min). Group 5 makes the command refuse a partial scan by itself.
-- [ ] 7.2 Before committing, stop and report rather than commit if any of these fail:
+- [x] 7.2 Before committing, stop and report rather than commit if any of these fail:
   - The CLI exited zero and printed no `WARNING:`. An unreachable registry would flip every
     row to `not-checked`; there are 0 today.
   - `.slp files seen` is about 18,099, and candidates and families did not drop below the
     committed 850 and 656.
   - Non-empty `error` cells number ≤ 2, the committed figure.
-- [ ] 7.3 Grep both artifacts for `Z:`, `users/`, `eberrigan`, `Elizabeth`, a drive-letter
+- [x] 7.3 Grep both artifacts for `Z:`, `users/`, `eberrigan`, `Elizabeth`, a drive-letter
   pattern `[A-Za-z]:[\\/]`, and `\`. None may appear.
-- [ ] 7.4 Compare with the projection, counting rows with `user_instances > 0`:
+- [x] 7.4 Compare with the projection, counting rows with `user_instances > 0`:
   - `multi-species` in `flags`: 33.
   - `folder-species-differs`: 12, in 9 directories.
   - `ambiguous-mode`: 0.
@@ -354,12 +354,12 @@ hand both off explicitly rather than leaving §7 unticked in an unarchived chang
   - Arabidopsis plate primary: 13/1/3.
 
   Report any drift in the PR body; do not explain it away.
-- [ ] 7.5 The commit holds `inventory/` only. Open PR B and require the full matrix green:
+- [x] 7.5 The commit holds `inventory/` only. Open PR B and require the full matrix green:
   `inventory/**` triggers CI, which runs the plurality test.
   `test_the_plate_row_survives_filename_first_derivation` pins `{8: 13, 6: 1, 7: 3}`. If the
   live share has drifted, that test fails, and PR B may update the pin, stating the drift in its
   body. That is the one exception to `inventory/` only. Rollback is one `git revert`
   of its squash commit.
-- [ ] 7.6 **PR C, `chore(openspec): archive update-inventory-derivation`**, after PR B. Tick
+- [x] 7.6 **PR C, `chore(openspec): archive update-inventory-derivation`**, after PR B. Tick
   §7, record any 7.4 drift as `### Why N instead of M?`, merge the delta into
   `openspec/specs/label-inventory/spec.md`, and check that its Purpose still reads true.
