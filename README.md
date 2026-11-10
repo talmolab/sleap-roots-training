@@ -253,7 +253,7 @@ cylinder arabidopsis primary family and an 8-node plate one selected the same ro
 carries a mode, and the report lists the capture modes observed with no row of their own and the
 node counts that disagree with their row. Node counts are read from the files, so none of this
 needs an external service. The committed `inventory/` was re-scanned under both (#89), and a
-test fails if its name-derived columns stop matching what the code derives from its paths.
+test fails if its path-derived columns stop matching what the code derives from its paths.
 
 Two things to know before reading the output. `species`, `mode` and `root_type` are **name-derived**
 — read off the path, not out of the file — and the report says so; they are not evidence. Species

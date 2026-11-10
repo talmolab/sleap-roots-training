@@ -163,8 +163,12 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 - **The committed `inventory/` is re-scanned** under the mode key and filename-first species
   (#89): 656 families, the same coverage as #58, with `species` changed on the 228 projected.
-  A new test fails when a committed row's name-derived columns differ from a fresh derivation
-  of its path, so a stale table or an un-re-scanned derivation change no longer passes CI.
+  A new test fails when the committed header, a row's name-derived columns or `version`, or its
+  member filenames disagree with what the code derives from the row's path, so a derivation or
+  serialization change made without a re-scan, or a hand-edited cell, fails CI. It does not
+  detect files added to or removed from the share, registry drift, or the report. The
+  `skeletons.yaml` plate-row comment is reworded, so `skeleton_table_sha256` changes with no row
+  changed, as in #81.
 - **The label inventory reads species from the filename before the folder (#59), and reports what
   names cannot settle (#65)** (`update-inventory-derivation`). The next scan changes `species`
   for 228 families, 33 of them to empty: a filename or folder naming several species gets none,
